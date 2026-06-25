@@ -946,13 +946,9 @@ let currentUser = null;
 
 async function initAuth() {
   try {
-    const response = await msalInstance.handleRedirectPromise();
-    if (response) setUser(response.account);
-    else {
-      const accounts = msalInstance.getAllAccounts();
-      if (accounts.length > 0) setUser(accounts[0]);
-    }
-  } catch(e) { console.error(e); }
+    const accounts = msalInstance.getAllAccounts();
+    if (accounts.length > 0) setUser(accounts[0]);
+  } catch(e) { console.error('initAuth error:', e); }
 }
 
 function setUser(account) {
@@ -983,11 +979,11 @@ function getCCTRByUser(name) {
 }
 
 async function login() {
-  try { await msalInstance.loginRedirect(loginRequest); }
-  catch(e) { console.error(e); }
+  try { const resp = await msalInstance.loginPopup(loginRequest); if(resp?.account) setUser(resp.account); }
+  catch(e) { console.error("login error:", e); alert("로그인 실패: " + (e.errorMessage || e.message || e)); }
 }
 function logout() {
-  msalInstance.logoutRedirect();
+  msalInstance.logoutPopup();
 }
 
 // ─────────────────────────────────────────────
