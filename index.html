@@ -525,12 +525,29 @@ function getCCTR(name) {
 async function loadBPMaster() {
   try {
     const t = await token();
+    // STK-NAS 사이트 접근
     const nasSite = await api('/sites/'+SITE_PATH_NAS);
     nasId = nasSite.id;
     const drives = await api('/sites/'+nasId+'/drives');
     const docDrive = drives.value.find(d=>['Documents','문서','Shared Documents'].includes(d.name))||drives.value[0];
-    const res = await fetch(GRAPH+'/drives/'+docDrive.id+'/root:/'+encodeURIComponent(BP_FILE_NAME)+':/content',
-      {headers:{Authorization:'Bearer '+t}});
+    // 파일명 특수문자 처리: 괄호 등 인코딩 문제 우회 → search API로 파일 찾기
+    let fileUrl = null;
+    try {
+      // 방법1: 파일명으로 search
+      const searchRes = await api('/sites/'+nasId+'/drive/root/search(q='Master data List 2014')');
+      const found = (searchRes.value||[]).find(i=>(i.name||'').includes('DTK'));
+      if(found) fileUrl = found['@microsoft.graph.downloadUrl'] || (GRAPH+'/drives/'+docDrive.id+'/items/'+found.id+'/content');
+    } catch(_){}
+    if(!fileUrl) {
+      // 방법2: GUID로 직접 접근
+      const itemRes = await api('/sites/'+nasId+'/drive/items/01'+'/content').catch(()=>null);
+      // 방법3: 경로 단계별 접근
+      const rootItems = await api('/sites/'+nasId+'/drive/root/children');
+      const xlsxItem = (rootItems.value||[]).find(i=>(i.name||'').includes('Master data'));
+      if(xlsxItem) fileUrl = GRAPH+'/sites/'+nasId+'/drive/items/'+xlsxItem.id+'/content';
+    }
+    if(!fileUrl) throw new Error('BP 파일 경로를 찾을 수 없음');
+    const res = await fetch(fileUrl, {headers:{Authorization:'Bearer '+t}});
     if(!res.ok) throw new Error('BP 파일 없음: '+res.status);
     const buf = await res.arrayBuffer();
     const wb = XLSX.read(buf,{type:'array'});
