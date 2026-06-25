@@ -720,6 +720,12 @@ async function loadBPMaster() {
       {code:'KR828347',type:'Vendor',name:'Incheon airport customs',nameKo:'인천공항세관',bizNo:'109-83-02763'},
     ];
   }
+  // 로드 완료(성공/실패 모두) 후 모달 업데이트
+  if(document.getElementById('bp-modal')?.classList.contains('open')) {
+    document.getElementById('bp-search-input').disabled = false;
+    renderBpResults(bpData.slice(0,10));
+    document.getElementById('bp-search-input').focus();
+  }
 }
 
 // ── Tabs ──
@@ -845,7 +851,7 @@ function openBpModal() {
   document.getElementById('bp-modal').classList.add('open');
   document.getElementById('bp-search-input').value='';
   if(bpData.length === 0) {
-    document.getElementById('bp-search-results').innerHTML = '<div style="text-align:center;padding:24px;color:#a19f9d">⏳ BP 데이터 로딩 중... 잠시만 기다려주세요</div>';
+    document.getElementById('bp-search-results').innerHTML = '<div style="text-align:center;padding:24px;color:#a19f9d">데이터 로딩 중...</div>';
     document.getElementById('bp-search-input').disabled = true;
   } else {
     document.getElementById('bp-search-input').disabled = false;
