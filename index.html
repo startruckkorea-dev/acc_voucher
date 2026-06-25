@@ -399,7 +399,8 @@ const SITE_PATH_DB  = 'startruckkorea.sharepoint.com:/sites/STK-DB:';
 const SITE_PATH_NAS = 'startruckkorea.sharepoint.com:/sites/STK-NAS:';
 const GRAPH  = 'https://graph.microsoft.com/v1.0';
 const SCOPES = ['User.Read','Sites.ReadWrite.All','Files.ReadWrite.All'];
-const BP_FILE_NAME = 'Master data List 2014_Final(DTK).xlsx';
+const BP_FILE_NAME   = 'Master data List 2014_Final(DTK).xlsx';
+const CCTR_FILE_NAME = 'STK CCTR List.xlsx';
 
 let msal_g = null, user = null, siteId = null, nasId = null;
 let bpData = []; // SharePoint Excel에서 로드
@@ -510,7 +511,8 @@ async function boot(account) {
   renderApproval();
   renderList();
   renderLines();
-  // BP 마스터 로드 (백그라운드)
+  // CCTR + BP 마스터 백그라운드 로드
+  loadCCTRMaster().catch(e=>console.warn('CCTR 로드 실패:', e.message));
   loadBPMaster().catch(e=>console.warn('BP 마스터 로드 실패:', e.message));
 }
 
@@ -519,6 +521,58 @@ function getCCTR(name) {
     'Hyunju Gong':'47900776 Accounting','Jihyun Ma':'47900776 Accounting',
     'Sora Kim':'47900776 Accounting','Martin Schindele':'47900706 CFO Office'};
   return map[name]||'47900776 Accounting';
+}
+
+// ── CCTR 마스터 로드 (STK-DB SharePoint Excel) ──
+async function loadCCTRMaster() {
+  try {
+    const t = await token();
+    if(!siteId) {
+      const dbSite = await api('/sites/'+SITE_PATH_DB);
+      siteId = dbSite.id;
+    }
+    const drives = await api('/sites/'+siteId+'/drives');
+    const docDrive = drives.value.find(d=>['Documents','문서','Shared Documents'].includes(d.name))||drives.value[0];
+    // 파일 검색
+    const searchRes = await api('/sites/'+siteId+"/drive/root/search(q='STK CCTR List')");
+    const found = (searchRes.value||[]).find(i=>(i.name||'').includes('CCTR'));
+    if(!found) throw new Error('CCTR 파일 못 찾음');
+    const res = await fetch(GRAPH+'/sites/'+siteId+'/drive/items/'+found.id+'/content',
+      {headers:{Authorization:'Bearer '+t}});
+    if(!res.ok) throw new Error('CCTR 파일 없음: '+res.status);
+    const buf = await res.arrayBuffer();
+    const wb = XLSX.read(buf,{type:'array'});
+    // Team 시트 사용
+    const sheetName = wb.SheetNames.find(s=>s==='Team')||wb.SheetNames[0];
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1});
+    const newCCTR = [];
+    // 헤더 찾기 (Function, 팀, 코스트센터 명, 코스트센터)
+    let headerIdx = -1;
+    for(let i=0;i<rows.length;i++){
+      if(rows[i].some(c=>(c||'').toString().includes('Cost Center')||(c||'').toString().includes('코스트센터'))) {
+        headerIdx = i; break;
+      }
+    }
+    if(headerIdx === -1) headerIdx = 3; // 기본 4번째 행
+    const headers = rows[headerIdx].map(h=>(h||'').toString().trim());
+    const cctrCol = headers.findIndex(h=>h.includes('Cost Center')||h.includes('코스트센터('));
+    const nameCol = headers.findIndex(h=>h.includes('CCTR Name')||h.includes('코스트센터 명'));
+    if(cctrCol === -1) throw new Error('CCTR 컬럼 못 찾음');
+    for(let i=headerIdx+1;i<rows.length;i++){
+      const r = rows[i];
+      const code = (r[cctrCol]||'').toString().trim();
+      const name = nameCol>-1 ? (r[nameCol]||'').toString().trim() : code;
+      if(!code||code.length<5) continue;
+      if(!newCCTR.find(c=>c.code===code)) newCCTR.push({code,name});
+    }
+    if(newCCTR.length > 0) {
+      COST_CENTERS.length = 0;
+      newCCTR.forEach(c=>COST_CENTERS.push(c));
+      console.log('[CCTR] Loaded:', COST_CENTERS.length, 'entries');
+    }
+  } catch(e) {
+    console.warn('[CCTR] 로드 실패 — 기본 목록 사용:', e.message);
+  }
 }
 
 // ── BP 마스터 로드 (STK-NAS SharePoint Excel) ──
