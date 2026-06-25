@@ -581,6 +581,9 @@ async function loadCCTRMaster(userName) {
       const empSheetName = wb.SheetNames.find(s=>s.includes('Employee'));
       console.log('[CCTR] Employee 시트:', empSheetName||'없음');
       let matched = null;
+      const koName = (userName.split(' ')[0])||'';
+      const enName = (userName.match(/\(([^)]+)\)/)||[])[1]||'';
+      console.log('[CCTR] 찾을 이름 - KO:'+koName+' EN:'+enName);
       if(empSheetName) {
         const empRows = XLSX.utils.sheet_to_json(wb.Sheets[empSheetName],{header:1});
         // 헤더 행 찾기 (Function, 팀, 코스트센터 명, 코스트센터, 성함_한글, Name_ENG 가 있는 행)
@@ -596,9 +599,7 @@ async function loadCCTRMaster(userName) {
         const nameEngCol = empHeader.findIndex(h=>(h||'').toString().includes('Name_ENG'));
         const nameKoCol  = empHeader.findIndex(h=>(h||'').toString().includes('성함'));
         console.log('[CCTR] 컬럼 인덱스 - CCTR:'+cctrCol2+' ENG:'+nameEngCol+' KO:'+nameKoCol);
-        const koName = (userName.split(' ')[0])||'';
-        const enName = (userName.match(/\(([^)]+)\)/)||[])[1]||'';
-        console.log('[CCTR] 찾을 이름 - KO:'+koName+' EN:'+enName);
+
         for(let i=empHeaderIdx+1;i<empRows.length;i++){
           const r = empRows[i];
           const eng = (r[nameEngCol]||'').toString().trim();
@@ -700,6 +701,8 @@ async function loadBPMaster() {
       const name2 = (r[3]||'').toString().trim();
       const bizNo = (r[4]||'').toString().trim();
       if(!code||!name1) continue;
+      if(isNaN(code.charAt(0))===false && code.includes('.')) continue; // 헤더행 스킵
+      if(code.toLowerCase()==='bp code'||code.toLowerCase()==='code') continue;
       bpData.push({code,type:item,name:name1,nameKo:name2,bizNo});
     }
     console.log('[BP Master] Loaded:', bpData.length, 'entries');
@@ -849,7 +852,7 @@ function renderBpResults(list) {
   const el=document.getElementById('bp-search-results');
   if(!list.length){el.innerHTML='<div style="text-align:center;padding:20px;color:#a19f9d">검색 결과 없음</div>';return;}
   el.innerHTML=list.map(b=>`<div class="result-item" onclick="selectBP('${b.code}')">
-    <div class="rc">${b.code} · ${b.type==='Vendor'||b.type==='S'?'Vendor (S)':'Customer (C)'}</div>
+    <div class="rc">${b.code} · ${(b.type==='Vendor'||b.type==='S')?'Supplier (S=공급업체)':'Customer (C=고객)'}</div>
     <div class="rn">${b.name}</div>
     ${b.nameKo?`<div class="rs">${b.nameKo}</div>`:''}
     ${b.bizNo?`<div class="rs">사업자번호: ${b.bizNo}</div>`:''}
