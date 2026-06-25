@@ -1,0 +1,1534 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STK Accounting Voucher</title>
+<script src="https://alcdn.msauth.net/browser/2.39.0/js/msal-browser.min.js"></script>
+<style>
+  :root {
+    --blue:      #1565C0;
+    --blue-dk:   #0D47A1;
+    --blue-lt:   #E3F2FD;
+    --blue-mid:  #1976D2;
+    --accent:    #FF8F00;
+    --accent-lt: #FFF8E1;
+    --red:       #C62828;
+    --red-lt:    #FFEBEE;
+    --green:     #2E7D32;
+    --green-lt:  #E8F5E9;
+    --gray-50:   #FAFAFA;
+    --gray-100:  #F5F5F5;
+    --gray-200:  #EEEEEE;
+    --gray-300:  #E0E0E0;
+    --gray-400:  #BDBDBD;
+    --gray-500:  #9E9E9E;
+    --gray-600:  #757575;
+    --gray-700:  #616161;
+    --gray-800:  #424242;
+    --gray-900:  #212121;
+    --white:     #FFFFFF;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,.12);
+    --shadow-md: 0 4px 12px rgba(0,0,0,.15);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,.18);
+    --radius:    6px;
+    --font: 'Segoe UI', 'Malgun Gothic', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font);
+    font-size: 13px;
+    background: var(--gray-100);
+    color: var(--gray-900);
+    min-height: 100vh;
+  }
+
+  /* ── TOP BAR ── */
+  #topbar {
+    background: var(--blue-dk);
+    color: var(--white);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    height: 52px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: var(--shadow-md);
+  }
+  .topbar-left { display: flex; align-items: center; gap: 12px; }
+  .topbar-logo {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: .5px;
+  }
+  .topbar-logo span { color: var(--accent); }
+  .topbar-badge {
+    background: rgba(255,255,255,.15);
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 11px;
+    letter-spacing: .3px;
+  }
+  #userInfo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+  }
+  #userInfo .name {
+    font-weight: 600;
+  }
+  #btnLogin, #btnLogout {
+    padding: 6px 14px;
+    border: 1px solid rgba(255,255,255,.4);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--white);
+    cursor: pointer;
+    font-size: 12px;
+    transition: background .2s;
+  }
+  #btnLogin:hover, #btnLogout:hover { background: rgba(255,255,255,.15); }
+
+  /* ── LOGIN SCREEN ── */
+  #loginScreen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - 52px);
+  }
+  .login-card {
+    background: var(--white);
+    border-radius: 12px;
+    box-shadow: var(--shadow-lg);
+    padding: 48px 40px;
+    text-align: center;
+    width: 360px;
+  }
+  .login-card .logo-big {
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--blue-dk);
+    margin-bottom: 6px;
+  }
+  .login-card .logo-big span { color: var(--accent); }
+  .login-card .subtitle {
+    color: var(--gray-500);
+    font-size: 13px;
+    margin-bottom: 32px;
+  }
+  .login-btn-ms {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    padding: 12px;
+    background: var(--blue);
+    color: var(--white);
+    border: none;
+    border-radius: var(--radius);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .2s;
+  }
+  .login-btn-ms:hover { background: var(--blue-dk); }
+
+  /* ── MAIN LAYOUT ── */
+  #appScreen { display: none; }
+
+  .page-header {
+    background: var(--white);
+    border-bottom: 1px solid var(--gray-200);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .page-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--blue-dk);
+  }
+  .page-title small {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--gray-500);
+    margin-left: 8px;
+  }
+  .header-actions { display: flex; gap: 8px; }
+
+  .container { padding: 20px 24px; max-width: 1300px; margin: 0 auto; }
+
+  /* ── TABS ── */
+  .tabs {
+    display: flex;
+    gap: 2px;
+    border-bottom: 2px solid var(--gray-200);
+    margin-bottom: 20px;
+  }
+  .tab {
+    padding: 9px 18px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--gray-600);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: all .15s;
+    white-space: nowrap;
+  }
+  .tab.active {
+    color: var(--blue);
+    border-bottom-color: var(--blue);
+    font-weight: 700;
+  }
+  .tab:hover:not(.active) { color: var(--gray-900); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ── CARD ── */
+  .card {
+    background: var(--white);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius);
+    margin-bottom: 16px;
+    box-shadow: var(--shadow-sm);
+  }
+  .card-header {
+    padding: 12px 16px;
+    background: var(--blue-dk);
+    color: var(--white);
+    border-radius: var(--radius) var(--radius) 0 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .card-body { padding: 16px; }
+
+  /* ── FORM GRID ── */
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px 16px;
+  }
+  .form-group { display: flex; flex-direction: column; gap: 4px; }
+  .form-group.full { grid-column: 1/-1; }
+  .form-group.half { grid-column: span 2; }
+
+  label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--gray-600);
+    text-transform: uppercase;
+    letter-spacing: .4px;
+  }
+  label .req { color: var(--red); margin-left: 2px; }
+  label .auto-tag {
+    background: var(--blue-lt);
+    color: var(--blue);
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-left: 4px;
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 700;
+  }
+
+  input, select, textarea {
+    font-family: var(--font);
+    font-size: 13px;
+    padding: 7px 10px;
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius);
+    background: var(--white);
+    color: var(--gray-900);
+    transition: border-color .15s, box-shadow .15s;
+    width: 100%;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px rgba(21,101,192,.12);
+  }
+  input[readonly], input.auto-val {
+    background: var(--gray-50);
+    color: var(--gray-600);
+    cursor: not-allowed;
+  }
+  textarea { resize: vertical; min-height: 60px; }
+
+  .input-with-btn {
+    display: flex;
+    gap: 6px;
+  }
+  .input-with-btn input { flex: 1; }
+  .btn-search {
+    padding: 7px 12px;
+    background: var(--gray-200);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 12px;
+    white-space: nowrap;
+    transition: background .15s;
+  }
+  .btn-search:hover { background: var(--gray-300); }
+
+  /* ── ACCOUNT LINES TABLE ── */
+  .lines-wrapper { overflow-x: auto; }
+  .lines-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    min-width: 1000px;
+  }
+  .lines-table th {
+    background: var(--gray-100);
+    color: var(--gray-700);
+    font-weight: 700;
+    font-size: 11px;
+    padding: 8px 8px;
+    text-align: left;
+    border: 1px solid var(--gray-200);
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: .3px;
+  }
+  .lines-table td {
+    padding: 5px 6px;
+    border: 1px solid var(--gray-200);
+    vertical-align: middle;
+  }
+  .lines-table tr:hover td { background: var(--blue-lt); }
+  .lines-table input, .lines-table select {
+    padding: 5px 7px;
+    font-size: 12px;
+    min-width: 80px;
+  }
+  .lines-table .col-no { width: 40px; text-align: center; color: var(--gray-500); }
+  .lines-table .col-drcr { width: 110px; }
+  .lines-table .col-gl { width: 140px; }
+  .lines-table .col-desc { min-width: 140px; }
+  .lines-table .col-cctr { width: 130px; }
+  .lines-table .col-pc { width: 120px; }
+  .lines-table .col-subpc { width: 90px; }
+  .lines-table .col-lineDesc { min-width: 130px; }
+  .lines-table .col-curr { width: 75px; }
+  .lines-table .col-amt { width: 120px; text-align: right; }
+  .lines-table .col-total { width: 120px; text-align: right; font-weight: 700; }
+  .lines-table .col-del { width: 36px; text-align: center; }
+
+  .btn-del-line {
+    background: none;
+    border: none;
+    color: var(--gray-400);
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 2px 4px;
+    border-radius: 3px;
+    transition: color .15s, background .15s;
+  }
+  .btn-del-line:hover { color: var(--red); background: var(--red-lt); }
+
+  .bp-row td { background: #F0F4FF !important; }
+  .bp-row:hover td { background: #E3EAFF !important; }
+
+  /* ── TOTALS ROW ── */
+  .totals-row {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 24px;
+    padding: 10px 12px;
+    background: var(--gray-50);
+    border-top: 2px solid var(--gray-200);
+    border-radius: 0 0 var(--radius) var(--radius);
+  }
+  .total-item { display: flex; align-items: center; gap: 8px; }
+  .total-label { font-size: 11px; color: var(--gray-600); font-weight: 600; text-transform: uppercase; }
+  .total-val {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--blue-dk);
+    min-width: 120px;
+    text-align: right;
+  }
+  .total-krw { font-size: 13px; color: var(--gray-600); font-weight: 600; }
+  .verify-badge {
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .verify-ok { background: var(--green-lt); color: var(--green); }
+  .verify-err { background: var(--red-lt); color: var(--red); }
+
+  /* ── APPROVAL SECTION ── */
+  .approval-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+  }
+  .approval-box {
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .approval-box .ap-header {
+    background: var(--gray-100);
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--gray-700);
+    text-transform: uppercase;
+    letter-spacing: .3px;
+  }
+  .approval-box .ap-body {
+    padding: 10px;
+  }
+  .approval-box .ap-name {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--gray-900);
+    margin-bottom: 2px;
+  }
+  .approval-box .ap-dept {
+    font-size: 11px;
+    color: var(--gray-500);
+    margin-bottom: 6px;
+  }
+  .approval-box .ap-range {
+    font-size: 10px;
+    color: var(--blue);
+    font-weight: 700;
+    background: var(--blue-lt);
+    padding: 2px 6px;
+    border-radius: 3px;
+    display: inline-block;
+  }
+  .approval-box .ap-status {
+    margin-top: 8px;
+  }
+  .status-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .s-pending  { background: var(--gray-100); color: var(--gray-500); border: 1px solid var(--gray-300); }
+  .s-required { background: var(--accent-lt); color: var(--accent); border: 1px solid #FFE082; }
+  .s-approved { background: var(--green-lt); color: var(--green); border: 1px solid #A5D6A7; }
+  .s-na       { background: var(--gray-50); color: var(--gray-400); border: 1px solid var(--gray-200); font-style: italic; }
+
+  /* ── BUTTONS ── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 18px;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .15s;
+    text-decoration: none;
+  }
+  .btn-primary { background: var(--blue); color: var(--white); }
+  .btn-primary:hover { background: var(--blue-dk); }
+  .btn-secondary { background: var(--gray-200); color: var(--gray-800); }
+  .btn-secondary:hover { background: var(--gray-300); }
+  .btn-success { background: var(--green); color: var(--white); }
+  .btn-success:hover { background: #1B5E20; }
+  .btn-accent { background: var(--accent); color: var(--white); }
+  .btn-accent:hover { background: #E65100; }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+  .btn-outline {
+    background: transparent;
+    border: 1px solid var(--blue);
+    color: var(--blue);
+  }
+  .btn-outline:hover { background: var(--blue-lt); }
+
+  /* ── LIST VIEW ── */
+  .list-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .list-filters { display: flex; gap: 8px; flex-wrap: wrap; }
+  .list-filters select, .list-filters input { width: auto; min-width: 140px; }
+
+  .voucher-list { display: flex; flex-direction: column; gap: 8px; }
+  .voucher-row {
+    background: var(--white);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    display: grid;
+    grid-template-columns: 100px 120px 1fr 120px 120px 100px 120px;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    transition: border-color .15s, box-shadow .15s;
+    box-shadow: var(--shadow-sm);
+  }
+  .voucher-row:hover {
+    border-color: var(--blue);
+    box-shadow: 0 2px 8px rgba(21,101,192,.15);
+  }
+  .vr-date { font-size: 12px; color: var(--gray-500); }
+  .vr-type { font-size: 11px; font-weight: 700; }
+  .vr-desc { font-size: 13px; color: var(--gray-800); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .vr-vendor { font-size: 12px; color: var(--gray-600); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .vr-amt { font-size: 13px; font-weight: 700; text-align: right; }
+  .vr-curr { font-size: 11px; color: var(--gray-500); }
+  .vr-status { text-align: right; }
+
+  .type-badge {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  .t-ap   { background: #E3F2FD; color: #0D47A1; }
+  .t-ims  { background: #E8EAF6; color: #283593; }
+  .t-ar   { background: #E8F5E9; color: #1B5E20; }
+  .t-cr   { background: #FFF3E0; color: #E65100; }
+  .t-gl   { background: #F3E5F5; color: #4A148C; }
+  .t-fa   { background: #FCE4EC; color: #880E4F; }
+  .t-adv  { background: #E0F7FA; color: #006064; }
+
+  .list-empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--gray-400);
+  }
+  .list-empty .icon { font-size: 48px; margin-bottom: 12px; }
+  .list-empty p { font-size: 14px; }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.5);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--white);
+    border-radius: 10px;
+    box-shadow: var(--shadow-lg);
+    width: 100%;
+    max-width: 560px;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+  .modal-header {
+    padding: 16px 20px;
+    background: var(--blue-dk);
+    color: var(--white);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-radius: 10px 10px 0 0;
+    font-weight: 700;
+  }
+  .modal-close {
+    background: none;
+    border: none;
+    color: var(--white);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+  }
+  .modal-body { padding: 20px; }
+
+  .search-results { margin-top: 12px; }
+  .result-item {
+    padding: 10px 12px;
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius);
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .result-item:hover { border-color: var(--blue); background: var(--blue-lt); }
+  .result-item .r-code { font-size: 11px; color: var(--gray-500); }
+  .result-item .r-name { font-size: 13px; font-weight: 600; color: var(--gray-900); }
+  .result-item .r-sub  { font-size: 11px; color: var(--gray-500); }
+
+  /* ── NOTICE ── */
+  .notice {
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    font-size: 12px;
+    margin-bottom: 12px;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .notice-info  { background: var(--blue-lt);  color: var(--blue-dk);  border-left: 3px solid var(--blue); }
+  .notice-warn  { background: var(--accent-lt); color: #5D4037;         border-left: 3px solid var(--accent); }
+  .notice-error { background: var(--red-lt);   color: var(--red);      border-left: 3px solid var(--red); }
+
+  /* ── MISC ── */
+  .divider { border: none; border-top: 1px solid var(--gray-200); margin: 4px 0; }
+  .text-right { text-align: right; }
+  .text-muted { color: var(--gray-500); }
+  .fw-bold { font-weight: 700; }
+  .mt-2 { margin-top: 8px; }
+  .mt-3 { margin-top: 16px; }
+  .flex-end { display: flex; justify-content: flex-end; gap: 8px; }
+  .flex-between { display: flex; justify-content: space-between; align-items: center; }
+
+  /* ── SPINNER ── */
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid rgba(255,255,255,.4);
+    border-top-color: var(--white);
+    border-radius: 50%;
+    animation: spin .6s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 768px) {
+    .voucher-row { grid-template-columns: 1fr 1fr; }
+    .form-grid { grid-template-columns: 1fr; }
+    .approval-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <div class="topbar-left">
+    <div class="topbar-logo">STK <span>APS</span></div>
+    <div class="topbar-badge">Accounting Voucher</div>
+  </div>
+  <div id="userInfo">
+    <span class="name" id="userName">-</span>
+    <button id="btnLogout" onclick="logout()" style="display:none">로그아웃</button>
+    <button id="btnLogin" onclick="login()">Microsoft 로그인</button>
+  </div>
+</div>
+
+<!-- LOGIN SCREEN -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="logo-big">STK <span>APS</span></div>
+    <div class="subtitle">Accounting Voucher System<br>Star Trucks Korea Co., Ltd.</div>
+    <button class="login-btn-ms" onclick="login()">
+      <svg width="18" height="18" viewBox="0 0 21 21" fill="none">
+        <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
+        <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
+        <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
+        <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
+      </svg>
+      Microsoft 계정으로 로그인
+    </button>
+  </div>
+</div>
+
+<!-- APP SCREEN -->
+<div id="appScreen">
+  <div class="page-header">
+    <div class="page-title">
+      Accounting Voucher
+      <small>회계 전표 시스템</small>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-primary" onclick="showNewVoucher()">＋ 새 바우처 작성</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('list')">📋 전표 목록</div>
+      <div class="tab" onclick="switchTab('new')" id="tabNew">📝 바우처 작성</div>
+    </div>
+
+    <!-- ──────────────── LIST TAB ──────────────── -->
+    <div class="tab-panel active" id="panelList">
+      <div class="list-toolbar">
+        <div class="list-filters">
+          <select id="filterType" onchange="renderList()">
+            <option value="">전체 유형</option>
+            <option value="AP">AP - Accounts Payable</option>
+            <option value="AP_IMS">AP (IMS) - 부품</option>
+            <option value="AP_CR">AP - Customer Refund</option>
+            <option value="AR">AR - Accounts Receivable</option>
+            <option value="GL">GL - General Ledger</option>
+            <option value="FA">Fixed Asset</option>
+            <option value="ADV">Advance Payment</option>
+            <option value="SET">Settlement of Advance</option>
+          </select>
+          <select id="filterStatus" onchange="renderList()">
+            <option value="">전체 상태</option>
+            <option value="Draft">임시저장</option>
+            <option value="Pending">결재 중</option>
+            <option value="Approved">승인 완료</option>
+          </select>
+          <input type="text" id="filterKeyword" placeholder="검색 (설명, BP명...)" oninput="renderList()" style="min-width:180px">
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="showNewVoucher()">＋ 새 바우처</button>
+      </div>
+      <div id="voucherList" class="voucher-list"></div>
+    </div>
+
+    <!-- ──────────────── NEW/EDIT TAB ──────────────── -->
+    <div class="tab-panel" id="panelNew">
+
+      <!-- 섹션 1: 바우처 정보 -->
+      <div class="card">
+        <div class="card-header">
+          <span>1. 바우처 정보 (Voucher Information)</span>
+          <span id="voucherIdBadge" style="font-size:11px;font-weight:400;opacity:.8"></span>
+        </div>
+        <div class="card-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Voucher Type <span class="req">*</span></label>
+              <select id="voucherType" onchange="onVoucherTypeChange()">
+                <option value="">-- 선택 --</option>
+                <option value="AP">AP - Accounts Payable</option>
+                <option value="AP_IMS">AP (IMS) - 부품</option>
+                <option value="AP_CR">AP - Customer Refund</option>
+                <option value="AR">AR - Accounts Receivable</option>
+                <option value="GL">GL - General Ledger</option>
+                <option value="FA">Fixed Asset</option>
+                <option value="ADV">Advance Payment</option>
+                <option value="SET">Settlement of Advance</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Submission Date <span class="req">*</span> <span class="auto-tag">AUTO</span></label>
+              <input type="date" id="submissionDate" readonly class="auto-val">
+            </div>
+            <div class="form-group">
+              <label>Invoice Date <span class="req">*</span></label>
+              <input type="date" id="invoiceDate">
+            </div>
+            <div class="form-group">
+              <label>Requester <span class="auto-tag">AUTO</span></label>
+              <input type="text" id="requesterName" readonly class="auto-val">
+            </div>
+            <div class="form-group">
+              <label>Cost Center <span class="auto-tag">AUTO</span></label>
+              <input type="text" id="requesterCCTR" readonly class="auto-val">
+            </div>
+            <div class="form-group">
+              <label>Exchange Rate</label>
+              <input type="number" id="exchangeRate" placeholder="특정 환율 필요시만 입력" step="0.01">
+            </div>
+          </div>
+
+          <hr class="divider" style="margin:14px 0">
+
+          <!-- BP 정보 -->
+          <div id="bpSection">
+            <div class="notice notice-info">
+              💡 GL 유형은 BP 코드 선택 불필요합니다. 나머지 유형은 필수입니다.
+            </div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Vendor/Customer No. <span class="req" id="bpReqMark">*</span></label>
+                <div class="input-with-btn">
+                  <input type="text" id="bpCode" placeholder="BP 코드" readonly>
+                  <button class="btn-search" onclick="openBpModal()">🔍 검색</button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Vendor/Customer Name <span class="auto-tag">AUTO</span></label>
+                <input type="text" id="bpName" readonly class="auto-val" placeholder="BP 선택 시 자동입력">
+              </div>
+              <div class="form-group">
+                <label>BP Category <span class="auto-tag">AUTO</span></label>
+                <input type="text" id="bpCategory" readonly class="auto-val" placeholder="S=Vendor / C=Customer">
+              </div>
+              <div class="form-group">
+                <label>Business No.</label>
+                <input type="text" id="bpBizNo" readonly class="auto-val" placeholder="자동입력">
+              </div>
+            </div>
+          </div>
+
+          <hr class="divider" style="margin:14px 0">
+
+          <div class="form-group full">
+            <label>Purpose / Description <span class="req">*</span></label>
+            <textarea id="purpose" rows="2" placeholder="구체적으로 작성해주세요 (예: Order S May 2026 - Daimler 부품 대금)"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- 섹션 2: 회계 정보 -->
+      <div class="card">
+        <div class="card-header">
+          <span>2. 회계 정보 (Account Information)</span>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.3)" onclick="addLine()">＋ 라인 추가</button>
+          </div>
+        </div>
+        <div class="card-body" style="padding:0">
+          <div class="lines-wrapper">
+            <table class="lines-table">
+              <thead>
+                <tr>
+                  <th class="col-no">No</th>
+                  <th class="col-drcr">DR/CR <span class="req">*</span></th>
+                  <th class="col-gl">GL Account <span class="req">*</span></th>
+                  <th class="col-desc">계정 설명</th>
+                  <th class="col-cctr">Cost Center</th>
+                  <th class="col-pc">Profit Center</th>
+                  <th class="col-subpc">Sub_PC</th>
+                  <th class="col-lineDesc">Line Description</th>
+                  <th class="col-curr">Currency <span class="req">*</span></th>
+                  <th class="col-amt">Amount <span class="req">*</span></th>
+                  <th class="col-total">Total</th>
+                  <th class="col-del"></th>
+                </tr>
+              </thead>
+              <tbody id="linesBody">
+                <!-- 라인들 렌더링됨 -->
+              </tbody>
+            </table>
+          </div>
+          <div class="totals-row">
+            <div class="total-item">
+              <span class="total-label">합계</span>
+              <span class="total-val" id="totalAmt">0.00</span>
+              <span class="total-krw" id="totalKrw"></span>
+            </div>
+            <div class="total-item">
+              <span class="total-label">검증</span>
+              <span class="verify-badge" id="verifyBadge">-</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 섹션 3: 첨부파일 -->
+      <div class="card">
+        <div class="card-header">3. 첨부파일 (Attachments)</div>
+        <div class="card-body">
+          <div class="notice notice-info">
+            💡 세금계산서 또는 Invoice가 있는 경우 첨부해주세요. (향후 기능 예정)
+          </div>
+          <div style="border:2px dashed var(--gray-300);border-radius:var(--radius);padding:24px;text-align:center;color:var(--gray-400)">
+            📎 파일 첨부 기능은 다음 버전에서 제공됩니다
+          </div>
+        </div>
+      </div>
+
+      <!-- 섹션 4: 결재라인 -->
+      <div class="card">
+        <div class="card-header">4. 결재라인 (Authorization)</div>
+        <div class="card-body">
+
+          <div style="margin-bottom:16px">
+            <div class="fw-bold" style="font-size:12px;color:var(--gray-600);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">
+              4-1. Accounting 담당자
+            </div>
+            <div class="approval-grid" id="approvalAccounting"></div>
+          </div>
+
+          <hr class="divider" style="margin:12px 0 16px">
+
+          <div style="margin-bottom:16px">
+            <div class="fw-bold" style="font-size:12px;color:var(--gray-600);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">
+              4-2. Business 승인라인
+            </div>
+            <div class="approval-grid" id="approvalBusiness"></div>
+          </div>
+
+          <hr class="divider" style="margin:12px 0 16px">
+
+          <div>
+            <div class="fw-bold" style="font-size:12px;color:var(--gray-600);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">
+              4-3. F&amp;C 승인라인
+            </div>
+            <div class="approval-grid" id="approvalFC"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 액션 버튼 -->
+      <div class="flex-end" style="margin-top:8px;margin-bottom:32px">
+        <button class="btn btn-secondary" onclick="resetForm()">초기화</button>
+        <button class="btn btn-outline" onclick="saveVoucher('Draft')">임시저장</button>
+        <button class="btn btn-primary" onclick="saveVoucher('Pending')">✔ 결재 요청</button>
+      </div>
+
+    </div><!-- /panelNew -->
+  </div><!-- /container -->
+</div><!-- /appScreen -->
+
+<!-- BP 검색 모달 -->
+<div class="modal-overlay" id="bpModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span>🔍 BP 검색 (Vendor / Customer)</span>
+      <button class="modal-close" onclick="closeBpModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;gap:8px">
+        <input type="text" id="bpSearchInput" placeholder="BP 코드 또는 이름 검색..." oninput="searchBP(this.value)" style="flex:1">
+        <button class="btn btn-primary btn-sm" onclick="searchBP(document.getElementById('bpSearchInput').value)">검색</button>
+      </div>
+      <div id="bpSearchResults" class="search-results">
+        <div style="text-align:center;padding:24px;color:var(--gray-400)">검색어를 입력하세요</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- GL 검색 모달 -->
+<div class="modal-overlay" id="glModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span>🔍 GL Account 검색</span>
+      <button class="modal-close" onclick="closeGlModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;gap:8px">
+        <input type="text" id="glSearchInput" placeholder="계정 코드 또는 설명 검색..." oninput="searchGL(this.value)" style="flex:1">
+        <button class="btn btn-primary btn-sm" onclick="searchGL(document.getElementById('glSearchInput').value)">검색</button>
+      </div>
+      <div id="glSearchResults" class="search-results">
+        <div style="text-align:center;padding:24px;color:var(--gray-400)">검색어를 입력하세요</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+//  MSAL 설정
+// ─────────────────────────────────────────────
+const msalConfig = {
+  auth: {
+    clientId: '432976c2-3ec0-4d6e-9247-8c5c53f82d20',
+    authority: 'https://login.microsoftonline.com/19cab1f5-3692-4168-b6ed-4b24d1dd5f6c',
+    redirectUri: window.location.origin + window.location.pathname
+  },
+  cache: { cacheLocation: 'sessionStorage' }
+};
+const msalInstance = new msal.PublicClientApplication(msalConfig);
+const loginRequest = { scopes: ['User.Read'] };
+
+let currentUser = null;
+
+async function initAuth() {
+  try {
+    const response = await msalInstance.handleRedirectPromise();
+    if (response) setUser(response.account);
+    else {
+      const accounts = msalInstance.getAllAccounts();
+      if (accounts.length > 0) setUser(accounts[0]);
+    }
+  } catch(e) { console.error(e); }
+}
+
+function setUser(account) {
+  currentUser = account;
+  document.getElementById('userName').textContent = account.name || account.username;
+  document.getElementById('btnLogin').style.display = 'none';
+  document.getElementById('btnLogout').style.display = '';
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = '';
+  // 자동 필드 세팅
+  document.getElementById('requesterName').value = account.name || account.username;
+  document.getElementById('requesterCCTR').value = getCCTRByUser(account.name);
+  document.getElementById('submissionDate').value = new Date().toISOString().split('T')[0];
+  renderApproval();
+  renderList();
+}
+
+function getCCTRByUser(name) {
+  const map = {
+    'Junsoon Lee': '47900745 IT Application',
+    'Gina Shin': '47900776 Accounting',
+    'Hyunju Gong': '47900776 Accounting',
+    'Jihyun Ma': '47900776 Accounting',
+    'Sora Kim': '47900776 Accounting',
+    'Martin Schindele': '47900706 CFO Office',
+  };
+  return map[name] || '47900776 Accounting';
+}
+
+async function login() {
+  try { await msalInstance.loginRedirect(loginRequest); }
+  catch(e) { console.error(e); }
+}
+function logout() {
+  msalInstance.logoutRedirect();
+}
+
+// ─────────────────────────────────────────────
+//  MASTER DATA
+// ─────────────────────────────────────────────
+const GL_ACCOUNTS = [
+  { code:'119813', name:'Invoice received/Goods not received_Parts', cctrRequired:false, pcRequired:false },
+  { code:'110510', name:'VAT recoverable', cctrRequired:false, pcRequired:false },
+  { code:'210220', name:'A/P : Vendor_Local', cctrRequired:false, pcRequired:false },
+  { code:'210110', name:'A/P : Affiliated Co.- DC Group', cctrRequired:false, pcRequired:false },
+  { code:'610401', name:'Local Travel', cctrRequired:true, pcRequired:false },
+  { code:'610402', name:'Overseas Travel', cctrRequired:true, pcRequired:false },
+  { code:'610801', name:'Printing', cctrRequired:true, pcRequired:false },
+  { code:'611301', name:'Entertainment : Deductible (Company Card)', cctrRequired:true, pcRequired:false },
+  { code:'611803', name:'Consulting Fee', cctrRequired:true, pcRequired:false },
+  { code:'611901', name:'EDP Maintenance Hardware', cctrRequired:true, pcRequired:false },
+  { code:'611902', name:'EDP external run cost', cctrRequired:true, pcRequired:false },
+  { code:'611903', name:'EDP cost software license', cctrRequired:true, pcRequired:false },
+  { code:'492810', name:'Accr_charges : Company Card (항공료)', cctrRequired:true, pcRequired:false },
+  { code:'492850', name:'Accr_charges : Other (연말Accrual)', cctrRequired:true, pcRequired:false },
+  { code:'610901', name:'Building Rental Fee', cctrRequired:true, pcRequired:false },
+  { code:'410101', name:'Turnover Basic : New Car', cctrRequired:false, pcRequired:true },
+  { code:'410201', name:'Turnover Parts : DAG sourced', cctrRequired:false, pcRequired:true },
+  { code:'510102', name:'Cost of Good Sold : Basic Vehicle', cctrRequired:false, pcRequired:true },
+  { code:'510201', name:'Cost of Good Sold : Parts - DAG', cctrRequired:false, pcRequired:true },
+  { code:'110401', name:'Advance payment : Supplier', cctrRequired:false, pcRequired:false },
+  { code:'110210', name:'T/R : Customer', cctrRequired:false, pcRequired:false },
+  { code:'210430', name:'Advance Received : Others (Customer refund)', cctrRequired:false, pcRequired:false },
+];
+
+const COST_CENTERS = [
+  { code:'47900704', name:'RD Office' },
+  { code:'47900705', name:'CEO Office' },
+  { code:'47900715', name:'HR' },
+  { code:'47900716', name:'Personnel' },
+  { code:'47900815', name:'Legal' },
+  { code:'47900708', name:'Compliance' },
+  { code:'47926134', name:'PMM Head Office' },
+  { code:'47926135', name:'Product Management' },
+  { code:'47925155', name:'Marketing_Sales' },
+  { code:'47926114', name:'Sales Head Office' },
+  { code:'47926115', name:'Sales Planning & Operation' },
+  { code:'47953305', name:'CSP Head Office' },
+  { code:'47955405', name:'Technical Operation' },
+  { code:'47954325', name:'Parts OP & Logistics' },
+  { code:'47900706', name:'CFO Office' },
+  { code:'47900775', name:'Controlling' },
+  { code:'47900776', name:'Accounting' },
+  { code:'47900745', name:'IT Application' },
+  { code:'47900755', name:'IT Infrastructure' },
+  { code:'47900825', name:'Procurement' },
+  { code:'47900805', name:'Administration' },
+  { code:'47900785', name:'Facility Management' },
+];
+
+const PROFIT_CENTERS = [
+  { code:'2100', name:'TRUCKS NV' },
+  { code:'2420', name:'UNIMOG NV' },
+  { code:'7130', name:'PARTS WSL BUS' },
+  { code:'7140', name:'PARTS WSL UNIMOG' },
+  { code:'7160', name:'PARTS CV OTHERS' },
+  { code:'7200', name:'PARTS WSL CV' },
+  { code:'7210', name:'PARTS WSL TRUCKS' },
+  { code:'7240', name:'PARTS CV OTHERS' },
+  { code:'7250', name:'PARTS UNIMOG' },
+  { code:'7260', name:'BUS' },
+  { code:'7270', name:'PARTS TRUCKS (EX-BRA)' },
+  { code:'7280', name:'PARTS REMAN' },
+  { code:'8210', name:'SERVICE TRUCKS EX WO' },
+];
+
+const BP_MASTER = [
+  { code:'KR850063', name:'Daimler Trucks & Buses_GLC Parts(EUR)', type:'S', bizNo:'000-00-00000' },
+  { code:'KR850073', name:'Daimler Truck AG_(EUR) Trucks & Buses', type:'S', bizNo:'0' },
+  { code:'KO513313', name:'Mercedes-Benz Financial Services', type:'C', bizNo:'' },
+  { code:'KO513314', name:'Mercedes-Benz Korea Limited', type:'C', bizNo:'' },
+  { code:'KR828347', name:'Incheon airport customs', type:'S', bizNo:'109-83-02763' },
+  { code:'KO540065', name:'KCP CO., LTD.', type:'C', bizNo:'' },
+  { code:'KO540304', name:'PNT', type:'S', bizNo:'' },
+  { code:'KO513317', name:'Daimler Commercial Vehicles South East Asia', type:'C', bizNo:'' },
+  { code:'KO513320', name:'PT DAIMLER COMMERCIAL VEHICLES INDONESIA', type:'C', bizNo:'' },
+];
+
+// ─────────────────────────────────────────────
+//  VOUCHER STATE
+// ─────────────────────────────────────────────
+let lines = [];
+let currentGlLineIdx = null;
+
+const APPROVAL_RULES = {
+  AP:     { TL:'< 1,000,000', MC:'< 20,000,000', CEO:'>= 20,000,000', RD:'>= 20,000,000', CFO:'>= 1,000,000' },
+  AP_IMS: { TL:'<= 1,000,000', MC:'<= 20,000,000', CEO:'> 50,000,000', RD:'> 50,000,000', CFO:'<= 50,000,000' },
+  AP_CR:  { TL:'<= 10,000,000', MC:'<= 10,000,000', CEO:'> 10,000,000', RD:'> 10,000,000', CFO:'<= 10,000,000' },
+  AR:     { TL:'< 20,000,000', MC:'< 20,000,000', CEO:'-', RD:'-', CFO:'>= 20,000,000' },
+  GL:     { TL:'필수', MC:'필수', CEO:'필요시', RD:'필요시', CFO:'필수' },
+  FA:     { TL:'필수', MC:'필수', CEO:'필요시', RD:'필요시', CFO:'필수' },
+  ADV:    { TL:'< 1,000,000', MC:'< 20,000,000', CEO:'>= 20,000,000', RD:'>= 20,000,000', CFO:'>= 1,000,000' },
+  SET:    { TL:'필수', MC:'필수', CEO:'-', RD:'-', CFO:'필수' },
+};
+
+const ACCOUNTING_HANDLERS = {
+  AP:    { name:'공현주', dept:'Accounting' },
+  AP_IMS:{ name:'김소라', dept:'Accounting' },
+  AP_CR: { name:'마지현', dept:'Accounting' },
+  AR:    { name:'마지현', dept:'Accounting' },
+  GL:    { name:'김소라', dept:'Accounting' },
+  FA:    { name:'김소라', dept:'Accounting' },
+  ADV:   { name:'공현주', dept:'Accounting' },
+  SET:   { name:'공현주', dept:'Accounting' },
+};
+
+// 로컬 스토리지 기반 임시 데이터
+let voucherStore = JSON.parse(localStorage.getItem('stk_vouchers') || '[]');
+
+function saveStore() {
+  localStorage.setItem('stk_vouchers', JSON.stringify(voucherStore));
+}
+
+// ─────────────────────────────────────────────
+//  TABS
+// ─────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((t,i)=>{
+    t.classList.toggle('active', (tab==='list'&&i===0)||(tab==='new'&&i===1));
+  });
+  document.getElementById('panelList').classList.toggle('active', tab==='list');
+  document.getElementById('panelNew').classList.toggle('active', tab==='new');
+}
+
+function showNewVoucher() {
+  resetForm();
+  switchTab('new');
+}
+
+// ─────────────────────────────────────────────
+//  FORM
+// ─────────────────────────────────────────────
+function onVoucherTypeChange() {
+  const type = document.getElementById('voucherType').value;
+  // BP 필수 표시
+  const isGL = (type === 'GL');
+  document.getElementById('bpReqMark').style.display = isGL ? 'none' : '';
+  renderApproval();
+}
+
+function renderApproval() {
+  const type = document.getElementById('voucherType').value;
+  const rules = APPROVAL_RULES[type] || {};
+  const handler = ACCOUNTING_HANDLERS[type] || { name:'-', dept:'Accounting' };
+
+  // Accounting
+  document.getElementById('approvalAccounting').innerHTML = `
+    <div class="approval-box">
+      <div class="ap-header">담당자</div>
+      <div class="ap-body">
+        <div class="ap-name">${handler.name}</div>
+        <div class="ap-dept">${handler.dept}</div>
+        <div class="ap-status"><span class="status-badge s-required">필수</span></div>
+      </div>
+    </div>`;
+
+  // Business
+  const biz = [
+    { title:'TL', name:'', dept:'', range: rules.TL||'-' },
+    { title:'MC', name:'', dept:'', range: rules.MC||'-' },
+    { title:'CEO', name:'Antonio Randazzo', dept:'CEO Office', range: rules.CEO||'-' },
+    { title:'RD', name:'Keuntae Dong', dept:'RD Office', range: rules.RD||'-' },
+  ];
+  document.getElementById('approvalBusiness').innerHTML = biz.map(b => {
+    const isNA = b.range === '-';
+    return `<div class="approval-box">
+      <div class="ap-header">${b.title}</div>
+      <div class="ap-body">
+        ${b.name ? `<div class="ap-name">${b.name}</div><div class="ap-dept">${b.dept}</div>` : '<div class="ap-name text-muted">담당자 TBD</div>'}
+        <div style="margin-top:6px"><span class="ap-range">${b.range}</span></div>
+        <div class="ap-status"><span class="status-badge ${isNA?'s-na':'s-pending'}">${isNA?'해당없음':'대기중'}</span></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // F&C
+  const fc = [
+    { title:'Controller', name:'Jungho Yoo', dept:'Controlling', range:'필요시' },
+    { title:'Accounting Mgr.', name:'Gina Shin', dept:'Accounting', range:'필수' },
+    { title:'CFO', name:'Martin Schindele', dept:'F&C', range: rules.CFO||'-' },
+  ];
+  document.getElementById('approvalFC').innerHTML = fc.map(f => {
+    const isNA = f.range === '-';
+    return `<div class="approval-box">
+      <div class="ap-header">${f.title}</div>
+      <div class="ap-body">
+        <div class="ap-name">${f.name}</div>
+        <div class="ap-dept">${f.dept}</div>
+        <div style="margin-top:6px"><span class="ap-range">${f.range}</span></div>
+        <div class="ap-status"><span class="status-badge ${isNA?'s-na':f.range==='필수'?'s-required':'s-pending'}">${isNA?'해당없음':f.range==='필수'?'필수':'대기중'}</span></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ─────────────────────────────────────────────
+//  ACCOUNT LINES
+// ─────────────────────────────────────────────
+function addLine() {
+  lines.push({ drcr:'', gl:'', glName:'', cctr:'', pc:'', subpc:'', lineDesc:'', currency:'EUR', amount:'' });
+  renderLines();
+}
+
+function deleteLine(idx) {
+  lines.splice(idx,1);
+  renderLines();
+}
+
+function renderLines() {
+  const tbody = document.getElementById('linesBody');
+  if (lines.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--gray-400)">
+      ＋ 라인 추가 버튼을 클릭하여 회계 라인을 추가하세요
+    </td></tr>`;
+    updateTotals();
+    return;
+  }
+
+  tbody.innerHTML = lines.map((l,i) => `
+    <tr>
+      <td class="col-no">${i+1}</td>
+      <td class="col-drcr">
+        <select onchange="lines[${i}].drcr=this.value;updateTotals()">
+          <option value="" ${!l.drcr?'selected':''}>선택</option>
+          <option value="DR" ${l.drcr==='DR'?'selected':''}>차변(Debit)</option>
+          <option value="CR" ${l.drcr==='CR'?'selected':''}>대변(Credit)</option>
+        </select>
+      </td>
+      <td class="col-gl">
+        <div class="input-with-btn" style="gap:4px">
+          <input type="text" value="${l.gl}" placeholder="코드" readonly
+            style="width:80px;cursor:pointer" onclick="openGlModal(${i})" title="${l.glName}">
+          <button class="btn-search" onclick="openGlModal(${i})" style="padding:5px 8px;font-size:11px">🔍</button>
+        </div>
+      </td>
+      <td class="col-desc" style="font-size:11px;color:var(--gray-500)">${l.glName||'-'}</td>
+      <td class="col-cctr">
+        <select onchange="lines[${i}].cctr=this.value">
+          <option value="">-</option>
+          ${COST_CENTERS.map(c=>`<option value="${c.code}" ${l.cctr===c.code?'selected':''}>${c.code} ${c.name}</option>`).join('')}
+        </select>
+      </td>
+      <td class="col-pc">
+        <select onchange="lines[${i}].pc=this.value">
+          <option value="">-</option>
+          ${PROFIT_CENTERS.map(p=>`<option value="${p.code}" ${l.pc===p.code?'selected':''}>${p.code} ${p.name}</option>`).join('')}
+        </select>
+      </td>
+      <td class="col-subpc">
+        <select onchange="lines[${i}].subpc=this.value">
+          <option value="">-</option>
+          ${['2121','2123','2124','2126','2127','2164','NA'].map(s=>`<option value="${s}" ${l.subpc===s?'selected':''}>${s}</option>`).join('')}
+        </select>
+      </td>
+      <td class="col-lineDesc">
+        <input type="text" value="${l.lineDesc}" placeholder="라인 설명" onchange="lines[${i}].lineDesc=this.value">
+      </td>
+      <td class="col-curr">
+        <select onchange="lines[${i}].currency=this.value;updateTotals()">
+          ${['EUR','KRW','USD','JPY','CNY','SGD'].map(c=>`<option ${l.currency===c?'selected':''}>${c}</option>`).join('')}
+        </select>
+      </td>
+      <td class="col-amt">
+        <input type="number" value="${l.amount}" step="0.01" placeholder="0.00"
+          style="text-align:right" onchange="lines[${i}].amount=parseFloat(this.value)||0;updateTotals()">
+      </td>
+      <td class="col-total text-right fw-bold" id="lineTotal_${i}">
+        ${l.amount ? (l.drcr==='CR'?'-':'') + formatNum(Math.abs(parseFloat(l.amount)||0)) : '0.00'}
+      </td>
+      <td class="col-del">
+        <button class="btn-del-line" onclick="deleteLine(${i})" title="라인 삭제">✕</button>
+      </td>
+    </tr>
+  `).join('');
+
+  updateTotals();
+}
+
+function updateTotals() {
+  let drTotal = 0, crTotal = 0, mainCurrency = 'EUR';
+  lines.forEach(l => {
+    const amt = parseFloat(l.amount) || 0;
+    if (l.drcr === 'DR') drTotal += amt;
+    if (l.drcr === 'CR') crTotal += amt;
+    if (l.currency) mainCurrency = l.currency;
+  });
+
+  const total = drTotal;
+  document.getElementById('totalAmt').textContent = mainCurrency + ' ' + formatNum(total);
+
+  // KRW 환산
+  const rate = parseFloat(document.getElementById('exchangeRate').value) || getDefaultRate(mainCurrency);
+  if (mainCurrency !== 'KRW' && rate) {
+    document.getElementById('totalKrw').textContent = '≈ KRW ' + formatNum(Math.round(total * rate));
+  } else {
+    document.getElementById('totalKrw').textContent = '';
+  }
+
+  // 검증
+  const badge = document.getElementById('verifyBadge');
+  if (lines.length === 0) {
+    badge.textContent = '-';
+    badge.className = 'verify-badge';
+  } else if (Math.abs(drTotal - crTotal) < 0.01) {
+    badge.textContent = '✔ OK';
+    badge.className = 'verify-badge verify-ok';
+  } else {
+    badge.textContent = '✕ 불일치 (DR: ' + formatNum(drTotal) + ' / CR: ' + formatNum(crTotal) + ')';
+    badge.className = 'verify-badge verify-err';
+  }
+}
+
+function getDefaultRate(currency) {
+  const rates = { EUR:1730.51, USD:1476.13, JPY:9.38, CNY:216.03, SGD:1158.06 };
+  return rates[currency] || 0;
+}
+
+function formatNum(n) {
+  return Number(n).toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
+}
+
+// ─────────────────────────────────────────────
+//  BP MODAL
+// ─────────────────────────────────────────────
+function openBpModal() {
+  document.getElementById('bpModal').classList.add('open');
+  document.getElementById('bpSearchInput').value = '';
+  document.getElementById('bpSearchResults').innerHTML = '<div style="text-align:center;padding:24px;color:var(--gray-400)">검색어를 입력하세요</div>';
+  setTimeout(() => document.getElementById('bpSearchInput').focus(), 100);
+}
+function closeBpModal() { document.getElementById('bpModal').classList.remove('open'); }
+
+function searchBP(q) {
+  const kw = q.toLowerCase().trim();
+  if (!kw) {
+    document.getElementById('bpSearchResults').innerHTML = '<div style="text-align:center;padding:24px;color:var(--gray-400)">검색어를 입력하세요</div>';
+    return;
+  }
+  const results = BP_MASTER.filter(b =>
+    b.code.toLowerCase().includes(kw) || b.name.toLowerCase().includes(kw)
+  );
+  if (!results.length) {
+    document.getElementById('bpSearchResults').innerHTML = '<div style="text-align:center;padding:24px;color:var(--gray-400)">검색 결과 없음</div>';
+    return;
+  }
+  document.getElementById('bpSearchResults').innerHTML = results.map(b => `
+    <div class="result-item" onclick="selectBP('${b.code}')">
+      <div class="r-code">${b.code} · ${b.type==='S'?'Vendor (S)':'Customer (C)'}</div>
+      <div class="r-name">${b.name}</div>
+      ${b.bizNo ? `<div class="r-sub">사업자번호: ${b.bizNo}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+function selectBP(code) {
+  const bp = BP_MASTER.find(b => b.code === code);
+  if (!bp) return;
+  document.getElementById('bpCode').value = bp.code;
+  document.getElementById('bpName').value = bp.name;
+  document.getElementById('bpCategory').value = bp.type === 'S' ? 'S (Vendor)' : 'C (Customer)';
+  document.getElementById('bpBizNo').value = bp.bizNo || '-';
+  closeBpModal();
+}
+
+// ─────────────────────────────────────────────
+//  GL MODAL
+// ─────────────────────────────────────────────
+function openGlModal(idx) {
+  currentGlLineIdx = idx;
+  document.getElementById('glModal').classList.add('open');
+  document.getElementById('glSearchInput').value = '';
+  document.getElementById('glSearchResults').innerHTML = '<div style="text-align:center;padding:24px;color:var(--gray-400)">검색어를 입력하세요</div>';
+  // 전체 목록 기본 표시
+  renderGlResults(GL_ACCOUNTS);
+  setTimeout(() => document.getElementById('glSearchInput').focus(), 100);
+}
+function closeGlModal() { document.getElementById('glModal').classList.remove('open'); }
+
+function searchGL(q) {
+  const kw = q.toLowerCase().trim();
+  if (!kw) { renderGlResults(GL_ACCOUNTS); return; }
+  renderGlResults(GL_ACCOUNTS.filter(g => g.code.includes(kw) || g.name.toLowerCase().includes(kw)));
+}
+
+function renderGlResults(list) {
+  if (!list.length) {
+    document.getElementById('glSearchResults').innerHTML = '<div style="text-align:center;padding:24px;color:var(--gray-400)">검색 결과 없음</div>';
+    return;
+  }
+  document.getElementById('glSearchResults').innerHTML = list.map(g => `
+    <div class="result-item" onclick="selectGL('${g.code}')">
+      <div class="r-code">${g.code}${g.cctrRequired?' · CCTR필수':''}${g.pcRequired?' · PC필수':''}</div>
+      <div class="r-name">${g.name}</div>
+    </div>
+  `).join('');
+}
+
+function selectGL(code) {
+  const gl = GL_ACCOUNTS.find(g => g.code === code);
+  if (!gl || currentGlLineIdx === null) return;
+  lines[currentGlLineIdx].gl = gl.code;
+  lines[currentGlLineIdx].glName = gl.name;
+  renderLines();
+  closeGlModal();
+}
+
+// ─────────────────────────────────────────────
+//  SAVE / RESET
+// ─────────────────────────────────────────────
+function saveVoucher(status) {
+  const type = document.getElementById('voucherType').value;
+  if (!type) { alert('Voucher Type을 선택하세요.'); return; }
+  const purpose = document.getElementById('purpose').value.trim();
+  if (!purpose) { alert('Purpose / Description을 입력하세요.'); return; }
+  if (lines.length === 0) { alert('회계 라인을 1개 이상 추가하세요.'); return; }
+
+  const badge = document.getElementById('verifyBadge');
+  if (status === 'Pending' && !badge.classList.contains('verify-ok')) {
+    if (!confirm('DR/CR 합계가 일치하지 않습니다. 계속 진행하시겠습니까?')) return;
+  }
+
+  const voucher = {
+    id: 'VCH-' + Date.now(),
+    type,
+    submissionDate: document.getElementById('submissionDate').value,
+    invoiceDate: document.getElementById('invoiceDate').value,
+    requester: document.getElementById('requesterName').value,
+    cctr: document.getElementById('requesterCCTR').value,
+    bpCode: document.getElementById('bpCode').value,
+    bpName: document.getElementById('bpName').value,
+    purpose,
+    lines: JSON.parse(JSON.stringify(lines)),
+    status,
+    createdAt: new Date().toISOString(),
+  };
+
+  voucherStore.unshift(voucher);
+  saveStore();
+
+  alert(status === 'Draft' ? '임시저장되었습니다.' : '결재 요청이 완료되었습니다.');
+  resetForm();
+  renderList();
+  switchTab('list');
+}
+
+function resetForm() {
+  document.getElementById('voucherType').value = '';
+  document.getElementById('invoiceDate').value = '';
+  document.getElementById('exchangeRate').value = '';
+  document.getElementById('bpCode').value = '';
+  document.getElementById('bpName').value = '';
+  document.getElementById('bpCategory').value = '';
+  document.getElementById('bpBizNo').value = '';
+  document.getElementById('purpose').value = '';
+  document.getElementById('voucherIdBadge').textContent = '';
+  lines = [];
+  renderLines();
+  renderApproval();
+}
+
+// ─────────────────────────────────────────────
+//  LIST
+// ─────────────────────────────────────────────
+const TYPE_LABEL = {
+  AP:'AP', AP_IMS:'AP (IMS)', AP_CR:'AP (CR)', AR:'AR', GL:'GL', FA:'FA', ADV:'ADV', SET:'SET'
+};
+const TYPE_CLASS = {
+  AP:'t-ap', AP_IMS:'t-ims', AP_CR:'t-cr', AR:'t-ar', GL:'t-gl', FA:'t-fa', ADV:'t-adv', SET:'t-adv'
+};
+const STATUS_LABEL = { Draft:'임시저장', Pending:'결재 중', Approved:'승인 완료' };
+
+function renderList() {
+  const filterType   = document.getElementById('filterType')?.value || '';
+  const filterStatus = document.getElementById('filterStatus')?.value || '';
+  const filterKw     = (document.getElementById('filterKeyword')?.value || '').toLowerCase();
+
+  let list = voucherStore.filter(v => {
+    if (filterType && v.type !== filterType) return false;
+    if (filterStatus && v.status !== filterStatus) return false;
+    if (filterKw && !v.purpose?.toLowerCase().includes(filterKw) && !v.bpName?.toLowerCase().includes(filterKw)) return false;
+    return true;
+  });
+
+  const el = document.getElementById('voucherList');
+  if (!el) return;
+
+  if (list.length === 0) {
+    el.innerHTML = `<div class="list-empty">
+      <div class="icon">📋</div>
+      <p>${voucherStore.length === 0 ? '작성된 바우처가 없습니다. 새 바우처를 작성해보세요.' : '검색 결과가 없습니다.'}</p>
+    </div>`;
+    return;
+  }
+
+  const getTotal = v => {
+    let t = 0, curr = 'EUR';
+    v.lines?.forEach(l => { if(l.drcr==='DR') { t+=parseFloat(l.amount)||0; curr=l.currency||curr; } });
+    return { amt: t, currency: curr };
+  };
+
+  el.innerHTML = list.map(v => {
+    const tot = getTotal(v);
+    const statusMap = { Draft:'s-pending', Pending:'s-required', Approved:'s-approved' };
+    return `<div class="voucher-row" onclick="openVoucher('${v.id}')">
+      <div class="vr-date">${v.submissionDate || '-'}</div>
+      <div class="vr-type"><span class="type-badge ${TYPE_CLASS[v.type]||'t-gl'}">${TYPE_LABEL[v.type]||v.type}</span></div>
+      <div class="vr-desc">${v.purpose || '-'}</div>
+      <div class="vr-vendor">${v.bpName || '-'}</div>
+      <div class="vr-amt">${formatNum(tot.amt)}</div>
+      <div class="vr-curr">${tot.currency}</div>
+      <div class="vr-status"><span class="status-badge ${statusMap[v.status]||'s-pending'}">${STATUS_LABEL[v.status]||v.status}</span></div>
+    </div>`;
+  }).join('');
+}
+
+function openVoucher(id) {
+  const v = voucherStore.find(x => x.id === id);
+  if (!v) return;
+  // 폼에 데이터 로드
+  document.getElementById('voucherType').value = v.type;
+  document.getElementById('submissionDate').value = v.submissionDate;
+  document.getElementById('invoiceDate').value = v.invoiceDate;
+  document.getElementById('bpCode').value = v.bpCode || '';
+  document.getElementById('bpName').value = v.bpName || '';
+  document.getElementById('purpose').value = v.purpose || '';
+  document.getElementById('voucherIdBadge').textContent = v.id;
+  lines = JSON.parse(JSON.stringify(v.lines || []));
+  onVoucherTypeChange();
+  renderLines();
+  switchTab('new');
+}
+
+// ─────────────────────────────────────────────
+//  INIT
+// ─────────────────────────────────────────────
+initAuth();
+</script>
+</body>
+</html>
