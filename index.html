@@ -534,7 +534,7 @@ async function loadBPMaster() {
     let fileUrl = null;
     try {
       // 방법1: 파일명으로 search
-      const searchRes = await api('/sites/'+nasId+'/drive/root/search(q='Master data List 2014')');
+      const searchRes = await api('/sites/'+nasId+"/drive/root/search(q='Master data List 2014')");
       const found = (searchRes.value||[]).find(i=>(i.name||'').includes('DTK'));
       if(found) fileUrl = found['@microsoft.graph.downloadUrl'] || (GRAPH+'/drives/'+docDrive.id+'/items/'+found.id+'/content');
     } catch(_){}
