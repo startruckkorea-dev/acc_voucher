@@ -621,20 +621,28 @@ async function loadBPMaster() {
     nasId = nasSite.id;
     const drives = await api('/sites/'+nasId+'/drives');
     const docDrive = drives.value.find(d=>['Documents','문서','Shared Documents'].includes(d.name))||drives.value[0];
-    // STK-NAS: 드라이브명 'STK' 하위 경로로 직접 접근
-    // 전체 경로: STK-Shared/6. STK-directed B2B/003._Accounting_Master Data Accenture/Master data List 2014_Final(DTK).xlsx
-    const BP_FILE_PATH = 'STK-Shared/6. STK-directed B2B/003._Accounting_Master Data Accenture/Master data List 2014_Final(DTK).xlsx';
+    // 드라이브 목록 로그
+    console.log('[BP] 드라이브 목록:', drives.value.map(d=>d.name+'('+d.id.slice(-8)+')').join(', '));
+    const stkDrive = drives.value.find(d=>d.name==='STK') || drives.value.find(d=>d.name==='STK-Shared') || drives.value.find(d=>['Documents','문서','Shared Documents'].includes(d.name)) || drives.value[0];
+    console.log('[BP] 선택 드라이브:', stkDrive.name);
 
-    // drives 목록에서 STK 드라이브 찾기
-    const stkDrive = drives.value.find(d=>d.name==='STK') || drives.value.find(d=>['Documents','문서','Shared Documents'].includes(d.name)) || drives.value[0];
-    console.log('[BP] 사용 드라이브:', stkDrive.name, stkDrive.id);
-
-    // 경로에서 각 폴더 세그먼트를 개별 인코딩
-    const encodedPath = BP_FILE_PATH.split('/').map(s=>encodeURIComponent(s)).join('/');
-    const res = await fetch(
-      GRAPH+'/drives/'+stkDrive.id+'/root:/'+encodedPath+':/content',
-      {headers:{Authorization:'Bearer '+t}});
-    if(!res.ok) throw new Error('BP 파일 없음: '+res.status);
+    // 경로 후보 (루트 기준으로 다양하게 시도)
+    const pathCandidates = [
+      '6. STK-directed B2B/003._Accounting_Master Data Accenture/Master data List 2014_Final(DTK).xlsx',
+      'STK-Shared/6. STK-directed B2B/003._Accounting_Master Data Accenture/Master data List 2014_Final(DTK).xlsx',
+      '003._Accounting_Master Data Accenture/Master data List 2014_Final(DTK).xlsx',
+      'Master data List 2014_Final(DTK).xlsx',
+    ];
+    let res = null;
+    for(const path of pathCandidates) {
+      const encodedPath = path.split('/').map(s=>encodeURIComponent(s)).join('/');
+      const url = GRAPH+'/drives/'+stkDrive.id+'/root:/'+encodedPath+':/content';
+      console.log('[BP] 시도:', path);
+      const r = await fetch(url, {headers:{Authorization:'Bearer '+t}});
+      if(r.ok) { res = r; console.log('[BP] ✅ 성공:', path); break; }
+      console.log('[BP] ❌ 실패', r.status, path);
+    }
+    if(!res) throw new Error('BP 파일 모든 경로 실패');
     const buf = await res.arrayBuffer();
     const wb = XLSX.read(buf,{type:'array'});
     const sheetName = wb.SheetNames.find(s=>s==='DTK')||wb.SheetNames[0];
