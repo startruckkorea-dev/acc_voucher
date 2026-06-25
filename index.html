@@ -358,7 +358,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 </div>
 
 <!-- BP 검색 모달 -->
-<div class="modal-overlay" id="bp-modal">
+<div class="modal-overlay" id="bp-modal" onclick="if(event.target===this)closeBpModal()">
   <div class="modal">
     <div class="modal-head">
       <span>🔍 BP 검색 (Vendor / Customer)</span>
@@ -375,7 +375,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 </div>
 
 <!-- GL 검색 모달 -->
-<div class="modal-overlay" id="gl-modal">
+<div class="modal-overlay" id="gl-modal" onclick="if(event.target===this)closeGlModal()">
   <div class="modal">
     <div class="modal-head">
       <span>🔍 GL Account 검색</span>
