@@ -626,23 +626,32 @@ async function loadBPMaster() {
     const stkDrive = drives.value.find(d=>d.name==='STK') || drives.value.find(d=>d.name==='STK-Shared') || drives.value.find(d=>['Documents','문서','Shared Documents'].includes(d.name)) || drives.value[0];
     console.log('[BP] 선택 드라이브:', stkDrive.name);
 
-    // 경로 후보 (루트 기준으로 다양하게 시도)
-    const pathCandidates = [
-      '6. STK-directed B2B/003._Accounting_Master Data Accenture/Master data List 2014_Final(DTK).xlsx',
-      'STK-Shared/6. STK-directed B2B/003._Accounting_Master Data Accenture/Master data List 2014_Final(DTK).xlsx',
-      '003._Accounting_Master Data Accenture/Master data List 2014_Final(DTK).xlsx',
-      'Master data List 2014_Final(DTK).xlsx',
-    ];
-    let res = null;
-    for(const path of pathCandidates) {
-      const encodedPath = path.split('/').map(s=>encodeURIComponent(s)).join('/');
-      const url = GRAPH+'/drives/'+stkDrive.id+'/root:/'+encodedPath+':/content';
-      console.log('[BP] 시도:', path);
-      const r = await fetch(url, {headers:{Authorization:'Bearer '+t}});
-      if(r.ok) { res = r; console.log('[BP] ✅ 성공:', path); break; }
-      console.log('[BP] ❌ 실패', r.status, path);
+    // search API로 파일 찾기 (경로 무관)
+    let fileItemId = null;
+    try {
+      // 방법1: 드라이브 search
+      const sr = await fetch(
+        GRAPH+'/drives/'+stkDrive.id+"/root/search(q='Master%20data%20List%202014')",
+        {headers:{Authorization:'Bearer '+t}}
+      );
+      if(sr.ok) {
+        const srData = await sr.json();
+        const found = (srData.value||[]).find(i=>(i.name||'').includes('DTK'));
+        if(found) { fileItemId = found.id; console.log('[BP] search 발견:', found.name, found.id); }
+      }
+    } catch(_){}
+    // 방법2: 사이트 search
+    if(!fileItemId) {
+      try {
+        const sr2 = await api('/sites/'+nasId+"/drive/search(q='Master data List 2014')");
+        const found2 = (sr2.value||[]).find(i=>(i.name||'').includes('DTK'));
+        if(found2) { fileItemId = found2.id; console.log('[BP] site search 발견:', found2.name); }
+      } catch(_){}
     }
-    if(!res) throw new Error('BP 파일 모든 경로 실패');
+    if(!fileItemId) throw new Error('BP 파일을 찾을 수 없음 (search 실패)');
+    const res = await fetch(
+      GRAPH+'/drives/'+stkDrive.id+'/items/'+fileItemId+'/content',
+      {headers:{Authorization:'Bearer '+t}});
     const buf = await res.arrayBuffer();
     const wb = XLSX.read(buf,{type:'array'});
     const sheetName = wb.SheetNames.find(s=>s==='DTK')||wb.SheetNames[0];
