@@ -855,6 +855,7 @@ function searchBP(q) {
         res.push(b); if(res.length>=50) break;
       }
     }
+    if(res.length===0) console.log('[BP 검색 없음] kw='+kw+' 총데이터='+bpData.length+' 마지막코드='+bpData[bpData.length-1]?.code);
     renderBpResults(res);
   },200);
 }
