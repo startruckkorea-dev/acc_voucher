@@ -506,7 +506,7 @@ async function boot(account) {
   document.getElementById('user-name').textContent=(account.name||account.username);
   // 자동 필드
   document.getElementById('v-requester').value = account.name||account.username;
-  document.getElementById('v-cctr').value = getCCTR(account.name);
+  document.getElementById('v-cctr').value = getCCTR(account.username||account.name);
   document.getElementById('v-date').value = new Date().toISOString().slice(0,10);
   renderApproval();
   renderList();
@@ -516,11 +516,19 @@ async function boot(account) {
   loadBPMaster().catch(e=>console.warn('BP 마스터 로드 실패:', e.message));
 }
 
-function getCCTR(name) {
-  const map={'Junsoon Lee':'47900745 IT Application','Gina Shin':'47900776 Accounting',
-    'Hyunju Gong':'47900776 Accounting','Jihyun Ma':'47900776 Accounting',
-    'Sora Kim':'47900776 Accounting','Martin Schindele':'47900706 CFO Office'};
-  return map[name]||'47900776 Accounting';
+function getCCTR(nameOrEmail) {
+  // 이메일 기반 매핑 (account.username)
+  const emailMap = {
+    'jimmy.lee@hyosung.com':    '47900745 IT Application',
+    'jimmy.lee@startruckkorea.com': '47900745 IT Application',
+    'gina.shin@hyosung.com':    '47900776 Accounting',
+    'hyunju.gong@hyosung.com':  '47900776 Accounting',
+    'jihyun.ma@hyosung.com':    '47900776 Accounting',
+    'sora.kim@hyosung.com':     '47900776 Accounting',
+    'martin.schindele@hyosung.com': '47900706 CFO Office',
+  };
+  const key = (nameOrEmail||'').toLowerCase();
+  return emailMap[key] || '47900776 Accounting';
 }
 
 // ── CCTR 마스터 로드 (STK-DB SharePoint Excel) ──
@@ -593,12 +601,23 @@ async function loadBPMaster() {
       if(found) fileUrl = found['@microsoft.graph.downloadUrl'] || (GRAPH+'/drives/'+docDrive.id+'/items/'+found.id+'/content');
     } catch(_){}
     if(!fileUrl) {
-      // 방법2: GUID로 직접 접근
-      const itemRes = await api('/sites/'+nasId+'/drive/items/01'+'/content').catch(()=>null);
-      // 방법3: 경로 단계별 접근
-      const rootItems = await api('/sites/'+nasId+'/drive/root/children');
-      const xlsxItem = (rootItems.value||[]).find(i=>(i.name||'').includes('Master data'));
-      if(xlsxItem) fileUrl = GRAPH+'/sites/'+nasId+'/drive/items/'+xlsxItem.id+'/content';
+      // 방법2: root/children 전체 탐색
+    if(!fileUrl) {
+      try {
+        const rootItems = await api('/sites/'+nasId+'/drive/root/children');
+        const xlsxItem = (rootItems.value||[]).find(i=>(i.name||'').includes('Master data'));
+        if(xlsxItem) fileUrl = GRAPH+'/sites/'+nasId+'/drive/items/'+xlsxItem.id+'/content';
+      } catch(_){}
+    }
+    // 방법3: 모든 드라이브 탐색
+    if(!fileUrl) {
+      for(const drv of (drives.value||[])) {
+        try {
+          const items = await api('/drives/'+drv.id+'/root/children');
+          const found2 = (items.value||[]).find(i=>(i.name||'').includes('Master data'));
+          if(found2){fileUrl=GRAPH+'/drives/'+drv.id+'/items/'+found2.id+'/content';break;}
+        } catch(_){}
+      }
     }
     if(!fileUrl) throw new Error('BP 파일 경로를 찾을 수 없음');
     const res = await fetch(fileUrl, {headers:{Authorization:'Bearer '+t}});
