@@ -583,8 +583,15 @@ async function loadCCTRMaster(userName) {
       let matched = null;
       if(empSheetName) {
         const empRows = XLSX.utils.sheet_to_json(wb.Sheets[empSheetName],{header:1});
-        const empHeader = empRows[0]||[];
-        console.log('[CCTR] Employee 헤더:', empHeader.join(', '));
+        // 헤더 행 찾기 (Function, 팀, 코스트센터 명, 코스트센터, 성함_한글, Name_ENG 가 있는 행)
+        let empHeaderIdx = -1;
+        for(let i=0;i<empRows.length;i++){
+          const r = empRows[i]||[];
+          if(r.some(c=>(c||'').toString().includes('Name_ENG'))) { empHeaderIdx=i; break; }
+        }
+        if(empHeaderIdx === -1) empHeaderIdx = 3; // 기본 4번째 행
+        const empHeader = empRows[empHeaderIdx]||[];
+        console.log('[CCTR] Employee 헤더(row'+empHeaderIdx+'):', empHeader.join(', '));
         const cctrCol2   = empHeader.findIndex(h=>(h||'').toString().includes('Cost Center'));
         const nameEngCol = empHeader.findIndex(h=>(h||'').toString().includes('Name_ENG'));
         const nameKoCol  = empHeader.findIndex(h=>(h||'').toString().includes('성함'));
@@ -592,7 +599,7 @@ async function loadCCTRMaster(userName) {
         const koName = (userName.split(' ')[0])||'';
         const enName = (userName.match(/\(([^)]+)\)/)||[])[1]||'';
         console.log('[CCTR] 찾을 이름 - KO:'+koName+' EN:'+enName);
-        for(let i=1;i<empRows.length;i++){
+        for(let i=empHeaderIdx+1;i<empRows.length;i++){
           const r = empRows[i];
           const eng = (r[nameEngCol]||'').toString().trim();
           const ko  = (r[nameKoCol]||'').toString().trim();
