@@ -706,6 +706,12 @@ async function loadBPMaster() {
       bpData.push({code,type:item,name:name1,nameKo:name2,bizNo});
     }
     console.log('[BP Master] Loaded:', bpData.length, 'entries');
+    // 모달이 열려있으면 자동 업데이트
+    if(document.getElementById('bp-modal')?.classList.contains('open')) {
+      document.getElementById('bp-search-input').disabled = false;
+      renderBpResults(bpData.slice(0,10));
+      document.getElementById('bp-search-input').focus();
+    }
   } catch(e) {
     console.warn('[BP Master] 로드 실패 — 기본 목록 사용:', e.message);
     bpData = [
@@ -838,8 +844,14 @@ function updateTotals() {
 function openBpModal() {
   document.getElementById('bp-modal').classList.add('open');
   document.getElementById('bp-search-input').value='';
-  renderBpResults(bpData.slice(0,10));
-  setTimeout(()=>document.getElementById('bp-search-input').focus(),100);
+  if(bpData.length === 0) {
+    document.getElementById('bp-search-results').innerHTML = '<div style="text-align:center;padding:24px;color:#a19f9d">⏳ BP 데이터 로딩 중... 잠시만 기다려주세요</div>';
+    document.getElementById('bp-search-input').disabled = true;
+  } else {
+    document.getElementById('bp-search-input').disabled = false;
+    renderBpResults(bpData.slice(0,10));
+    setTimeout(()=>document.getElementById('bp-search-input').focus(),100);
+  }
 }
 function closeBpModal() { document.getElementById('bp-modal').classList.remove('open'); }
 
