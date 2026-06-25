@@ -577,16 +577,21 @@ async function loadCCTRMaster(userName) {
     }
     // Employee 시트에서 이름으로 CCTR 매핑
     if(userName) {
+      console.log('[CCTR] 시트 목록:', wb.SheetNames.join(', '));
       const empSheetName = wb.SheetNames.find(s=>s.includes('Employee'));
+      console.log('[CCTR] Employee 시트:', empSheetName||'없음');
       let matched = null;
       if(empSheetName) {
         const empRows = XLSX.utils.sheet_to_json(wb.Sheets[empSheetName],{header:1});
         const empHeader = empRows[0]||[];
+        console.log('[CCTR] Employee 헤더:', empHeader.join(', '));
         const cctrCol2   = empHeader.findIndex(h=>(h||'').toString().includes('Cost Center'));
         const nameEngCol = empHeader.findIndex(h=>(h||'').toString().includes('Name_ENG'));
         const nameKoCol  = empHeader.findIndex(h=>(h||'').toString().includes('성함'));
-        const koName = (userName.split(' ')[0])||'';  // 첫 공백 전 이름 (이준순)
+        console.log('[CCTR] 컬럼 인덱스 - CCTR:'+cctrCol2+' ENG:'+nameEngCol+' KO:'+nameKoCol);
+        const koName = (userName.split(' ')[0])||'';
         const enName = (userName.match(/\(([^)]+)\)/)||[])[1]||'';
+        console.log('[CCTR] 찾을 이름 - KO:'+koName+' EN:'+enName);
         for(let i=1;i<empRows.length;i++){
           const r = empRows[i];
           const eng = (r[nameEngCol]||'').toString().trim();
@@ -645,21 +650,27 @@ async function loadBPMaster() {
         }
       } catch(_){}
     }
-    // STK-DB에서도 시도
+    // STK-DB에서도 시도 (root/children + search)
     if(!fileItemId) {
       try {
         if(!siteId) { const s=await api('/sites/'+SITE_PATH_DB); siteId=s.id; }
         const dbDrives = await api('/sites/'+siteId+'/drives');
+        console.log('[BP] STK-DB 드라이브:', dbDrives.value.map(d=>d.name).join(', '));
         for(const drv of dbDrives.value) {
+          // root/children에서 직접 찾기
           try {
-            const sr = await fetch(
-              GRAPH+'/drives/'+drv.id+"/root/search(q='Master%20data%20List%202014')",
-              {headers:{Authorization:'Bearer '+t}}
-            );
-            if(!sr.ok) continue;
-            const srData = await sr.json();
-            const found = (srData.value||[]).find(i=>(i.name||'').includes('DTK'));
-            if(found) { fileItemId=found.id; fileDriveId=drv.id; console.log('[BP] STK-DB 발견:', found.name); break; }
+            const ci = await api('/drives/'+drv.id+'/root/children');
+            const found3 = (ci.value||[]).find(i=>(i.name||'').includes('Master data'));
+            if(found3) { fileItemId=found3.id; fileDriveId=drv.id; console.log('[BP] STK-DB root 발견:', found3.name); break; }
+          } catch(_){}
+          // search
+          try {
+            const sr = await fetch(GRAPH+'/drives/'+drv.id+"/root/search(q='Master%20data%20List%202014')",{headers:{Authorization:'Bearer '+t}});
+            if(sr.ok) {
+              const srData = await sr.json();
+              const found4 = (srData.value||[]).find(i=>(i.name||'').includes('DTK'));
+              if(found4) { fileItemId=found4.id; fileDriveId=drv.id; console.log('[BP] STK-DB search 발견:', found4.name); break; }
+            }
           } catch(_){}
         }
       } catch(_){}
