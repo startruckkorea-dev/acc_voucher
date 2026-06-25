@@ -621,10 +621,18 @@ async function loadBPMaster() {
     nasId = nasSite.id;
     const drives = await api('/sites/'+nasId+'/drives');
     const docDrive = drives.value.find(d=>['Documents','문서','Shared Documents'].includes(d.name))||drives.value[0];
-    // 직접 경로 지정: STK/STK-Shared/6. STK-directed B2B/003._Accounting_Master Data Accenture/
-    const BP_FILE_PATH = 'STK/STK-Shared/6. STK-directed B2B/003._Accounting_Master Data Accenture/Master data List 2014_Final(DTK).xlsx';
+    // STK-NAS: 드라이브명 'STK' 하위 경로로 직접 접근
+    // 전체 경로: STK-Shared/6. STK-directed B2B/003._Accounting_Master Data Accenture/Master data List 2014_Final(DTK).xlsx
+    const BP_FILE_PATH = 'STK-Shared/6. STK-directed B2B/003._Accounting_Master Data Accenture/Master data List 2014_Final(DTK).xlsx';
+
+    // drives 목록에서 STK 드라이브 찾기
+    const stkDrive = drives.value.find(d=>d.name==='STK') || drives.value.find(d=>['Documents','문서','Shared Documents'].includes(d.name)) || drives.value[0];
+    console.log('[BP] 사용 드라이브:', stkDrive.name, stkDrive.id);
+
+    // 경로에서 각 폴더 세그먼트를 개별 인코딩
+    const encodedPath = BP_FILE_PATH.split('/').map(s=>encodeURIComponent(s)).join('/');
     const res = await fetch(
-      GRAPH+'/sites/'+nasId+'/drive/root:/'+encodeURIComponent(BP_FILE_PATH).replace(/%2F/g,'/')+':'+'/content',
+      GRAPH+'/drives/'+stkDrive.id+'/root:/'+encodedPath+':/content',
       {headers:{Authorization:'Bearer '+t}});
     if(!res.ok) throw new Error('BP 파일 없음: '+res.status);
     const buf = await res.arrayBuffer();
