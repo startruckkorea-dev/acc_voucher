@@ -838,20 +838,31 @@ function updateTotals() {
 function openBpModal() {
   document.getElementById('bp-modal').classList.add('open');
   document.getElementById('bp-search-input').value='';
-  renderBpResults(bpData.slice(0,30));
+  renderBpResults(bpData.slice(0,10));
   setTimeout(()=>document.getElementById('bp-search-input').focus(),100);
 }
 function closeBpModal() { document.getElementById('bp-modal').classList.remove('open'); }
 
+let _bpTimer=null;
 function searchBP(q) {
-  const kw=q.toLowerCase().trim();
-  if(!kw){renderBpResults(bpData.slice(0,30));return;}
-  renderBpResults(bpData.filter(b=>b.code.toLowerCase().includes(kw)||b.name.toLowerCase().includes(kw)||(b.nameKo&&b.nameKo.includes(q))));
+  clearTimeout(_bpTimer);
+  _bpTimer=setTimeout(()=>{
+    const kw=q.toLowerCase().trim();
+    if(!kw){renderBpResults(bpData.slice(0,10));return;}
+    const res=[];
+    for(const b of bpData){
+      if(b.code.toLowerCase().includes(kw)||b.name.toLowerCase().includes(kw)||(b.nameKo&&b.nameKo.includes(q))){
+        res.push(b); if(res.length>=50) break;
+      }
+    }
+    renderBpResults(res);
+  },200);
 }
 function renderBpResults(list) {
   const el=document.getElementById('bp-search-results');
   if(!list.length){el.innerHTML='<div style="text-align:center;padding:20px;color:#a19f9d">검색 결과 없음</div>';return;}
-  el.innerHTML=list.map(b=>`<div class="result-item" onclick="selectBP('${b.code}')">
+  const countHtml = list.length>=50 ? '<div style="font-size:11px;color:#a19f9d;padding:4px 12px;background:#f9f8f7">상위 50개 표시 — 검색어를 더 입력하세요</div>' : '';
+  el.innerHTML=countHtml+list.map(b=>`<div class="result-item" onclick="selectBP('${b.code}')">
     <div class="rc">${b.code} · ${(b.type==='Vendor'||b.type==='S')?'Supplier (S=공급업체)':'Customer (C=고객)'}</div>
     <div class="rn">${b.name}</div>
     ${b.nameKo?`<div class="rs">${b.nameKo}</div>`:''}
