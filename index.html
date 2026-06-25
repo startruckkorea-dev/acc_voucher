@@ -585,7 +585,7 @@ async function loadCCTRMaster(userName) {
         const cctrCol2   = empHeader.findIndex(h=>(h||'').toString().includes('Cost Center'));
         const nameEngCol = empHeader.findIndex(h=>(h||'').toString().includes('Name_ENG'));
         const nameKoCol  = empHeader.findIndex(h=>(h||'').toString().includes('성함'));
-        const koName = (userName.match(/^([가-힣]+)/)||[])[1]||'';
+        const koName = (userName.split(' ')[0])||'';  // 첫 공백 전 이름 (이준순)
         const enName = (userName.match(/\(([^)]+)\)/)||[])[1]||'';
         for(let i=1;i<empRows.length;i++){
           const r = empRows[i];
@@ -626,31 +626,47 @@ async function loadBPMaster() {
     const stkDrive = drives.value.find(d=>d.name==='STK') || drives.value.find(d=>d.name==='STK-Shared') || drives.value.find(d=>['Documents','문서','Shared Documents'].includes(d.name)) || drives.value[0];
     console.log('[BP] 선택 드라이브:', stkDrive.name);
 
-    // search API로 파일 찾기 (경로 무관)
-    let fileItemId = null;
-    try {
-      // 방법1: 드라이브 search
-      const sr = await fetch(
-        GRAPH+'/drives/'+stkDrive.id+"/root/search(q='Master%20data%20List%202014')",
-        {headers:{Authorization:'Bearer '+t}}
-      );
-      if(sr.ok) {
+    // STK-NAS 모든 드라이브에서 search
+    let fileItemId = null, fileDriveId = null;
+    for(const drv of drives.value) {
+      try {
+        const sr = await fetch(
+          GRAPH+'/drives/'+drv.id+"/root/search(q='Master%20data%20List%202014')",
+          {headers:{Authorization:'Bearer '+t}}
+        );
+        if(!sr.ok) continue;
         const srData = await sr.json();
         const found = (srData.value||[]).find(i=>(i.name||'').includes('DTK'));
-        if(found) { fileItemId = found.id; console.log('[BP] search 발견:', found.name, found.id); }
-      }
-    } catch(_){}
-    // 방법2: 사이트 search
-    if(!fileItemId) {
-      try {
-        const sr2 = await api('/sites/'+nasId+"/drive/search(q='Master data List 2014')");
-        const found2 = (sr2.value||[]).find(i=>(i.name||'').includes('DTK'));
-        if(found2) { fileItemId = found2.id; console.log('[BP] site search 발견:', found2.name); }
+        if(found) {
+          fileItemId = found.id;
+          fileDriveId = drv.id;
+          console.log('[BP] ✅ 발견:', drv.name, found.name);
+          break;
+        }
       } catch(_){}
     }
-    if(!fileItemId) throw new Error('BP 파일을 찾을 수 없음 (search 실패)');
+    // STK-DB에서도 시도
+    if(!fileItemId) {
+      try {
+        if(!siteId) { const s=await api('/sites/'+SITE_PATH_DB); siteId=s.id; }
+        const dbDrives = await api('/sites/'+siteId+'/drives');
+        for(const drv of dbDrives.value) {
+          try {
+            const sr = await fetch(
+              GRAPH+'/drives/'+drv.id+"/root/search(q='Master%20data%20List%202014')",
+              {headers:{Authorization:'Bearer '+t}}
+            );
+            if(!sr.ok) continue;
+            const srData = await sr.json();
+            const found = (srData.value||[]).find(i=>(i.name||'').includes('DTK'));
+            if(found) { fileItemId=found.id; fileDriveId=drv.id; console.log('[BP] STK-DB 발견:', found.name); break; }
+          } catch(_){}
+        }
+      } catch(_){}
+    }
+    if(!fileItemId) throw new Error('BP 파일을 찾을 수 없음');
     const res = await fetch(
-      GRAPH+'/drives/'+stkDrive.id+'/items/'+fileItemId+'/content',
+      GRAPH+'/drives/'+fileDriveId+'/items/'+fileItemId+'/content',
       {headers:{Authorization:'Bearer '+t}});
     const buf = await res.arrayBuffer();
     const wb = XLSX.read(buf,{type:'array'});
