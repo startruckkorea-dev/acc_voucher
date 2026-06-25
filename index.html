@@ -503,16 +503,15 @@ async function boot(account) {
   user = account;
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='block';
-  document.getElementById('user-name').textContent=(account.name||account.username);
+  document.getElementById('user-name').textContent=(account.name||account.username)+' ('+(account.username)+')';
   // 자동 필드
   document.getElementById('v-requester').value = account.name||account.username;
-  document.getElementById('v-cctr').value = getCCTR(account.username||account.name);
   document.getElementById('v-date').value = new Date().toISOString().slice(0,10);
   renderApproval();
   renderList();
   renderLines();
-  // CCTR + BP 마스터 백그라운드 로드
-  loadCCTRMaster().catch(e=>console.warn('CCTR 로드 실패:', e.message));
+  // CCTR 로드 후 이름 매핑
+  loadCCTRMaster(account.name).catch(e=>console.warn('CCTR 로드 실패:', e.message));
   loadBPMaster().catch(e=>console.warn('BP 마스터 로드 실패:', e.message));
 }
 
@@ -532,7 +531,7 @@ function getCCTR(nameOrEmail) {
 }
 
 // ── CCTR 마스터 로드 (STK-DB SharePoint Excel) ──
-async function loadCCTRMaster() {
+async function loadCCTRMaster(userName) {
   try {
     const t = await token();
     if(!siteId) {
@@ -578,8 +577,46 @@ async function loadCCTRMaster() {
       newCCTR.forEach(c=>COST_CENTERS.push(c));
       console.log('[CCTR] Loaded:', COST_CENTERS.length, 'entries');
     }
+    // 이름으로 CCTR 코드 찾기
+    if(userName) {
+      // Employee 시트에서 이름 매핑
+      const empSheet = wb.SheetNames.find(s=>s.includes('Employee'))||null;
+      let matched = null;
+      if(empSheet) {
+        const empRows = XLSX.utils.sheet_to_json(wb.Sheets[empSheet],{header:1});
+        // 헤더: Function, 팀, CCTR Name, Cost Center, 성함_한글, Name_ENG, HC, Remark
+        const empHeader = empRows[0]||[];
+        const cctrCol2 = empHeader.findIndex(h=>(h||'').toString().includes('Cost Center')||(h||'').toString().includes('코스트센터('));
+        const nameEngCol = empHeader.findIndex(h=>(h||'').toString().includes('Name_ENG')||(h||'').toString().includes('Name ENG'));
+        const nameKoCol  = empHeader.findIndex(h=>(h||'').toString().includes('성함')||(h||'').toString().includes('한글'));
+        // userName에서 한글 이름 추출 (예: "이준순 스타트럭코리아 IT(Junsoon Lee)" → "이준순")
+        const koName = (userName.match(/^([가-힣]+)/)||[])[1]||'';
+        // 영문 이름 추출 (예: "이준순 스타트럭코리아 IT(Junsoon Lee)" → "Junsoon Lee")
+        const enName = (userName.match(/\(([^)]+)\)/)||[])[1]||userName;
+        for(let i=1;i<empRows.length;i++){
+          const r=empRows[i];
+          const eng=(r[nameEngCol]||'').toString().trim();
+          const ko=(r[nameKoCol]||'').toString().trim();
+          if((koName&&ko===koName)||(enName&&eng.toLowerCase()===enName.toLowerCase())) {
+            const code=(r[cctrCol2]||'').toString().trim();
+            if(code) { matched=code; break; }
+          }
+        }
+      }
+      if(matched) {
+        const cctrObj = COST_CENTERS.find(c=>c.code===matched);
+        const display = cctrObj ? matched+' '+cctrObj.name : matched;
+        document.getElementById('v-cctr').value = display;
+        console.log('[CCTR] User matched:', userName, '→', display);
+      } else {
+        // fallback: 이메일 기반
+        document.getElementById('v-cctr').value = getCCTR(user?.username||'');
+        console.warn('[CCTR] 이름 매핑 실패, fallback 사용:', userName);
+      }
+    }
   } catch(e) {
     console.warn('[CCTR] 로드 실패 — 기본 목록 사용:', e.message);
+    document.getElementById('v-cctr').value = getCCTR(user?.username||'');
   }
 }
 
