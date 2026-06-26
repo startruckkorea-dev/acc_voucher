@@ -562,10 +562,15 @@ async function loadAccMasters() {
       for(let i=2;i<rows.length;i++){
         const r=rows[i];
         // GL: col1=New GL Code, col3=Description(EN)
-        const glCode=(r[1]||'').toString().trim();
+        const glNew=(r[1]||'').toString().trim();
+        const glOld=(r[2]||'').toString().trim();
         const glName=(r[3]||'').toString().trim();
-        if(glCode && glCode!=='Need to be created' && /^\d+$/.test(glCode) && glCode.length>=4) {
-          if(!newGL.find(g=>g.code===glCode)) newGL.push({code:glCode, name:glName});
+        if(glNew && glNew!=='Need to be created' && /^\d+$/.test(glNew) && glNew.length>=4) {
+          if(!newGL.find(g=>g.code===glNew))
+            newGL.push({code:glNew, altCode:glOld, name:glName});
+        } else if(glOld && /^\d+$/.test(glOld) && glOld.length>=4) {
+          if(!newGL.find(g=>g.code===glOld))
+            newGL.push({code:glOld, altCode:'', name:glName});
         }
         // CCTR: col7=Code, col8=Name
         const ccCode=(r[7]||'').toString().trim();
@@ -1054,13 +1059,21 @@ function openGlModal(idx) {
 function closeGlModal(){document.getElementById('gl-modal').classList.remove('open');}
 function searchGL(q){
   const kw=q.toLowerCase().trim();
-  renderGlResults(kw?GL_LIST.filter(g=>g.code.includes(kw)||g.name.toLowerCase().includes(kw)):GL_LIST);
+  renderGlResults(kw?GL_LIST.filter(g=>g.code.includes(kw)||(g.altCode&&g.altCode.includes(kw))||g.name.toLowerCase().includes(kw)):GL_LIST.slice(0,50));
 }
 function renderGlResults(list){
   document.getElementById('gl-search-results').innerHTML=list.map(g=>`
-    <div class="gl-item" onclick="selectGL('${g.code}')">
-      <div class="gc">${g.code}${g.cctr?' · CCTR필수':''}${g.pc?' · PC필수':''}</div>
-      <div class="gn">${g.name}</div>
+    <div class="gl-item" style="display:flex;gap:0;padding:0;overflow:hidden">
+      <div onclick="selectGL('${g.code}')" style="flex:1;padding:8px 12px;cursor:pointer;border-right:1px solid #edebe9"
+        onmouseover="this.style.background='#f0f6ff'" onmouseout="this.style.background=''">
+        <div class="gc">New GL: ${g.code}</div>
+        <div class="gn">${g.name}</div>
+      </div>
+      ${g.altCode ? `<div onclick="selectGL('${g.altCode}')" style="padding:8px 12px;cursor:pointer;min-width:90px;text-align:center"
+        onmouseover="this.style.background='#f0f6ff'" onmouseout="this.style.background=''">
+        <div class="gc" style="color:#605e5c">Old GL</div>
+        <div style="font-size:12px;font-weight:600;color:#605e5c">${g.altCode}</div>
+      </div>` : ''}
     </div>`).join('');
 }
 function selectGL(code){
