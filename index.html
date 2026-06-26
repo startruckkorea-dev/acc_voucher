@@ -405,7 +405,7 @@ const CCTR_FILE_NAME    = 'STK CCTR List.xlsx';
 const COA_FILE_NAME      = 'acc_voucher_coa.xlsx';
 const EXCHANGE_FILE_NAME = 'acc_voucher_exchange.xlsx';
 const PC_FILE_NAME       = 'acc_voucher_pc.xlsx';
-const TEAM_FILE_NAME     = 'acc_voucher_team.xlsx';
+const TEAM_FILE_NAME     = 'acc_voucher_GL_CCTR_COPA.xlsx'; // 통합 마스터
 
 let msal_g = null, user = null, siteId = null, nasId = null;
 let bpData = []; // SharePoint Excel에서 로드
@@ -536,7 +536,7 @@ function getCCTR(nameOrEmail) {
   return emailMap[key] || '47900776 Accounting';
 }
 
-// ── 회계 마스터 로드 (STK-DB: COA/PC/Team/환율) ──
+// ── 회계 마스터 로드 (STK-DB: acc_voucher_GL_CCTR_COPA + COA + 환율) ──
 async function loadAccMasters() {
   try {
     const t = await token();
@@ -549,89 +549,88 @@ async function loadAccMasters() {
       return XLSX.read(await r.arrayBuffer(), {type:'array', cellDates:true});
     }
 
-    // ── COA (GL Account): 구분1,구분2,Code,ExternalCode,Name,ForeignName,...
+    // ── GL_CCTR_COPA 통합 파일 파싱
+    // 헤더: row0=(None,GL Account,...,Cost Center,Name,...,Profit,Description,...,Select:COPA)
+    // row1: (None,New GL,GL Account,Description,설명,...,CCTR Code,Name,...,PC Code,PC Name,...)
+    // data from row2
+    try {
+      const wb = await fetchXlsx(TEAM_FILE_NAME); // acc_voucher_GL_CCTR_COPA.xlsx
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
+
+      const newGL=[], newCC=[], newPC=[], newSubPC=[];
+
+      for(let i=2;i<rows.length;i++){
+        const r=rows[i];
+        // GL: col1=New GL Code, col3=Description(EN)
+        const glCode=(r[1]||'').toString().trim();
+        const glName=(r[3]||'').toString().trim();
+        if(glCode && glCode!=='Need to be created' && /^\d+$/.test(glCode) && glCode.length>=4) {
+          if(!newGL.find(g=>g.code===glCode)) newGL.push({code:glCode, name:glName});
+        }
+        // CCTR: col7=Code, col8=Name
+        const ccCode=(r[7]||'').toString().trim();
+        const ccName=(r[8]||'').toString().trim();
+        if(ccCode && /^\d{8}$/.test(ccCode)) {
+          if(!newCC.find(c=>c.code===ccCode)) newCC.push({code:ccCode, name:ccName});
+        }
+        // PC: col10=Code, col11=Name (숫자 4자리)
+        const pcCode=(r[10]||'').toString().trim();
+        const pcName=(r[11]||'').toString().trim();
+        if(pcCode && /^\d{4}$/.test(pcCode) && pcName && pcName!=='WSL DUMMY') {
+          if(!newPC.find(p=>p.code===pcCode)) newPC.push({code:pcCode, name:pcName});
+        }
+        // Sub_PC: 같은 col10/11이지만 4자리+영문 패턴 (2121 TRUCKS_ATEGO 21)
+        // Sub_PC 데이터는 PC 목록과 분리: col10이 4자리이고 col11에 '_' 포함
+        if(pcCode && /^\d{4}$/.test(pcCode) && pcName.includes('_')) {
+          if(!newSubPC.find(s=>s.code===pcCode)) newSubPC.push({code:pcCode, name:pcName});
+        }
+        // NA
+        if(pcCode==='NA' && !newSubPC.find(s=>s.code==='NA')) newSubPC.push({code:'NA',name:'NA'});
+      }
+
+      if(newGL.length){ GL_LIST.length=0; newGL.forEach(g=>GL_LIST.push(g)); }
+      if(newCC.length){ COST_CENTERS.length=0; newCC.forEach(c=>COST_CENTERS.push(c)); }
+      if(newPC.length){ PROFIT_CENTERS.length=0; newPC.forEach(p=>PROFIT_CENTERS.push(p)); }
+      window._subProfitCenters = newSubPC;
+      console.log('[GL_CCTR_COPA] GL:'+newGL.length+' CC:'+newCC.length+' PC:'+newPC.length+' Sub_PC:'+newSubPC.length);
+    } catch(e){ console.warn('[GL_CCTR_COPA]', e.message); }
+
+    // ── COA (acc_voucher_coa.xlsx) - 추가 GL 보완
     try {
       const wb = await fetchXlsx(COA_FILE_NAME);
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
-      // 헤더: row1 (구분1,구분2,Code,ExternalCode,Name,ForeignName...)
       const hIdx = rows.findIndex(r=>(r[2]||'').toString().trim()==='Code');
-      const newGL = [];
+      let added=0;
       for(let i=hIdx+1;i<rows.length;i++){
         const r=rows[i];
         const code=(r[2]||'').toString().trim();
         const name=(r[4]||'').toString().trim();
-        const nameKo=(r[5]||'').toString().trim();
-        if(!code||isNaN(code)||code.length<4) continue;
-        newGL.push({code, name: name||nameKo, cctr:false, pc:false});
+        if(!code||!/^\d+$/.test(code)||code.length<4) continue;
+        if(!GL_LIST.find(g=>g.code===code)){ GL_LIST.push({code,name}); added++; }
       }
-      if(newGL.length){ GL_LIST.length=0; newGL.forEach(g=>GL_LIST.push(g)); }
-      console.log('[COA] Loaded:', GL_LIST.length);
+      console.log('[COA] 추가 GL:', added, '총:', GL_LIST.length);
     } catch(e){ console.warn('[COA]', e.message); }
 
-    // ── PC (Profit Center): PC목록 컬럼 (col8) = "2100 TRUCKS NV"
-    try {
-      const wb = await fetchXlsx(PC_FILE_NAME);
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
-      const hIdx = rows.findIndex(r=>(r[7]||'').toString().includes('PC목록'));
-      const newPC = [];
-      for(let i=hIdx+1;i<rows.length;i++){
-        const val=(rows[i][7]||'').toString().trim();
-        if(!val) continue;
-        const m=val.match(/^(\d+)\s+(.+)$/);
-        if(m) { const code=m[1],name=m[2]; if(!newPC.find(p=>p.code===code)) newPC.push({code,name}); }
-      }
-      // Sub_PC: col17 = "2121 TRUCKS_ATEGO 21"
-      const subPCs=[];
-      for(let i=hIdx+1;i<rows.length;i++){
-        const val=(rows[i][17]||'').toString().trim();
-        if(!val||val==='NA NA') continue;
-        const m=val.match(/^(\d+)\s+(.+)$/);
-        if(m&&!subPCs.find(p=>p.code===m[1])) subPCs.push({code:m[1],name:m[2]});
-      }
-      if(newPC.length){ PROFIT_CENTERS.length=0; newPC.forEach(p=>PROFIT_CENTERS.push(p)); }
-      window._subProfitCenters = subPCs;
-      console.log('[PC] Loaded:', PROFIT_CENTERS.length, 'Sub_PC:', subPCs.length);
-    } catch(e){ console.warn('[PC]', e.message); }
-
-    // ── Team (Cost Center): col1=Department, col2=CCTR숫자
-    try {
-      const wb = await fetchXlsx(TEAM_FILE_NAME);
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
-      const newCC=[];
-      for(let i=0;i<rows.length;i++){
-        const dept=(rows[i][1]||'').toString().trim();
-        const code=(rows[i][2]||'').toString().trim();
-        if(!code||isNaN(code)||code.length<5) continue;
-        if(!newCC.find(c=>c.code===code)) newCC.push({code,name:dept});
-      }
-      if(newCC.length){ COST_CENTERS.length=0; newCC.forEach(c=>COST_CENTERS.push(c)); }
-      console.log('[Team/CC] Loaded:', COST_CENTERS.length);
-    } catch(e){ console.warn('[Team]', e.message); }
-
-    // ── Exchange Rate: 헤더row0=(None,CNY,EUR,JPY,SGD,USD), row1~=(date,cny,eur,jpy,sgd,usd)
+    // ── Exchange Rate (acc_voucher_exchange.xlsx)
     try {
       const wb = await fetchXlsx(EXCHANGE_FILE_NAME);
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, cellDates:true});
-      const hRow = rows[0]; // [None, 'CNY', 'EUR', 'JPY', 'SGD', 'USD']
-      const currencies = hRow.slice(1).map(c=>(c||'').toString().trim()).filter(Boolean);
-      window._exchangeRates = [];
+      const hRow=rows[0]; // [None, 'CNY', 'EUR', 'JPY', 'SGD', 'USD']
+      const currencies=hRow.slice(1).map(c=>(c||'').toString().trim()).filter(Boolean);
+      window._exchangeRates=[];
       for(let i=1;i<rows.length;i++){
-        const r=rows[i];
-        if(!r[0]) continue;
-        const dateVal = r[0];
+        const r=rows[i]; if(!r[0]) continue;
         let dateStr='';
-        if(dateVal instanceof Date) dateStr=dateVal.toISOString().slice(0,10);
-        else if(typeof dateVal==='number'){
-          // Excel 날짜 숫자 → JS Date
-          const d=new Date(Math.round((dateVal-25569)*86400*1000));
-          dateStr=d.toISOString().slice(0,10);
-        } else dateStr=dateVal.toString();
+        if(r[0] instanceof Date) dateStr=r[0].toISOString().slice(0,10);
+        else if(typeof r[0]==='number'){
+          dateStr=new Date(Math.round((r[0]-25569)*86400*1000)).toISOString().slice(0,10);
+        } else dateStr=r[0].toString();
         currencies.forEach((curr,ci)=>{
           const rate=parseFloat(r[ci+1])||0;
           if(rate) window._exchangeRates.push({date:dateStr,currency:curr,rate});
         });
       }
-      console.log('[Exchange] Loaded:', window._exchangeRates.length, '건');
+      console.log('[Exchange] Loaded:', window._exchangeRates.length);
       applyTodayExchangeRate();
     } catch(e){ console.warn('[Exchange]', e.message); }
 
@@ -642,8 +641,9 @@ function applyTodayExchangeRate() {
   const rates = window._exchangeRates||[];
   if(!rates.length) return;
   const today = new Date().toISOString().slice(0,7); // YYYY-MM
-  const todayRates = rates.filter(r=>r.date.startsWith(today));
-  const useRates = todayRates.length ? todayRates : rates.slice(-5);
+  // 당월 최신 환율 (날짜 내림차순)
+  const monthRates = rates.filter(r=>r.date.startsWith(today));
+  const useRates = monthRates.length ? monthRates : rates.slice(-5);
 
   // EUR 환율 자동 입력
   const exEl = document.getElementById('v-exrate');
@@ -652,24 +652,23 @@ function applyTodayExchangeRate() {
     if(eur) { exEl.value=eur.rate; exEl.dispatchEvent(new Event('input')); }
   }
 
-  // 참고 환율 표시 (통화별 최신값)
+  // 참고 환율 표시 - 통화별 최신값 한 줄로
   const latestMap={};
-  [...rates].reverse().forEach(r=>{ if(!latestMap[r.currency]) latestMap[r.currency]=r; });
+  [...rates].reverse().forEach(r=>{ if(!latestMap[r.currency]) latestMap[r.currency]=r.rate; });
   const refEl = document.getElementById('exchange-ref') || (() => {
     const el=document.createElement('div');
     el.id='exchange-ref';
-    el.style.cssText='font-size:11px;color:#605e5c;margin-top:4px;line-height:1.6';
+    el.style.cssText='font-size:11px;color:#605e5c;margin-top:4px';
     document.getElementById('v-exrate')?.closest('.form-group')?.appendChild(el);
     return el;
   })();
   if(refEl){
-    const dateLabel = useRates[0]?.date||'';
-    const rateStr = Object.values(latestMap).map(r=>`${r.currency}: ${r.rate.toLocaleString()}`).join(' · ');
-    refEl.innerHTML=`📅 ${dateLabel} 기준: ${rateStr}<br><span style="color:#a19f9d;font-size:10px">직접 수정 가능</span>`;
+    const latest = useRates[0]?.date||'';
+    const parts = Object.entries(latestMap).map(([k,v])=>`${k} ${v.toLocaleString()}`).join(' / ');
+    refEl.innerHTML = `<span style="color:#a19f9d">${latest} | ${parts}</span>`;
   }
 }
 
-// Sub_PC 드롭다운 업데이트 (renderLines에서 호출)
 function getSubPCs() {
   return window._subProfitCenters||[
     {code:'2121',name:'TRUCKS_ATEGO 21'},{code:'2123',name:'TRUCKS_ACTROS 23'},
