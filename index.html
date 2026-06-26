@@ -559,15 +559,20 @@ async function loadAccMasters() {
 
       const newGL=[], newCC=[], newPC=[], newSubPC=[];
 
-      for(let i=2;i<rows.length;i++){
+      // 헤더: row3 (New GL Account, GL Account, Description, ...)
+      // data: row4~
+      const glHdrIdx = rows.findIndex(r=>(r[1]||'').toString().includes('New GL'));
+      const dataStart = glHdrIdx>=0 ? glHdrIdx+1 : 4;
+
+      for(let i=dataStart;i<rows.length;i++){
         const r=rows[i];
-        // GL: col1=New GL Code, col3=Description(EN)
-        const glNew=(r[1]||'').toString().trim();
-        const glOld=(r[2]||'').toString().trim();
+        // col1=New GL Code(숫자), col2=Old GL Code(숫자), col3=Description(EN)
+        const glNew=(r[1]!=null?r[1]:'').toString().trim();
+        const glOld=(r[2]!=null?r[2]:'').toString().trim();
         const glName=(r[3]||'').toString().trim();
         if(glNew && glNew!=='Need to be created' && /^\d+$/.test(glNew) && glNew.length>=4) {
           if(!newGL.find(g=>g.code===glNew))
-            newGL.push({code:glNew, altCode:glOld, name:glName});
+            newGL.push({code:glNew, altCode:(/^\d+$/.test(glOld)?glOld:''), name:glName});
         } else if(glOld && /^\d+$/.test(glOld) && glOld.length>=4) {
           if(!newGL.find(g=>g.code===glOld))
             newGL.push({code:glOld, altCode:'', name:glName});
@@ -1050,11 +1055,9 @@ function searchGL(q){
 function renderGlResults(list){
   document.getElementById('gl-search-results').innerHTML=list.map(g=>`
     <div class="gl-item" onclick="selectGL('${g.code}')">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-        <span class="gc">${g.code}</span>
-        ${g.altCode?`<span style="font-size:10px;color:#a19f9d">구코드: ${g.altCode}</span>`:''}
-      </div>
-      <div class="gn">${g.name}</div>
+      <span style="font-size:13px;font-weight:700;color:#0078d4">${g.code}</span>
+      ${g.altCode?`<span style="font-size:10px;color:#c8c6c4;margin-left:6px">(${g.altCode})</span>`:''}
+      <span style="font-size:12px;color:#323130;margin-left:8px">${g.name}</span>
     </div>`).join('');
 }
 function selectGL(code){
