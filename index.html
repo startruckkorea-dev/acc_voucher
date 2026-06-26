@@ -567,7 +567,8 @@ async function loadAccMasters() {
         const glNew=(r[1]!=null?r[1]:'').toString().trim();
         const glOld=(r[2]!=null?r[2]:'').toString().trim();
         const glName=(r[3]||'').toString().trim();
-        if(glNew && glNew!=='Need to be created' && /^\d+$/.test(glNew) && glNew.length>=4) {
+        if(i===4) console.log('[GL DEBUG row4]', JSON.stringify(r.slice(0,6)));
+      if(glNew && glNew!=='Need to be created' && /^\d+$/.test(glNew) && glNew.length>=4) {
           if(!newGL.find(g=>g.code===glNew))
             newGL.push({code:glNew, altCode:(/^\d+$/.test(glOld)?glOld:''), name:glName});
         } else if(glOld && /^\d+$/.test(glOld) && glOld.length>=4) {
