@@ -1013,7 +1013,7 @@ function searchBP(q) {
     if(!kw){renderBpResults(bpData.slice(0,10));return;}
     const res=[];
     for(const b of bpData){
-      if(b.code.toLowerCase().includes(kw)||b.name.toLowerCase().includes(kw)||(b.nameKo&&b.nameKo.includes(q))){
+      if(b.code.toLowerCase().includes(kw)||b.name.toLowerCase().includes(kw)||(b.nameKo&&b.nameKo.includes(q))||(b.bizNo&&b.bizNo.includes(kw))){
         res.push(b); if(res.length>=50) break;
       }
     }
