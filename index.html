@@ -1049,15 +1049,12 @@ function searchGL(q){
 }
 function renderGlResults(list){
   document.getElementById('gl-search-results').innerHTML=list.map(g=>`
-    <div style="display:flex;gap:4px;margin-bottom:4px">
-      <div class="gl-item" onclick="selectGL('${g.code}')" style="flex:1;min-width:0">
-        <div class="gc">${g.code}${g.altCode?' (Old: '+g.altCode+')':''}</div>
-        <div class="gn">${g.name}</div>
+    <div class="gl-item" onclick="selectGL('${g.code}')">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <span class="gc">${g.code}</span>
+        ${g.altCode?`<span style="font-size:10px;color:#a19f9d">구코드: ${g.altCode}</span>`:''}
       </div>
-      ${g.altCode?`<div class="gl-item" onclick="selectGL('${g.altCode}')" style="width:80px;text-align:center;flex-shrink:0">
-        <div class="gc" style="color:#a19f9d">Old</div>
-        <div style="font-size:13px;font-weight:700;color:#605e5c">${g.altCode}</div>
-      </div>`:''}
+      <div class="gn">${g.name}</div>
     </div>`).join('');
 }
 function selectGL(code){
