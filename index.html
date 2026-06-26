@@ -565,13 +565,12 @@ async function loadAccMasters() {
 
       // 헤더: row3 (index 3) = New GL Account, GL Account, Description
       // data: row4~ (index 4~)
-      console.log('[GL row4 full]', JSON.stringify(rows[4]));
       for(let i=4;i<rows.length;i++){
         const r=rows[i];
         // col1=New GL Code(숫자), col2=Old GL Code(숫자), col3=Description(EN)
-        const glNew=(r[2]!=null?r[2]:'').toString().trim();
-        const glOld=(r[3]!=null?r[3]:'').toString().trim();
-        const glName=(r[4]||'').toString().trim();
+        const glNew=(r[0]!=null?r[0]:'').toString().trim();
+        const glOld=(r[1]!=null?r[1]:'').toString().trim();
+        const glName=(r[2]||'').toString().trim();
         if(glNew && glNew!=='Need to be created' && /^\d+$/.test(glNew) && glNew.length>=4) {
           if(!newGL.find(g=>g.code===glNew))
             newGL.push({code:glNew, altCode:(/^\d+$/.test(glOld)?glOld:''), name:glName});
@@ -580,14 +579,14 @@ async function loadAccMasters() {
             newGL.push({code:glOld, altCode:'', name:glName});
         }
         // CCTR: col7=Code, col8=Name
-        const ccCode=(r[8]||'').toString().trim();
-        const ccName=(r[9]||'').toString().trim();
+        const ccCode=(r[6]!=null?r[6]:'').toString().trim();
+        const ccName=(r[7]||'').toString().trim();
         if(ccCode && /^\d{8}$/.test(ccCode)) {
           if(!newCC.find(c=>c.code===ccCode)) newCC.push({code:ccCode, name:ccName});
         }
         // PC: col10=Code, col11=Name (숫자 4자리)
-        const pcCode=(r[11]||'').toString().trim();
-        const pcName=(r[12]||'').toString().trim();
+        const pcCode=(r[9]!=null?r[9]:'').toString().trim();
+        const pcName=(r[10]||'').toString().trim();
         if(pcCode && /^\d{4}$/.test(pcCode) && pcName && pcName!=='WSL DUMMY') {
           if(!newPC.find(p=>p.code===pcCode)) newPC.push({code:pcCode, name:pcName});
         }
