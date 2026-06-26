@@ -541,150 +541,142 @@ async function loadAccMasters() {
   try {
     const t = await token();
     if(!siteId) { const s=await api('/sites/'+SITE_PATH_DB); siteId=s.id; }
-    const drives = await api('/sites/'+siteId+'/drives');
-    const docDrive = drives.value.find(d=>['Documents','문서','Shared Documents'].includes(d.name))||drives.value[0];
-
-    async function loadFile(name) {
-      try {
-        const sr = await api('/sites/'+siteId+'/drive/root:/'+encodeURIComponent(name)+':/content');
-        return null; // api()는 JSON 반환, binary 필요 → fetch 직접
-      } catch(_){}
-      return null;
-    }
 
     async function fetchXlsx(name) {
-      const r = await fetch(GRAPH+'/sites/'+siteId+'/drive/root:/'+encodeURIComponent(name)+':/content', {headers:{Authorization:'Bearer '+t}});
-      if(!r.ok) throw new Error(name+' 로드 실패: '+r.status);
-      const buf = await r.arrayBuffer();
-      return XLSX.read(buf, {type:'array'});
+      const r = await fetch(GRAPH+'/sites/'+siteId+'/drive/root:/'+encodeURIComponent(name)+':/content',
+        {headers:{Authorization:'Bearer '+t}});
+      if(!r.ok) throw new Error(name+' '+r.status);
+      return XLSX.read(await r.arrayBuffer(), {type:'array', cellDates:true});
     }
 
-    // COA (GL Account)
+    // ── COA (GL Account): 구분1,구분2,Code,ExternalCode,Name,ForeignName,...
     try {
       const wb = await fetchXlsx(COA_FILE_NAME);
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
-      // 헤더 행 찾기
-      let hIdx = rows.findIndex(r=>r.some(c=>(c||'').toString().match(/account|계정|code/i)));
-      if(hIdx===-1) hIdx=0;
-      const h = rows[hIdx];
-      const codeCol = h.findIndex(c=>(c||'').toString().match(/^(gl.*)?code|계정코드|account.*no/i));
-      const nameCol = h.findIndex(c=>(c||'').toString().match(/name|계정명|description/i));
+      // 헤더: row1 (구분1,구분2,Code,ExternalCode,Name,ForeignName...)
+      const hIdx = rows.findIndex(r=>(r[2]||'').toString().trim()==='Code');
       const newGL = [];
       for(let i=hIdx+1;i<rows.length;i++){
         const r=rows[i];
-        const code=(r[codeCol>=0?codeCol:0]||'').toString().trim();
-        const name=(r[nameCol>=0?nameCol:1]||'').toString().trim();
-        if(!code||code.length<4) continue;
-        newGL.push({code,name});
+        const code=(r[2]||'').toString().trim();
+        const name=(r[4]||'').toString().trim();
+        const nameKo=(r[5]||'').toString().trim();
+        if(!code||isNaN(code)||code.length<4) continue;
+        newGL.push({code, name: name||nameKo, cctr:false, pc:false});
       }
-      if(newGL.length>0){ GL_LIST.length=0; newGL.forEach(g=>GL_LIST.push(g)); }
+      if(newGL.length){ GL_LIST.length=0; newGL.forEach(g=>GL_LIST.push(g)); }
       console.log('[COA] Loaded:', GL_LIST.length);
-    } catch(e){ console.warn('[COA] 실패:', e.message); }
+    } catch(e){ console.warn('[COA]', e.message); }
 
-    // Profit Center
+    // ── PC (Profit Center): PC목록 컬럼 (col8) = "2100 TRUCKS NV"
     try {
       const wb = await fetchXlsx(PC_FILE_NAME);
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
-      let hIdx = rows.findIndex(r=>r.some(c=>(c||'').toString().match(/profit|pc|code/i)));
-      if(hIdx===-1) hIdx=0;
-      const h = rows[hIdx];
-      const codeCol = h.findIndex(c=>(c||'').toString().match(/code|코드/i));
-      const nameCol = h.findIndex(c=>(c||'').toString().match(/name|이름|description/i));
+      const hIdx = rows.findIndex(r=>(r[7]||'').toString().includes('PC목록'));
       const newPC = [];
       for(let i=hIdx+1;i<rows.length;i++){
-        const r=rows[i];
-        const code=(r[codeCol>=0?codeCol:0]||'').toString().trim();
-        const name=(r[nameCol>=0?nameCol:1]||'').toString().trim();
-        if(!code) continue;
-        newPC.push({code,name});
+        const val=(rows[i][7]||'').toString().trim();
+        if(!val) continue;
+        const m=val.match(/^(\d+)\s+(.+)$/);
+        if(m) { const code=m[1],name=m[2]; if(!newPC.find(p=>p.code===code)) newPC.push({code,name}); }
       }
-      if(newPC.length>0){ PROFIT_CENTERS.length=0; newPC.forEach(p=>PROFIT_CENTERS.push(p)); }
-      console.log('[PC] Loaded:', PROFIT_CENTERS.length);
-    } catch(e){ console.warn('[PC] 실패:', e.message); }
+      // Sub_PC: col17 = "2121 TRUCKS_ATEGO 21"
+      const subPCs=[];
+      for(let i=hIdx+1;i<rows.length;i++){
+        const val=(rows[i][17]||'').toString().trim();
+        if(!val||val==='NA NA') continue;
+        const m=val.match(/^(\d+)\s+(.+)$/);
+        if(m&&!subPCs.find(p=>p.code===m[1])) subPCs.push({code:m[1],name:m[2]});
+      }
+      if(newPC.length){ PROFIT_CENTERS.length=0; newPC.forEach(p=>PROFIT_CENTERS.push(p)); }
+      window._subProfitCenters = subPCs;
+      console.log('[PC] Loaded:', PROFIT_CENTERS.length, 'Sub_PC:', subPCs.length);
+    } catch(e){ console.warn('[PC]', e.message); }
 
-    // Team (Cost Center) - acc_voucher_team.xlsx
+    // ── Team (Cost Center): col1=Department, col2=CCTR숫자
     try {
       const wb = await fetchXlsx(TEAM_FILE_NAME);
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
-      let hIdx = rows.findIndex(r=>r.some(c=>(c||'').toString().match(/cost.*center|cctr|코스트/i)));
-      if(hIdx===-1) hIdx=0;
-      const h = rows[hIdx];
-      const codeCol = h.findIndex(c=>(c||'').toString().match(/cost.*center|코스트센터\(/i));
-      const nameCol = h.findIndex(c=>(c||'').toString().match(/name|명|cctr.*name/i));
-      const newCC = [];
-      for(let i=hIdx+1;i<rows.length;i++){
-        const r=rows[i];
-        const code=(r[codeCol>=0?codeCol:0]||'').toString().trim();
-        const name=(r[nameCol>=0?nameCol:1]||'').toString().trim();
-        if(!code||code.length<5) continue;
-        if(!newCC.find(c=>c.code===code)) newCC.push({code,name});
+      const newCC=[];
+      for(let i=0;i<rows.length;i++){
+        const dept=(rows[i][1]||'').toString().trim();
+        const code=(rows[i][2]||'').toString().trim();
+        if(!code||isNaN(code)||code.length<5) continue;
+        if(!newCC.find(c=>c.code===code)) newCC.push({code,name:dept});
       }
-      if(newCC.length>0){ COST_CENTERS.length=0; newCC.forEach(c=>COST_CENTERS.push(c)); }
+      if(newCC.length){ COST_CENTERS.length=0; newCC.forEach(c=>COST_CENTERS.push(c)); }
       console.log('[Team/CC] Loaded:', COST_CENTERS.length);
-    } catch(e){ console.warn('[Team] 실패:', e.message); }
+    } catch(e){ console.warn('[Team]', e.message); }
 
-    // Exchange Rate
+    // ── Exchange Rate: 헤더row0=(None,CNY,EUR,JPY,SGD,USD), row1~=(date,cny,eur,jpy,sgd,usd)
     try {
       const wb = await fetchXlsx(EXCHANGE_FILE_NAME);
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
-      let hIdx = rows.findIndex(r=>r.some(c=>(c||'').toString().match(/date|날짜|month|currency/i)));
-      if(hIdx===-1) hIdx=0;
-      const h = rows[hIdx];
-      const dateCol   = h.findIndex(c=>(c||'').toString().match(/date|날짜|month/i));
-      const currCol   = h.findIndex(c=>(c||'').toString().match(/currency|통화/i));
-      const rateCol   = h.findIndex(c=>(c||'').toString().match(/rate|환율|krw/i));
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, cellDates:true});
+      const hRow = rows[0]; // [None, 'CNY', 'EUR', 'JPY', 'SGD', 'USD']
+      const currencies = hRow.slice(1).map(c=>(c||'').toString().trim()).filter(Boolean);
       window._exchangeRates = [];
-      for(let i=hIdx+1;i<rows.length;i++){
+      for(let i=1;i<rows.length;i++){
         const r=rows[i];
-        const date=(r[dateCol>=0?dateCol:0]||'').toString().trim();
-        const curr=(r[currCol>=0?currCol:1]||'').toString().trim();
-        const rate=parseFloat(r[rateCol>=0?rateCol:2])||0;
-        if(!curr||!rate) continue;
-        window._exchangeRates.push({date,currency:curr,rate});
+        if(!r[0]) continue;
+        const dateVal = r[0];
+        let dateStr='';
+        if(dateVal instanceof Date) dateStr=dateVal.toISOString().slice(0,10);
+        else if(typeof dateVal==='number'){
+          // Excel 날짜 숫자 → JS Date
+          const d=new Date(Math.round((dateVal-25569)*86400*1000));
+          dateStr=d.toISOString().slice(0,10);
+        } else dateStr=dateVal.toString();
+        currencies.forEach((curr,ci)=>{
+          const rate=parseFloat(r[ci+1])||0;
+          if(rate) window._exchangeRates.push({date:dateStr,currency:curr,rate});
+        });
       }
-      console.log('[Exchange] Loaded:', window._exchangeRates.length);
+      console.log('[Exchange] Loaded:', window._exchangeRates.length, '건');
       applyTodayExchangeRate();
-    } catch(e){ console.warn('[Exchange] 실패:', e.message); }
+    } catch(e){ console.warn('[Exchange]', e.message); }
 
-  } catch(e) { console.warn('[AccMasters] 전체 실패:', e.message); }
+  } catch(e){ console.warn('[AccMasters]', e.message); }
 }
 
 function applyTodayExchangeRate() {
   const rates = window._exchangeRates||[];
   if(!rates.length) return;
-  const today = new Date();
-  const ym = today.getFullYear()+'-'+(String(today.getMonth()+1).padStart(2,'0'));
-  // 당월 환율 찾기 (날짜 문자열에 연월 포함된 항목)
-  const todayRates = rates.filter(r=>r.date.includes(ym)||r.date.replace(/\//g,'-').includes(ym));
-  if(!todayRates.length) {
-    // 가장 최근 날짜 사용
-    const latest = rates[rates.length-1];
-    if(latest) console.log('[Exchange] 당월 없음, 최근 사용:', latest.date);
+  const today = new Date().toISOString().slice(0,7); // YYYY-MM
+  const todayRates = rates.filter(r=>r.date.startsWith(today));
+  const useRates = todayRates.length ? todayRates : rates.slice(-5);
+
+  // EUR 환율 자동 입력
+  const exEl = document.getElementById('v-exrate');
+  if(exEl && !exEl.value) {
+    const eur = useRates.find(r=>r.currency==='EUR');
+    if(eur) { exEl.value=eur.rate; exEl.dispatchEvent(new Event('input')); }
   }
-  updateExchangeRateField(todayRates.length ? todayRates : rates.slice(-10));
+
+  // 참고 환율 표시 (통화별 최신값)
+  const latestMap={};
+  [...rates].reverse().forEach(r=>{ if(!latestMap[r.currency]) latestMap[r.currency]=r; });
+  const refEl = document.getElementById('exchange-ref') || (() => {
+    const el=document.createElement('div');
+    el.id='exchange-ref';
+    el.style.cssText='font-size:11px;color:#605e5c;margin-top:4px;line-height:1.6';
+    document.getElementById('v-exrate')?.closest('.form-group')?.appendChild(el);
+    return el;
+  })();
+  if(refEl){
+    const dateLabel = useRates[0]?.date||'';
+    const rateStr = Object.values(latestMap).map(r=>`${r.currency}: ${r.rate.toLocaleString()}`).join(' · ');
+    refEl.innerHTML=`📅 ${dateLabel} 기준: ${rateStr}<br><span style="color:#a19f9d;font-size:10px">직접 수정 가능</span>`;
+  }
 }
 
-function updateExchangeRateField(rateList) {
-  // Exchange Rate 필드 옆에 통화별 환율 표시
-  const exEl = document.getElementById('v-exrate');
-  if(!exEl) return;
-  // 기준 통화(EUR) 환율 자동 적용
-  const eurRate = rateList.find(r=>r.currency==='EUR'||r.currency==='EUR/KRW');
-  if(eurRate && !exEl.value) {
-    exEl.value = eurRate.rate;
-    exEl.dispatchEvent(new Event('input'));
-  }
-  // 환율 참고 표시
-  const container = exEl.closest('.form-group');
-  let refEl = document.getElementById('exchange-ref');
-  if(!refEl) {
-    refEl = document.createElement('div');
-    refEl.id = 'exchange-ref';
-    refEl.style.cssText = 'font-size:11px;color:#605e5c;margin-top:4px;line-height:1.6';
-    container.appendChild(refEl);
-  }
-  const display = rateList.slice(0,6).map(r=>`${r.currency}: ${r.rate.toLocaleString()}`).join(' · ');
-  refEl.innerHTML = '📅 참고 환율: '+display+'<br><span style="color:#a19f9d">직접 수정 가능</span>';
+// Sub_PC 드롭다운 업데이트 (renderLines에서 호출)
+function getSubPCs() {
+  return window._subProfitCenters||[
+    {code:'2121',name:'TRUCKS_ATEGO 21'},{code:'2123',name:'TRUCKS_ACTROS 23'},
+    {code:'2124',name:'TRUCKS_ACTROS 24'},{code:'2126',name:'TRUCKS_ACTROS 26'},
+    {code:'2127',name:'TRUCKS_ACTROS 27'},{code:'2164',name:'TRUCKS ACTROS 64'},
+    {code:'NA',name:'NA'},
+  ];
 }
 
 // ── CCTR 마스터 로드 (STK-DB SharePoint Excel) ──
@@ -976,7 +968,7 @@ function renderLines() {
       </select></td>
       <td><select onchange="lines[${i}].subpc=this.value">
         <option value="">-</option>
-        ${['2121','2123','2124','2126','2127','2164','NA'].map(s=>`<option value="${s}" ${l.subpc===s?'selected':''}>${s}</option>`).join('')}
+        ${getSubPCs().map(s=>`<option value="${s.code}" ${l.subpc===s.code?'selected':''}>${s.code} ${s.name}</option>`).join('')}
       </select></td>
       <td><input type="text" value="${l.lineDesc}" placeholder="설명" onchange="lines[${i}].lineDesc=this.value" style="min-width:110px"></td>
       <td><select onchange="lines[${i}].currency=this.value;updateTotals()">
