@@ -565,6 +565,7 @@ async function loadAccMasters() {
 
       // 헤더: row3 (index 3) = New GL Account, GL Account, Description
       // data: row4~ (index 4~)
+      console.log('[GL row4 full]', JSON.stringify(rows[4]));
       for(let i=4;i<rows.length;i++){
         const r=rows[i];
         // col1=New GL Code(숫자), col2=Old GL Code(숫자), col3=Description(EN)
