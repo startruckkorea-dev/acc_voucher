@@ -263,7 +263,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         </div>
         <div class="form-group">
           <label>Exchange Rate</label>
-          <input type="number" id="v-exrate" placeholder="특정 환율만 입력" step="0.01" oninput="updateTotals()">
+          <input type="number" id="v-exrate" placeholder="환율 자동 로드 또는 직접 입력" step="0.01" oninput="updateTotals()">
         </div>
       </div>
       <div class="form-row">
@@ -401,7 +401,11 @@ const SITE_PATH_NAS = 'startruckkorea.sharepoint.com:/sites/STK-NAS:';
 const GRAPH  = 'https://graph.microsoft.com/v1.0';
 const SCOPES = ['User.Read','Sites.ReadWrite.All','Files.ReadWrite.All'];
 const BP_FILE_NAME   = 'Master data List 2014_Final(DTK).xlsx';
-const CCTR_FILE_NAME = 'STK CCTR List.xlsx';
+const CCTR_FILE_NAME    = 'STK CCTR List.xlsx';
+const COA_FILE_NAME      = 'acc_voucher_coa.xlsx';
+const EXCHANGE_FILE_NAME = 'acc_voucher_exchange.xlsx';
+const PC_FILE_NAME       = 'acc_voucher_pc.xlsx';
+const TEAM_FILE_NAME     = 'acc_voucher_team.xlsx';
 
 let msal_g = null, user = null, siteId = null, nasId = null;
 let bpData = []; // SharePoint Excel에서 로드
@@ -514,6 +518,7 @@ async function boot(account) {
   // CCTR 로드 후 이름 매핑
   loadCCTRMaster(account.name).catch(e=>console.warn('CCTR 로드 실패:', e.message));
   loadBPMaster().catch(e=>console.warn('BP 마스터 로드 실패:', e.message));
+  loadAccMasters().catch(e=>console.warn('회계 마스터 로드 실패:', e.message));
 }
 
 function getCCTR(nameOrEmail) {
@@ -529,6 +534,157 @@ function getCCTR(nameOrEmail) {
   };
   const key = (nameOrEmail||'').toLowerCase();
   return emailMap[key] || '47900776 Accounting';
+}
+
+// ── 회계 마스터 로드 (STK-DB: COA/PC/Team/환율) ──
+async function loadAccMasters() {
+  try {
+    const t = await token();
+    if(!siteId) { const s=await api('/sites/'+SITE_PATH_DB); siteId=s.id; }
+    const drives = await api('/sites/'+siteId+'/drives');
+    const docDrive = drives.value.find(d=>['Documents','문서','Shared Documents'].includes(d.name))||drives.value[0];
+
+    async function loadFile(name) {
+      try {
+        const sr = await api('/sites/'+siteId+'/drive/root:/'+encodeURIComponent(name)+':/content');
+        return null; // api()는 JSON 반환, binary 필요 → fetch 직접
+      } catch(_){}
+      return null;
+    }
+
+    async function fetchXlsx(name) {
+      const r = await fetch(GRAPH+'/sites/'+siteId+'/drive/root:/'+encodeURIComponent(name)+':/content', {headers:{Authorization:'Bearer '+t}});
+      if(!r.ok) throw new Error(name+' 로드 실패: '+r.status);
+      const buf = await r.arrayBuffer();
+      return XLSX.read(buf, {type:'array'});
+    }
+
+    // COA (GL Account)
+    try {
+      const wb = await fetchXlsx(COA_FILE_NAME);
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
+      // 헤더 행 찾기
+      let hIdx = rows.findIndex(r=>r.some(c=>(c||'').toString().match(/account|계정|code/i)));
+      if(hIdx===-1) hIdx=0;
+      const h = rows[hIdx];
+      const codeCol = h.findIndex(c=>(c||'').toString().match(/^(gl.*)?code|계정코드|account.*no/i));
+      const nameCol = h.findIndex(c=>(c||'').toString().match(/name|계정명|description/i));
+      const newGL = [];
+      for(let i=hIdx+1;i<rows.length;i++){
+        const r=rows[i];
+        const code=(r[codeCol>=0?codeCol:0]||'').toString().trim();
+        const name=(r[nameCol>=0?nameCol:1]||'').toString().trim();
+        if(!code||code.length<4) continue;
+        newGL.push({code,name});
+      }
+      if(newGL.length>0){ GL_LIST.length=0; newGL.forEach(g=>GL_LIST.push(g)); }
+      console.log('[COA] Loaded:', GL_LIST.length);
+    } catch(e){ console.warn('[COA] 실패:', e.message); }
+
+    // Profit Center
+    try {
+      const wb = await fetchXlsx(PC_FILE_NAME);
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
+      let hIdx = rows.findIndex(r=>r.some(c=>(c||'').toString().match(/profit|pc|code/i)));
+      if(hIdx===-1) hIdx=0;
+      const h = rows[hIdx];
+      const codeCol = h.findIndex(c=>(c||'').toString().match(/code|코드/i));
+      const nameCol = h.findIndex(c=>(c||'').toString().match(/name|이름|description/i));
+      const newPC = [];
+      for(let i=hIdx+1;i<rows.length;i++){
+        const r=rows[i];
+        const code=(r[codeCol>=0?codeCol:0]||'').toString().trim();
+        const name=(r[nameCol>=0?nameCol:1]||'').toString().trim();
+        if(!code) continue;
+        newPC.push({code,name});
+      }
+      if(newPC.length>0){ PROFIT_CENTERS.length=0; newPC.forEach(p=>PROFIT_CENTERS.push(p)); }
+      console.log('[PC] Loaded:', PROFIT_CENTERS.length);
+    } catch(e){ console.warn('[PC] 실패:', e.message); }
+
+    // Team (Cost Center) - acc_voucher_team.xlsx
+    try {
+      const wb = await fetchXlsx(TEAM_FILE_NAME);
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
+      let hIdx = rows.findIndex(r=>r.some(c=>(c||'').toString().match(/cost.*center|cctr|코스트/i)));
+      if(hIdx===-1) hIdx=0;
+      const h = rows[hIdx];
+      const codeCol = h.findIndex(c=>(c||'').toString().match(/cost.*center|코스트센터\(/i));
+      const nameCol = h.findIndex(c=>(c||'').toString().match(/name|명|cctr.*name/i));
+      const newCC = [];
+      for(let i=hIdx+1;i<rows.length;i++){
+        const r=rows[i];
+        const code=(r[codeCol>=0?codeCol:0]||'').toString().trim();
+        const name=(r[nameCol>=0?nameCol:1]||'').toString().trim();
+        if(!code||code.length<5) continue;
+        if(!newCC.find(c=>c.code===code)) newCC.push({code,name});
+      }
+      if(newCC.length>0){ COST_CENTERS.length=0; newCC.forEach(c=>COST_CENTERS.push(c)); }
+      console.log('[Team/CC] Loaded:', COST_CENTERS.length);
+    } catch(e){ console.warn('[Team] 실패:', e.message); }
+
+    // Exchange Rate
+    try {
+      const wb = await fetchXlsx(EXCHANGE_FILE_NAME);
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
+      let hIdx = rows.findIndex(r=>r.some(c=>(c||'').toString().match(/date|날짜|month|currency/i)));
+      if(hIdx===-1) hIdx=0;
+      const h = rows[hIdx];
+      const dateCol   = h.findIndex(c=>(c||'').toString().match(/date|날짜|month/i));
+      const currCol   = h.findIndex(c=>(c||'').toString().match(/currency|통화/i));
+      const rateCol   = h.findIndex(c=>(c||'').toString().match(/rate|환율|krw/i));
+      window._exchangeRates = [];
+      for(let i=hIdx+1;i<rows.length;i++){
+        const r=rows[i];
+        const date=(r[dateCol>=0?dateCol:0]||'').toString().trim();
+        const curr=(r[currCol>=0?currCol:1]||'').toString().trim();
+        const rate=parseFloat(r[rateCol>=0?rateCol:2])||0;
+        if(!curr||!rate) continue;
+        window._exchangeRates.push({date,currency:curr,rate});
+      }
+      console.log('[Exchange] Loaded:', window._exchangeRates.length);
+      applyTodayExchangeRate();
+    } catch(e){ console.warn('[Exchange] 실패:', e.message); }
+
+  } catch(e) { console.warn('[AccMasters] 전체 실패:', e.message); }
+}
+
+function applyTodayExchangeRate() {
+  const rates = window._exchangeRates||[];
+  if(!rates.length) return;
+  const today = new Date();
+  const ym = today.getFullYear()+'-'+(String(today.getMonth()+1).padStart(2,'0'));
+  // 당월 환율 찾기 (날짜 문자열에 연월 포함된 항목)
+  const todayRates = rates.filter(r=>r.date.includes(ym)||r.date.replace(/\//g,'-').includes(ym));
+  if(!todayRates.length) {
+    // 가장 최근 날짜 사용
+    const latest = rates[rates.length-1];
+    if(latest) console.log('[Exchange] 당월 없음, 최근 사용:', latest.date);
+  }
+  updateExchangeRateField(todayRates.length ? todayRates : rates.slice(-10));
+}
+
+function updateExchangeRateField(rateList) {
+  // Exchange Rate 필드 옆에 통화별 환율 표시
+  const exEl = document.getElementById('v-exrate');
+  if(!exEl) return;
+  // 기준 통화(EUR) 환율 자동 적용
+  const eurRate = rateList.find(r=>r.currency==='EUR'||r.currency==='EUR/KRW');
+  if(eurRate && !exEl.value) {
+    exEl.value = eurRate.rate;
+    exEl.dispatchEvent(new Event('input'));
+  }
+  // 환율 참고 표시
+  const container = exEl.closest('.form-group');
+  let refEl = document.getElementById('exchange-ref');
+  if(!refEl) {
+    refEl = document.createElement('div');
+    refEl.id = 'exchange-ref';
+    refEl.style.cssText = 'font-size:11px;color:#605e5c;margin-top:4px;line-height:1.6';
+    container.appendChild(refEl);
+  }
+  const display = rateList.slice(0,6).map(r=>`${r.currency}: ${r.rate.toLocaleString()}`).join(' · ');
+  refEl.innerHTML = '📅 참고 환율: '+display+'<br><span style="color:#a19f9d">직접 수정 가능</span>';
 }
 
 // ── CCTR 마스터 로드 (STK-DB SharePoint Excel) ──
