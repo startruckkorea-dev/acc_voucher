@@ -600,21 +600,7 @@ async function loadAccMasters() {
       console.log('[GL_CCTR_COPA] GL:'+newGL.length+' CC:'+newCC.length+' PC:'+newPC.length+' Sub_PC:'+newSubPC.length);
     } catch(e){ console.warn('[GL_CCTR_COPA]', e.message); }
 
-    // ── COA (acc_voucher_coa.xlsx) - 추가 GL 보완
-    try {
-      const wb = await fetchXlsx(COA_FILE_NAME);
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
-      const hIdx = rows.findIndex(r=>(r[2]||'').toString().trim()==='Code');
-      let added=0;
-      for(let i=hIdx+1;i<rows.length;i++){
-        const r=rows[i];
-        const code=(r[2]||'').toString().trim();
-        const name=(r[4]||'').toString().trim();
-        if(!code||!/^\d+$/.test(code)||code.length<4) continue;
-        if(!GL_LIST.find(g=>g.code===code)){ GL_LIST.push({code,name}); added++; }
-      }
-      console.log('[COA] 추가 GL:', added, '총:', GL_LIST.length);
-    } catch(e){ console.warn('[COA]', e.message); }
+    // COA 별도 로드 제거 - GL_CCTR_COPA 파일만 사용
 
     // ── Exchange Rate (acc_voucher_exchange.xlsx)
     try {
@@ -1063,17 +1049,15 @@ function searchGL(q){
 }
 function renderGlResults(list){
   document.getElementById('gl-search-results').innerHTML=list.map(g=>`
-    <div class="gl-item" style="display:flex;gap:0;padding:0;overflow:hidden">
-      <div onclick="selectGL('${g.code}')" style="flex:1;padding:8px 12px;cursor:pointer;border-right:1px solid #edebe9"
-        onmouseover="this.style.background='#f0f6ff'" onmouseout="this.style.background=''">
-        <div class="gc">New GL: ${g.code}</div>
+    <div style="display:flex;gap:4px;margin-bottom:4px">
+      <div class="gl-item" onclick="selectGL('${g.code}')" style="flex:1;min-width:0">
+        <div class="gc">${g.code}${g.altCode?' (Old: '+g.altCode+')':''}</div>
         <div class="gn">${g.name}</div>
       </div>
-      ${g.altCode ? `<div onclick="selectGL('${g.altCode}')" style="padding:8px 12px;cursor:pointer;min-width:90px;text-align:center"
-        onmouseover="this.style.background='#f0f6ff'" onmouseout="this.style.background=''">
-        <div class="gc" style="color:#605e5c">Old GL</div>
-        <div style="font-size:12px;font-weight:600;color:#605e5c">${g.altCode}</div>
-      </div>` : ''}
+      ${g.altCode?`<div class="gl-item" onclick="selectGL('${g.altCode}')" style="width:80px;text-align:center;flex-shrink:0">
+        <div class="gc" style="color:#a19f9d">Old</div>
+        <div style="font-size:13px;font-weight:700;color:#605e5c">${g.altCode}</div>
+      </div>`:''}
     </div>`).join('');
 }
 function selectGL(code){
