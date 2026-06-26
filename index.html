@@ -559,12 +559,9 @@ async function loadAccMasters() {
 
       const newGL=[], newCC=[], newPC=[], newSubPC=[];
 
-      // 헤더: row3 (New GL Account, GL Account, Description, ...)
-      // data: row4~
-      const glHdrIdx = rows.findIndex(r=>(r[1]||'').toString().includes('New GL'));
-      const dataStart = glHdrIdx>=0 ? glHdrIdx+1 : 4;
-
-      for(let i=dataStart;i<rows.length;i++){
+      // 헤더: row3 (index 3) = New GL Account, GL Account, Description
+      // data: row4~ (index 4~)
+      for(let i=4;i<rows.length;i++){
         const r=rows[i];
         // col1=New GL Code(숫자), col2=Old GL Code(숫자), col3=Description(EN)
         const glNew=(r[1]!=null?r[1]:'').toString().trim();
