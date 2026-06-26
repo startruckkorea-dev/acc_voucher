@@ -543,10 +543,14 @@ async function loadAccMasters() {
     if(!siteId) { const s=await api('/sites/'+SITE_PATH_DB); siteId=s.id; }
 
     async function fetchXlsx(name) {
+      console.log('[fetchXlsx] 시도:', name);
       const r = await fetch(GRAPH+'/sites/'+siteId+'/drive/root:/'+encodeURIComponent(name)+':/content',
         {headers:{Authorization:'Bearer '+t}});
-      if(!r.ok) throw new Error(name+' '+r.status);
-      return XLSX.read(await r.arrayBuffer(), {type:'array', cellDates:true});
+      console.log('[fetchXlsx] 응답:', name, r.status);
+      if(!r.ok) throw new Error(name+' HTTP '+r.status);
+      const buf = await r.arrayBuffer();
+      console.log('[fetchXlsx] 버퍼 크기:', name, buf.byteLength);
+      return XLSX.read(buf, {type:'array', cellDates:true});
     }
 
     // ── GL_CCTR_COPA 통합 파일 파싱
@@ -600,7 +604,7 @@ async function loadAccMasters() {
       if(newPC.length){ PROFIT_CENTERS.length=0; newPC.forEach(p=>PROFIT_CENTERS.push(p)); }
       window._subProfitCenters = newSubPC;
       console.log('[GL_CCTR_COPA] GL:'+newGL.length+' CC:'+newCC.length+' PC:'+newPC.length+' Sub_PC:'+newSubPC.length);
-    } catch(e){ console.warn('[GL_CCTR_COPA]', e.message); }
+    } catch(e){ console.error('[GL_CCTR_COPA] 파싱 실패:', e.message, e.stack); }
 
     // COA 별도 로드 제거 - GL_CCTR_COPA 파일만 사용
 
