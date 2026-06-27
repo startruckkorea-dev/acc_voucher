@@ -264,9 +264,9 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         <div class="form-group">
           <label>Exchange Rate</label>
           <input type="number" id="v-exrate" placeholder="환율 자동 로드 또는 직접 입력" step="0.01" oninput="updateTotals()">
-          <div id="exchange-banner" style="display:none"></div>
         </div>
       </div>
+      <div id="exchange-banner" style="display:none"></div>
       <div class="form-row">
         <div class="form-group">
           <label>Requester <span class="auto-tag">자동</span></label>
@@ -638,10 +638,13 @@ async function loadAccMasters() {
 function applyTodayExchangeRate() {
   const rates = window._exchangeRates||[];
   if(!rates.length) return;
-  const today = new Date().toISOString().slice(0,7); // YYYY-MM
-  // 당월 최신 환율 (날짜 내림차순)
-  const monthRates = rates.filter(r=>r.date.startsWith(today));
-  const useRates = monthRates.length ? monthRates : rates.slice(-5);
+
+  // 오늘 날짜(YYYY-MM-DD) 기준 가장 최신 날짜 찾기
+  const today = new Date().toISOString().slice(0,10);
+  // 오늘 이하 날짜 중 가장 최신 (내림차순 정렬 후 첫 번째)
+  const sorted = [...rates].sort((a,b)=>b.date.localeCompare(a.date));
+  const latestDate = sorted.find(r=>r.date<=today)?.date || sorted[0]?.date;
+  const useRates = sorted.filter(r=>r.date===latestDate);
 
   // EUR 환율 자동 입력
   const exEl = document.getElementById('v-exrate');
@@ -650,22 +653,22 @@ function applyTodayExchangeRate() {
     if(eur) { exEl.value=eur.rate; exEl.dispatchEvent(new Event('input')); }
   }
 
-  // 참고 환율 배너 표시
-  const latestMap={};
-  [...rates].reverse().forEach(r=>{ if(!latestMap[r.currency]) latestMap[r.currency]=r.rate; });
+  // 참고 환율 배너 - 섹션1 아래 전체 폭으로 표시
   const banner = document.getElementById('exchange-banner');
   if(banner){
-    const latest = useRates[0]?.date||'';
-    const parts = Object.entries(latestMap).map(([k,v])=>`${k} ${Number(v).toLocaleString()}`).join(' / ');
+    const parts = ['USD','SGD','JPY','EUR','CNY'].map(cur=>{
+      const r=useRates.find(x=>x.currency===cur);
+      return r?`<span><b>${cur}</b> ${Number(r.rate).toLocaleString()}</span>`:'';
+    }).filter(Boolean).join('<span style="color:#d2d0ce;margin:0 4px">|</span>');
     banner.style.display='block';
     banner.innerHTML = `
-      <div style="display:flex;align-items:flex-start;gap:8px;background:#f0f6ff;border:1px solid #c7e0f4;border-radius:4px;padding:8px 10px;margin-top:6px">
-        <span style="font-size:15px;flex-shrink:0">📎</span>
-        <div style="font-size:11px;line-height:1.6">
-          <div style="color:#0078d4;font-weight:600;margin-bottom:1px">${latest} 기준 참고 환율</div>
-          <div style="color:#605e5c">${parts}</div>
-          <div style="color:#a19f9d;margin-top:3px">오늘 날짜의 환율로 자동 기입되었습니다. 수정이 필요한 경우 BU Admin과 확인 후 수정해주세요.</div>
+      <div style="display:flex;align-items:center;gap:10px;background:#f0f6ff;border:1px solid #c7e0f4;border-radius:4px;padding:9px 14px;margin-top:10px;flex-wrap:wrap">
+        <span style="font-size:14px;flex-shrink:0">📎</span>
+        <div style="flex:1;min-width:0">
+          <span style="color:#0078d4;font-weight:600;font-size:12px;margin-right:10px">${latestDate} 기준 참고 환율</span>
+          <span style="font-size:12px;color:#323130">${parts}</span>
         </div>
+        <div style="font-size:11px;color:#a19f9d;flex-shrink:0">오늘 날짜 환율로 자동 기입 · 수정 필요 시 BU Admin 확인</div>
       </div>`;
   }
 }
