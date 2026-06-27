@@ -166,6 +166,15 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
   .form-row.three, .form-row.four { grid-template-columns: 1fr 1fr; }
   .appr-grid { grid-template-columns: repeat(2,1fr); }
 }
+
+/* ── 승인/반려 버튼 ── */
+.btn-sm { padding:3px 10px; font-size:11px; border-radius:3px; border:none; cursor:pointer; margin-left:4px; }
+.btn-approve { background:#107c10; color:#fff; }
+.btn-approve:hover { background:#0b5e0b; }
+.btn-reject { background:#d83b01; color:#fff; }
+.btn-reject:hover { background:#b32d00; }
+.s-Rejected { background:#fde7e9; color:#d83b01; }
+
 </style>
 </head>
 <body>
@@ -222,11 +231,12 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
           <option value="Draft">임시저장</option>
           <option value="Pending">결재 중</option>
           <option value="Approved">승인완료</option>
+          <option value="Rejected">반려</option>
         </select>
         <input type="text" id="f-kw" placeholder="검색..." oninput="renderList()" style="min-width:160px">
       </div>
       <table class="voucher-table">
-        <thead><tr><th>제출일</th><th>유형</th><th>BP명</th><th>Purpose</th><th style="text-align:right">금액</th><th>통화</th><th>상태</th></tr></thead>
+        <thead><tr><th>제출일</th><th>유형</th><th>요청자</th><th>BP명</th><th>Purpose</th><th style="text-align:right">금액</th><th>통화</th><th>상태/결재</th></tr></thead>
         <tbody id="list-body"></tbody>
       </table>
     </div>
@@ -411,7 +421,8 @@ let msal_g = null, user = null, siteId = null, nasId = null;
 let bpData = []; // SharePoint Excel에서 로드
 let lines  = [];
 let currentGlIdx = null;
-let voucherStore = JSON.parse(localStorage.getItem('stk_acc_vouchers') || '[]');
+let voucherStore = [];
+let siteIdDB = null; // STK-DB site ID cache
 
 // GL 마스터 (하드코딩 기본셋 — 추후 SharePoint 확장 가능)
 const GL_LIST = [
@@ -513,8 +524,8 @@ async function boot(account) {
   document.getElementById('v-requester').value = account.name||account.username;
   document.getElementById('v-date').value = new Date().toISOString().slice(0,10);
   renderApproval();
-  renderList();
   renderLines();
+  loadVouchers().catch(e=>console.warn('전표 로드 실패:',e.message));
   // CCTR 로드 후 이름 매핑
   loadCCTRMaster(account.name).catch(e=>console.warn('CCTR 로드 실패:', e.message));
   loadBPMaster().catch(e=>console.warn('BP 마스터 로드 실패:', e.message));
@@ -1073,7 +1084,7 @@ function selectGL(code){
 }
 
 // ── Save / Reset ──
-function saveVoucher(status) {
+async function saveVoucher(status) {
   const type=document.getElementById('v-type').value;
   if(!type){alert('Voucher Type을 선택하세요.');return;}
   const purpose=document.getElementById('v-purpose').value.trim();
@@ -1082,17 +1093,214 @@ function saveVoucher(status) {
   const vb=document.getElementById('verify-badge');
   if(status==='Pending'&&!vb.classList.contains('verify-ok'))
     if(!confirm('DR/CR 합계가 일치하지 않습니다. 계속하시겠습니까?')) return;
-  const v={id:'VCH-'+Date.now(),type,date:document.getElementById('v-date').value,
-    invDate:document.getElementById('v-inv-date').value,
-    requester:document.getElementById('v-requester').value,
-    bpCode:document.getElementById('v-bp-code').value,
-    bpName:document.getElementById('v-bp-name').value,
-    purpose,lines:JSON.parse(JSON.stringify(lines)),status,createdAt:new Date().toISOString()};
-  voucherStore.unshift(v);
-  localStorage.setItem('stk_acc_vouchers',JSON.stringify(voucherStore));
-  alert(status==='Draft'?'임시저장됐습니다.':'결재 요청이 완료됐습니다.');
-  resetForm(); renderList(); switchTab('list');
+
+  const editId = document.getElementById('voucher-id-badge').textContent;
+  const bpBizNo = document.getElementById('v-bp-bizno')?.textContent || '';
+  const bpCat = document.getElementById('v-bp-cat').value || '';
+  const exrate = document.getElementById('v-exrate').value || '';
+  const invDate = document.getElementById('v-inv-date').value || '';
+
+  // DR 합계 계산
+  let totalDR = 0;
+  lines.forEach(l=>{ if(l.drcr==='DR') totalDR += parseFloat(l.amount)||0; });
+
+  const fields = {
+    Title: 'VCH-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Date.now().toString().slice(-4),
+    VoucherType: type,
+    SubmitDate: document.getElementById('v-date').value,
+    InvoiceDate: invDate,
+    Requester: document.getElementById('v-requester').value,
+    RequesterEmail: user?.username || '',
+    CCTRCode: document.getElementById('v-cctr').value || '',
+    BPCode: document.getElementById('v-bp-code').value || '',
+    BPName: document.getElementById('v-bp-name').value || '',
+    BPCategory: bpCat,
+    BPBizNo: bpBizNo,
+    Purpose: purpose,
+    ExchangeRate: exrate ? parseFloat(exrate) : null,
+    TotalAmount: totalDR,
+    Currency: lines[0]?.currency || 'EUR',
+    Status: status,
+    LinesJSON: JSON.stringify(lines),
+    AccHandler: ACC_HANDLER[type] || ''
+  };
+
+  try {
+    const sid = await getSiteIdDB();
+    let saved;
+    if (editId && editId.startsWith('VCH-')) {
+      // 기존 항목 수정 (SharePoint ID로 찾기)
+      const existing = voucherStore.find(v=>v.Title===editId);
+      if (existing?._spId) {
+        saved = await api(`/sites/${sid}/lists/ACC_Voucher_List/items/${existing._spId}`, 'PATCH', {fields});
+        saved = { ...existing, ...fields, _spId: existing._spId };
+      } else {
+        // fallback: 새로 생성
+        const res = await api(`/sites/${sid}/lists/ACC_Voucher_List/items`, 'POST', {fields});
+        saved = { ...fields, _spId: res.id };
+      }
+    } else {
+      const res = await api(`/sites/${sid}/lists/ACC_Voucher_List/items`, 'POST', {fields});
+      saved = { ...fields, _spId: res.id };
+    }
+
+    // 결재요청 시 이메일 알림
+    if (status === 'Pending') {
+      await sendApprovalEmail(saved);
+    }
+
+    alert(status==='Draft'?'임시저장됐습니다.':'결재 요청이 완료됐습니다.');
+    resetForm();
+    await loadVouchers();
+    switchTab('list');
+  } catch(e) {
+    console.error('저장 오류:', e);
+    alert('저장 중 오류가 발생했습니다: ' + e.message);
+  }
 }
+
+// ── SharePoint List 연동 ──
+async function getSiteIdDB() {
+  if (siteIdDB) return siteIdDB;
+  const r = await api('/sites/' + SITE_PATH_DB);
+  siteIdDB = r.id;
+  return siteIdDB;
+}
+
+async function loadVouchers() {
+  try {
+    const sid = await getSiteIdDB();
+    const myEmail = user?.username || '';
+    // 본인 전표 + 자신이 담당 Accounting인 전표 (Status=Pending)
+    const r = await api(`/sites/${sid}/lists/ACC_Voucher_List/items?$expand=fields&$top=200&$orderby=fields/Created desc`);
+    voucherStore = (r.value || []).map(item => ({
+      ...item.fields,
+      _spId: item.id,
+      _created: item.createdDateTime
+    }));
+    renderList();
+  } catch(e) {
+    console.warn('전표 목록 로드 실패:', e.message);
+    voucherStore = [];
+    renderList();
+  }
+}
+
+async function sendApprovalEmail(v) {
+  const handler = ACC_HANDLER[v.VoucherType] || '';
+  const handlerEmailMap = {
+    '김소라': 'sora.kim@hyosung.com',
+    '공현주': 'hyunju.gong@hyosung.com',
+    '마지현': 'jihyun.ma@hyosung.com'
+  };
+  const toEmail = handlerEmailMap[handler];
+  if (!toEmail) return;
+
+  const totalFmt = (v.TotalAmount||0).toLocaleString() + ' ' + (v.Currency||'EUR');
+  const body = `
+<div style="font-family:Segoe UI,sans-serif;max-width:600px">
+  <h2 style="color:#0078d4">📋 회계 전표 결재 요청</h2>
+  <table style="border-collapse:collapse;width:100%">
+    <tr><td style="padding:6px 12px;background:#f3f2f1;font-weight:600;width:140px">전표번호</td>
+        <td style="padding:6px 12px;border-bottom:1px solid #edebe9">${v.Title}</td></tr>
+    <tr><td style="padding:6px 12px;background:#f3f2f1;font-weight:600">유형</td>
+        <td style="padding:6px 12px;border-bottom:1px solid #edebe9">${v.VoucherType}</td></tr>
+    <tr><td style="padding:6px 12px;background:#f3f2f1;font-weight:600">요청자</td>
+        <td style="padding:6px 12px;border-bottom:1px solid #edebe9">${v.Requester} (${v.RequesterEmail})</td></tr>
+    <tr><td style="padding:6px 12px;background:#f3f2f1;font-weight:600">BP명</td>
+        <td style="padding:6px 12px;border-bottom:1px solid #edebe9">${v.BPName||'-'}</td></tr>
+    <tr><td style="padding:6px 12px;background:#f3f2f1;font-weight:600">Purpose</td>
+        <td style="padding:6px 12px;border-bottom:1px solid #edebe9">${v.Purpose}</td></tr>
+    <tr><td style="padding:6px 12px;background:#f3f2f1;font-weight:600">금액</td>
+        <td style="padding:6px 12px;border-bottom:1px solid #edebe9">${totalFmt}</td></tr>
+    <tr><td style="padding:6px 12px;background:#f3f2f1;font-weight:600">제출일</td>
+        <td style="padding:6px 12px;border-bottom:1px solid #edebe9">${v.SubmitDate||''}</td></tr>
+  </table>
+  <div style="margin-top:16px">
+    <a href="https://startruckkorea-dev.github.io/acc_voucher/" 
+       style="background:#0078d4;color:#fff;padding:10px 20px;border-radius:4px;text-decoration:none;display:inline-block">
+      🔗 전표 시스템 열기
+    </a>
+  </div>
+  <p style="color:#a19f9d;font-size:12px;margin-top:20px">STK Accounting Voucher System | acc_voucher@startruckkorea.com</p>
+</div>`;
+
+  await api('/me/sendMail', 'POST', {
+    message: {
+      subject: `[STK 전표] ${v.VoucherType} 결재 요청 - ${v.Purpose} (${v.Requester})`,
+      body: { contentType: 'HTML', content: body },
+      toRecipients: [{ emailAddress: { address: toEmail, name: handler } }],
+      ccRecipients: [{ emailAddress: { address: v.RequesterEmail, name: v.Requester } }]
+    },
+    saveToSentItems: true
+  });
+}
+
+async function approveVoucher(spId, action) {
+  // action: 'Approved' | 'Rejected'
+  const v = voucherStore.find(x=>x._spId===spId);
+  if (!v) return;
+  const label = action==='Approved'?'승인':'반려';
+  if (!confirm(`이 전표를 ${label} 처리하시겠습니까?`)) return;
+
+  const comment = action==='Rejected' ? (prompt('반려 사유를 입력하세요:') || '') : '';
+
+  try {
+    const sid = await getSiteIdDB();
+    await api(`/sites/${sid}/lists/ACC_Voucher_List/items/${spId}`, 'PATCH', {
+      fields: {
+        Status: action,
+        ApprovalComment: comment,
+        ApprovedBy: user?.name || user?.username || '',
+        ApprovedDate: new Date().toISOString().slice(0,10)
+      }
+    });
+    // 요청자에게 결과 이메일
+    await sendResultEmail(v, action, comment);
+    alert(`${label} 처리됐습니다.`);
+    await loadVouchers();
+  } catch(e) {
+    alert('처리 중 오류: ' + e.message);
+  }
+}
+
+async function sendResultEmail(v, action, comment) {
+  const label = action==='Approved'?'승인완료':'반려';
+  const color = action==='Approved'?'#107c10':'#d83b01';
+  const body = `
+<div style="font-family:Segoe UI,sans-serif;max-width:600px">
+  <h2 style="color:${color}">📋 회계 전표 ${label}</h2>
+  <table style="border-collapse:collapse;width:100%">
+    <tr><td style="padding:6px 12px;background:#f3f2f1;font-weight:600;width:140px">전표번호</td>
+        <td style="padding:6px 12px;border-bottom:1px solid #edebe9">${v.Title}</td></tr>
+    <tr><td style="padding:6px 12px;background:#f3f2f1;font-weight:600">유형</td>
+        <td style="padding:6px 12px;border-bottom:1px solid #edebe9">${v.VoucherType}</td></tr>
+    <tr><td style="padding:6px 12px;background:#f3f2f1;font-weight:600">Purpose</td>
+        <td style="padding:6px 12px;border-bottom:1px solid #edebe9">${v.Purpose}</td></tr>
+    <tr><td style="padding:6px 12px;background:#f3f2f1;font-weight:600">처리결과</td>
+        <td style="padding:6px 12px;border-bottom:1px solid #edebe9;color:${color};font-weight:600">${label}</td></tr>
+    ${comment?`<tr><td style="padding:6px 12px;background:#f3f2f1;font-weight:600">사유</td>
+        <td style="padding:6px 12px;border-bottom:1px solid #edebe9">${comment}</td></tr>`:''}
+  </table>
+  <div style="margin-top:16px">
+    <a href="https://startruckkorea-dev.github.io/acc_voucher/" 
+       style="background:#0078d4;color:#fff;padding:10px 20px;border-radius:4px;text-decoration:none;display:inline-block">
+      🔗 전표 시스템 열기
+    </a>
+  </div>
+</div>`;
+
+  if (!v.RequesterEmail) return;
+  await api('/me/sendMail', 'POST', {
+    message: {
+      subject: `[STK 전표] ${label} - ${v.Purpose} (${v.VoucherType})`,
+      body: { contentType: 'HTML', content: body },
+      toRecipients: [{ emailAddress: { address: v.RequesterEmail, name: v.Requester } }]
+    },
+    saveToSentItems: true
+  });
+}
+
 
 function resetForm(){
   ['v-type','v-inv-date','v-exrate','v-bp-code','v-bp-name','v-bp-cat','v-purpose'].forEach(id=>{
@@ -1108,43 +1316,78 @@ function renderList(){
   const ft=document.getElementById('f-type')?.value||'';
   const fs=document.getElementById('f-status')?.value||'';
   const fk=(document.getElementById('f-kw')?.value||'').toLowerCase();
+  const myEmail=(user?.username||'').toLowerCase();
+  const myHandler = Object.entries(ACC_HANDLER).filter(([k,v])=>v===getMyHandlerName()).map(([k])=>k);
+
   const list=voucherStore.filter(v=>{
-    if(ft&&v.type!==ft)return false;
-    if(fs&&v.status!==fs)return false;
-    if(fk&&!v.purpose?.toLowerCase().includes(fk)&&!v.bpName?.toLowerCase().includes(fk))return false;
+    if(ft&&v.VoucherType!==ft)return false;
+    if(fs&&v.Status!==fs)return false;
+    if(fk&&!v.Purpose?.toLowerCase().includes(fk)&&!v.BPName?.toLowerCase().includes(fk)&&!v.Title?.toLowerCase().includes(fk))return false;
     return true;
   });
-  const getAmt=v=>{let t=0,c='EUR';v.lines?.forEach(l=>{if(l.drcr==='DR'){t+=parseFloat(l.amount)||0;c=l.currency||c;}});return{t,c};};
-  const stMap={Draft:'s-Draft',Pending:'s-Pending',Approved:'s-Approved'};
-  const stLabel={Draft:'임시저장',Pending:'결재 중',Approved:'승인완료'};
+
+  const stMap={Draft:'s-Draft',Pending:'s-Pending',Approved:'s-Approved',Rejected:'s-Rejected'};
+  const stLabel={Draft:'임시저장',Pending:'결재 중',Approved:'승인완료',Rejected:'반려'};
   const body=document.getElementById('list-body');
   if(!list.length){
-    body.innerHTML=`<tr><td colspan="7" class="list-empty">${voucherStore.length?'검색 결과가 없습니다.':'작성된 바우처가 없습니다.'}</td></tr>`;
+    body.innerHTML=`<tr><td colspan="8" class="list-empty">${voucherStore.length?'검색 결과가 없습니다.':'작성된 바우처가 없습니다. 새 바우처를 작성해보세요.'}</td></tr>`;
     return;
   }
-  const fmt=n=>n.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fmt=n=>(n||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  // 내가 담당 Accounting인지 확인
+  function isMyApproval(v) {
+    return v.Status==='Pending' && myHandler.includes(v.VoucherType);
+  }
+
   body.innerHTML=list.map(v=>{
-    const {t,c}=getAmt(v);
-    return`<tr onclick="openVoucher('${v.id}')">
-      <td>${v.date||'-'}</td>
-      <td><span class="type-badge t-${v.type}">${TYPE_LABEL[v.type]||v.type}</span></td>
-      <td style="font-size:12px;color:#605e5c">${v.bpName||'-'}</td>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.purpose||'-'}</td>
-      <td style="text-align:right;font-weight:700">${fmt(t)}</td>
-      <td style="color:#605e5c;font-size:12px">${c}</td>
-      <td><span class="type-badge ${stMap[v.status]||''}">${stLabel[v.status]||v.status}</span></td>
+    const approvalBtns = isMyApproval(v) ? `
+      <button class="btn btn-sm btn-approve" onclick="event.stopPropagation();approveVoucher('${v._spId}','Approved')">✔ 승인</button>
+      <button class="btn btn-sm btn-reject" onclick="event.stopPropagation();approveVoucher('${v._spId}','Rejected')">✖ 반려</button>` : '';
+    const isOwn = (v.RequesterEmail||'').toLowerCase()===myEmail;
+    return`<tr onclick="openVoucher('${v.Title||v._spId}')" style="${isOwn?'':'background:#faf9f8'}">
+      <td>${v.SubmitDate||'-'}</td>
+      <td><span class="type-badge t-${v.VoucherType}">${TYPE_LABEL[v.VoucherType]||v.VoucherType}</span></td>
+      <td style="font-size:11px;color:#605e5c">${v.Requester||'-'}</td>
+      <td style="font-size:12px;color:#605e5c">${v.BPName||'-'}</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.Purpose||'-'}</td>
+      <td style="text-align:right;font-weight:700">${fmt(v.TotalAmount)}</td>
+      <td style="color:#605e5c;font-size:12px">${v.Currency||'EUR'}</td>
+      <td>
+        <span class="type-badge ${stMap[v.Status]||''}">${stLabel[v.Status]||v.Status}</span>
+        ${approvalBtns}
+      </td>
     </tr>`;}).join('');
 }
-function openVoucher(id){
-  const v=voucherStore.find(x=>x.id===id);if(!v)return;
-  document.getElementById('v-type').value=v.type;
-  document.getElementById('v-inv-date').value=v.invDate||'';
-  document.getElementById('v-bp-code').value=v.bpCode||'';
-  document.getElementById('v-bp-name').value=v.bpName||'';
-  document.getElementById('v-purpose').value=v.purpose||'';
-  document.getElementById('voucher-id-badge').textContent=v.id;
-  lines=JSON.parse(JSON.stringify(v.lines||[]));
+
+function getMyHandlerName() {
+  // user.name에서 한글 성명 추출 (예: "이준순 스타트럭..." → "이준순")
+  const raw = user?.name||'';
+  return raw.split(' ')[0];
+}
+function openVoucher(titleOrId){
+  const v=voucherStore.find(x=>x.Title===titleOrId||x._spId===titleOrId);
+  if(!v)return;
+  // 읽기 전용: Pending/Approved/Rejected는 수정 불가
+  const isReadonly = v.Status==='Approved'||v.Status==='Rejected';
+  document.getElementById('v-type').value=v.VoucherType||'';
+  document.getElementById('v-inv-date').value=v.InvoiceDate||'';
+  document.getElementById('v-bp-code').value=v.BPCode||'';
+  document.getElementById('v-bp-name').value=v.BPName||'';
+  document.getElementById('v-bp-cat').value=v.BPCategory||'';
+  document.getElementById('v-purpose').value=v.Purpose||'';
+  document.getElementById('v-exrate').value=v.ExchangeRate||'';
+  document.getElementById('voucher-id-badge').textContent=v.Title||'';
+  if(v.CCTRCode) document.getElementById('v-cctr').value=v.CCTRCode;
+  lines=JSON.parse(v.LinesJSON||'[]');
   onTypeChange();renderLines();switchTab('new');
+  // 승인됐거나 반려된 건은 버튼 비활성화
+  const saveBtns = document.querySelectorAll('.form-actions button');
+  saveBtns.forEach(b=>{ b.disabled=isReadonly; });
+  if(isReadonly){
+    const badge=document.getElementById('voucher-id-badge');
+    badge.textContent=(v.Title||'')+(v.Status==='Approved'?' ✅ 승인완료':' ❌ 반려');
+  }
 }
 
 // ── Init ──
