@@ -264,6 +264,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         <div class="form-group">
           <label>Exchange Rate</label>
           <input type="number" id="v-exrate" placeholder="환율 자동 로드 또는 직접 입력" step="0.01" oninput="updateTotals()">
+          <div id="exchange-banner" style="display:none"></div>
         </div>
       </div>
       <div class="form-row">
@@ -649,20 +650,23 @@ function applyTodayExchangeRate() {
     if(eur) { exEl.value=eur.rate; exEl.dispatchEvent(new Event('input')); }
   }
 
-  // 참고 환율 표시 - 통화별 최신값 한 줄로
+  // 참고 환율 배너 표시
   const latestMap={};
   [...rates].reverse().forEach(r=>{ if(!latestMap[r.currency]) latestMap[r.currency]=r.rate; });
-  const refEl = document.getElementById('exchange-ref') || (() => {
-    const el=document.createElement('div');
-    el.id='exchange-ref';
-    el.style.cssText='font-size:11px;color:#605e5c;margin-top:4px';
-    document.getElementById('v-exrate')?.closest('.form-group')?.appendChild(el);
-    return el;
-  })();
-  if(refEl){
+  const banner = document.getElementById('exchange-banner');
+  if(banner){
     const latest = useRates[0]?.date||'';
-    const parts = Object.entries(latestMap).map(([k,v])=>`${k} ${v.toLocaleString()}`).join(' / ');
-    refEl.innerHTML = `<span style="color:#a19f9d">${latest} | ${parts}</span>`;
+    const parts = Object.entries(latestMap).map(([k,v])=>`${k} ${Number(v).toLocaleString()}`).join(' / ');
+    banner.style.display='block';
+    banner.innerHTML = `
+      <div style="display:flex;align-items:flex-start;gap:8px;background:#f0f6ff;border:1px solid #c7e0f4;border-radius:4px;padding:8px 10px;margin-top:6px">
+        <span style="font-size:15px;flex-shrink:0">📎</span>
+        <div style="font-size:11px;line-height:1.6">
+          <div style="color:#0078d4;font-weight:600;margin-bottom:1px">${latest} 기준 참고 환율</div>
+          <div style="color:#605e5c">${parts}</div>
+          <div style="color:#a19f9d;margin-top:3px">오늘 날짜의 환율로 자동 기입되었습니다. 수정이 필요한 경우 BU Admin과 확인 후 수정해주세요.</div>
+        </div>
+      </div>`;
   }
 }
 
