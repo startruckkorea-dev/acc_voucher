@@ -571,7 +571,23 @@ async function loadAccMasters() {
         const ccCode=(r[6]!=null?r[6]:'').toString().trim();
         const ccName=(r[7]||'').toString().trim();
         if(ccCode && /^\d{8}$/.test(ccCode)) {
-          if(!newCC.find(c=>c.code===ccCode)) newCC.push({code:ccCode, name:ccName});
+          if(!newCC.find(c=>c.code===ccCode)) {
+          // 중복 텍스트 제거: "A B A B" → "A B" (절반이 동일하면 앞 절반만 사용)
+          let cleanName = ccName;
+          const half = Math.ceil(cleanName.length/2);
+          const firstHalf = cleanName.slice(0, half).trim();
+          if(cleanName.trim() === (firstHalf+' '+firstHalf).trim() || cleanName.trim() === firstHalf+firstHalf) {
+            cleanName = firstHalf;
+          } else if(cleanName.length > 4) {
+            // 공백 기준으로 단어 반복 체크
+            const words = cleanName.trim().split(' ');
+            const mid = Math.floor(words.length/2);
+            if(words.length % 2 === 0 && words.slice(0,mid).join(' ') === words.slice(mid).join(' ')) {
+              cleanName = words.slice(0,mid).join(' ');
+            }
+          }
+          newCC.push({code:ccCode, name:cleanName});
+        }
         }
         // PC: col10=Code, col11=Name (숫자 4자리)
         const pcCode=(r[9]!=null?r[9]:'').toString().trim();
