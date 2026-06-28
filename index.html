@@ -567,9 +567,17 @@ async function loadAccMasters() {
           if(!newGL.find(g=>g.code===glOld))
             newGL.push({code:glOld, altCode:'', name:glName});
         }
-        // CCTR: H열(index7)=Code, I열(index8)=Name of team
-        const ccCode=(r[7]!=null?r[7]:'').toString().trim();
-        const ccName=(r[8]||'').toString().trim();
+        // CCTR: 실제 열 탐색 - 8자리 숫자 패턴으로 자동 감지
+        // 행 전체에서 8자리 숫자 찾기
+        let ccCode='', ccName='';
+        for(let ci=0;ci<r.length;ci++){
+          const v=(r[ci]!=null?r[ci]:'').toString().trim();
+          if(/^\d{8}$/.test(v) && v.startsWith('479')){
+            ccCode=v;
+            ccName=(r[ci+1]||'').toString().trim();
+            break;
+          }
+        }
         if(ccCode && /^\d{8}$/.test(ccCode)) {
           if(!newCC.find(c=>c.code===ccCode)) newCC.push({code:ccCode, name:ccName});
         }
