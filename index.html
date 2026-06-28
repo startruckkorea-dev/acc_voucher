@@ -168,23 +168,9 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 }
 
 /* ── Tab btn (GW style) ── */
-.tab-btn {
-  padding: 10px 20px;
-  border: none;
-  background: none;
-  font-size: 14px;
-  font-weight: 500;
-  color: #605e5c;
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  transition: all .15s;
-}
-.tab-btn.active {
-  color: #0078d4;
-  border-bottom: 2px solid #0078d4;
-  font-weight: 600;
-}
-.tab-btn:hover:not(.active) { color: #323130; background: #f3f2f1; }
+.tab-btn { padding: 8px 18px; border: none; background: #fff; border-radius: 4px 4px 0 0; font-size: 14px; cursor: pointer; color: #605e5c; border-bottom: 3px solid transparent; }
+.tab-btn.active { color: #0078d4; border-bottom: 3px solid #0078d4; font-weight: 500; }
+.tab-btn:hover:not(.active) { background: #f3f2f1; }
 .badge {
   display: inline-block;
   background: #d83b01;
@@ -232,7 +218,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
   </div>
 
   <!-- ── 전표 목록 ── -->
-  <div class="tab-panel active" id="panel-list">
+  <div class="tab-panel active" id="tab-list" style="display:none">
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
         <div class="card-title" style="margin-bottom:0">전표 목록</div>
@@ -266,7 +252,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
   </div>
 
   <!-- ── 바우처 작성 ── -->
-  <div class="tab-panel" id="panel-new">
+  <div class="tab-panel" id="tab-new">
     <div class="card">
       <div class="card-title">회계 전표 작성 <span id="voucher-id-badge" style="font-size:11px;font-weight:400;color:#a19f9d"></span></div>
 
@@ -514,29 +500,35 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 
 <!-- ── 결재함 ── -->
 <div id="tab-appr" style="display:none">
-  <div class="card" style="padding:0;overflow-x:auto">
-    <table class="list-table">
-      <thead><tr>
-        <th>전표번호</th><th>제출일</th><th>유형</th><th>요청자</th><th>BP명</th><th>Purpose</th><th>금액</th><th>상태</th><th>처리</th>
-      </tr></thead>
-      <tbody id="appr-body">
-        <tr><td colspan="9" style="text-align:center;padding:40px;color:#a19f9d">결재 대기 중인 전표가 없습니다.</td></tr>
-      </tbody>
-    </table>
+  <div class="card">
+    <div class="card-title">결재함</div>
+    <div style="overflow-x:auto">
+      <table class="list-table">
+        <thead><tr>
+          <th>전표번호</th><th>제출일</th><th>유형</th><th>요청자</th><th>BP명</th><th>Purpose</th><th>금액</th><th>상태</th><th>처리</th>
+        </tr></thead>
+        <tbody id="appr-body">
+          <tr><td colspan="9" style="text-align:center;padding:40px;color:#a19f9d">결재 대기 중인 전표가 없습니다.</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 
 <!-- ── 관리자 ── -->
 <div id="tab-admin" style="display:none">
-  <div class="card" style="padding:0;overflow-x:auto">
-    <table class="list-table">
-      <thead><tr>
-        <th>전표번호</th><th>제출일</th><th>유형</th><th>요청자</th><th>BP명</th><th>Purpose</th><th>금액</th><th>상태</th>
-      </tr></thead>
-      <tbody id="admin-body">
-        <tr><td colspan="8" style="text-align:center;padding:40px;color:#a19f9d">전체 전표 목록이 여기에 표시됩니다.</td></tr>
-      </tbody>
-    </table>
+  <div class="card">
+    <div class="card-title">관리자</div>
+    <div style="overflow-x:auto">
+      <table class="list-table">
+        <thead><tr>
+          <th>전표번호</th><th>제출일</th><th>유형</th><th>요청자</th><th>BP명</th><th>Purpose</th><th>금액</th><th>상태</th>
+        </tr></thead>
+        <tbody id="admin-body">
+          <tr><td colspan="8" style="text-align:center;padding:40px;color:#a19f9d">전체 전표 목록이 여기에 표시됩니다.</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 
