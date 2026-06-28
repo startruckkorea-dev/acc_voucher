@@ -781,13 +781,12 @@ function applyTodayExchangeRate() {
     }).filter(Boolean).join('<span style="color:#d2d0ce;margin:0 4px">|</span>');
     banner.style.display='block';
     banner.innerHTML = `
-      <div style="display:flex;align-items:center;gap:10px;background:#f0f6ff;border:1px solid #c7e0f4;border-radius:4px;padding:9px 14px;margin-top:10px;flex-wrap:wrap">
-        
-        <div style="flex:1;min-width:0">
-          <span style="color:#0078d4;font-weight:600;font-size:12px;margin-right:10px">${latestDate} 기준 참고 환율</span>
-          <span style="font-size:12px;color:#323130">${parts}</span>
+      <div style="background:#f0f6ff;border:1px solid #c7e0f4;border-radius:4px;padding:8px 14px;margin-top:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="color:#0078d4;font-weight:600;font-size:12px">${latestDate} 기준 참고 환율</span>
+          <span style="font-size:11px;color:#a19f9d">오늘 날짜 환율로 자동 기입 · 수정 필요 시 BU Admin 확인</span>
         </div>
-        <div style="font-size:11px;color:#a19f9d;flex-shrink:0">오늘 날짜 환율로 자동 기입 · 수정 필요 시 BU Admin 확인</div>
+        <div style="font-size:12px;color:#323130">${parts}</div>
       </div>`;
   }
 }
