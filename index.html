@@ -358,12 +358,12 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
       <div style="border:2px dashed #edebe9;border-radius:4px;padding:20px;text-align:center;color:#a19f9d;font-size:13px">📎 파일 첨부 기능은 다음 버전에서 제공됩니다</div>
 
       <div class="section-title">6. 결재라인 (Authorization)</div>
-      <div style="font-size:12px;color:#605e5c;font-weight:500;margin-bottom:8px">6-1. Accounting 담당자</div>
-      <div class="appr-grid" id="appr-accounting" style="margin-bottom:16px"></div>
-      <div style="font-size:12px;color:#605e5c;font-weight:500;margin-bottom:8px">6-2. Business 승인라인</div>
+      <div style="font-size:12px;color:#605e5c;font-weight:500;margin-bottom:8px">6-1. Business 승인라인</div>
       <div class="appr-grid" id="appr-business" style="margin-bottom:16px"></div>
-      <div style="font-size:12px;color:#605e5c;font-weight:500;margin-bottom:8px">6-3. F&amp;C 승인라인</div>
-      <div class="appr-grid" id="appr-fc"></div>
+      <div style="font-size:12px;color:#605e5c;font-weight:500;margin-bottom:8px">6-2. F&amp;C 승인라인</div>
+      <div class="appr-grid" id="appr-fc" style="margin-bottom:16px"></div>
+      <div style="font-size:12px;color:#605e5c;font-weight:500;margin-bottom:8px">6-3. Accounting 담당자 <span style="font-size:11px;color:#a19f9d;font-weight:400">(최종)</span></div>
+      <div class="appr-grid" id="appr-accounting"></div>
 
       <div class="btn-row">
         <button class="btn btn-default" onclick="resetForm()">초기화</button>
@@ -1015,12 +1015,7 @@ function renderApproval() {
   const rules = APPROVAL_RULES[type]||{};
   const handler = ACC_HANDLER[type]||'-';
 
-  document.getElementById('appr-accounting').innerHTML = `
-    <div class="appr-box"><div class="ah">담당자</div><div class="ab">
-      <div class="an">${handler}</div><div class="ad">Accounting</div>
-      <span class="badge-req">필수</span>
-    </div></div>`;
-
+  // 6-1. Business 승인라인
   const biz = [
     {title:'TL',name:'',dept:'',range:rules.TL||'-'},
     {title:'MC',name:'',dept:'',range:rules.MC||'-'},
@@ -1034,6 +1029,7 @@ function renderApproval() {
       <span class="${b.range==='-'?'badge-na':'badge-req'}">${b.range==='-'?'해당없음':'대기'}</span>
     </div></div>`).join('');
 
+  // 6-2. F&C 승인라인
   const fc = [
     {title:'Controller',name:'Jungho Yoo',dept:'Controlling',range:'필요시'},
     {title:'Accounting Mgr.',name:'Gina Shin',dept:'Accounting',range:'필수'},
@@ -1045,6 +1041,17 @@ function renderApproval() {
       <div class="ar">${f.range}</div>
       <span class="${f.range==='-'?'badge-na':'badge-req'}">${f.range==='-'?'해당없음':f.range==='필수'?'필수':'대기'}</span>
     </div></div>`).join('');
+
+  // 6-3. Accounting 담당자 (최종)
+  document.getElementById('appr-accounting').innerHTML = `
+    <div class="appr-box" style="border:2px solid #0078d4">
+      <div class="ah" style="background:#0078d4;color:#fff">Accounting (최종)</div>
+      <div class="ab">
+        <div class="an">${handler}</div>
+        <div class="ad">Accounting</div>
+        <span class="badge-req">필수</span>
+      </div>
+    </div>`;
 }
 
 // ── Account Lines ──
