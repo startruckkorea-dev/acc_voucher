@@ -315,19 +315,16 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
           <thead>
             <tr>
               <th style="width:36px">No</th>
-              <th style="width:90px">DR/CR <span class="req">*</span></th>
-              <th style="width:130px">GL Account <span class="req">*</span></th>
-              <th style="min-width:140px">계정명</th>
-              <th style="width:100px">Cost Center</th>
-              <th style="min-width:130px">CCTR Name</th>
-              <th style="width:80px">Profit Center</th>
-              <th style="min-width:120px">PC Description</th>
-              <th style="width:110px">Sub_PC</th>
-              <th style="min-width:130px">Sub_PC Name</th>
-              <th style="min-width:120px">Line Description</th>
-              <th style="width:110px">Currency</th>
-              <th style="width:110px">Amount</th>
-              <th style="width:110px">Total</th>
+              <th style="width:80px">DR/CR</th>
+              <th style="width:80px">GL</th>
+              <th style="min-width:160px">계정명</th>
+              <th style="min-width:120px">Cost Center</th>
+              <th style="min-width:120px">Profit Center</th>
+              <th style="min-width:120px">Sub_PC</th>
+              <th style="min-width:110px">Line Desc</th>
+              <th style="width:70px">CCY</th>
+              <th style="width:130px;text-align:right">Amount</th>
+              <th style="width:130px;text-align:right">Total(KRW)</th>
               <th style="width:32px"></th>
             </tr>
           </thead>
@@ -357,6 +354,75 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         <button class="btn btn-outline" onclick="saveVoucher('Draft')">임시저장</button>
         <button class="btn btn-primary" onclick="saveVoucher('Pending')">✔ 결재 요청</button>
       </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── 라인 편집 모달 ── -->
+<div class="modal-overlay" id="line-modal" onclick="if(event.target===this)closeLineModal()">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <span id="line-modal-title">회계 라인 편집</span>
+      <button class="modal-close" onclick="closeLineModal()">✕</button>
+    </div>
+    <div class="modal-body" style="display:grid;grid-template-columns:1fr 1fr;gap:12px 16px">
+      <div class="form-group">
+        <label>DR/CR <span class="req">*</span></label>
+        <select id="lm-drcr">
+          <option value="">선택</option>
+          <option value="DR">DR 차변</option>
+          <option value="CR">CR 대변</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Currency</label>
+        <select id="lm-currency">
+          <option>EUR</option><option>KRW</option><option>USD</option>
+          <option>JPY</option><option>CNY</option><option>SGD</option>
+        </select>
+      </div>
+      <div class="form-group" style="grid-column:span 2">
+        <label>GL Account <span class="req">*</span></label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="text" id="lm-gl" placeholder="코드" readonly style="width:90px">
+          <button class="btn-search" onclick="openGlModal(_lineModalIdx)" style="flex-shrink:0">🔍 검색</button>
+          <span id="lm-glname" style="font-size:12px;color:#605e5c;flex:1"></span>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Cost Center</label>
+        <select id="lm-cctr" onchange="document.getElementById('lm-cctrname').textContent=COST_CENTERS.find(c=>c.code===this.value)?.name||''">
+          <option value="">-</option>
+        </select>
+        <div id="lm-cctrname" style="font-size:11px;color:#605e5c;margin-top:3px"></div>
+      </div>
+      <div class="form-group">
+        <label>Profit Center</label>
+        <select id="lm-pc" onchange="document.getElementById('lm-pcname').textContent=PROFIT_CENTERS.find(p=>p.code===this.value)?.name||''">
+          <option value="">-</option>
+        </select>
+        <div id="lm-pcname" style="font-size:11px;color:#605e5c;margin-top:3px"></div>
+      </div>
+      <div class="form-group" style="grid-column:span 2">
+        <label>Sub_PC</label>
+        <select id="lm-subpc" onchange="document.getElementById('lm-subpcname').textContent=getSubPCs().find(s=>s.code===this.value)?.name||''">
+          <option value="">-</option>
+        </select>
+        <div id="lm-subpcname" style="font-size:11px;color:#605e5c;margin-top:3px"></div>
+      </div>
+      <div class="form-group" style="grid-column:span 2">
+        <label>Line Description</label>
+        <input type="text" id="lm-linedesc" placeholder="설명">
+      </div>
+      <div class="form-group">
+        <label>Amount</label>
+        <input type="number" id="lm-amount" step="0.01" style="text-align:right" placeholder="0.00">
+      </div>
+    </div>
+    <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+      <button class="btn" onclick="closeLineModal()">취소</button>
+      <button class="btn btn-primary" onclick="saveLineModal()">✔ 확인</button>
     </div>
   </div>
 </div>
@@ -930,54 +996,41 @@ function renderLines() {
     tbody.innerHTML = `<tr><td colspan="12" style="text-align:center;padding:20px;color:#a19f9d">＋ 라인 추가 버튼을 눌러 회계 라인을 추가하세요</td></tr>`;
     updateTotals(); return;
   }
-  tbody.innerHTML = lines.map((l,i)=>`
-    <tr>
+  const fmt = n=>(n||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
+  tbody.innerHTML = lines.map((l,i)=>{
+    const amt = parseFloat(l.amount)||0;
+    const sign = l.drcr==='CR'?-1:1;
+    const rate = parseFloat(document.getElementById('v-exrate')?.value)||0;
+    let totalTxt = '';
+    if(amt){
+      if(l.currency==='KRW') totalTxt = fmt(sign*amt);
+      else if(rate) totalTxt = 'KRW '+Math.round(sign*amt*rate).toLocaleString();
+      else totalTxt = '-';
+    } else totalTxt = '<span style="color:#a19f9d">0.00</span>';
+
+    const drcrLabel = l.drcr==='DR'?'<span style="color:#0078d4;font-weight:600">DR</span>':l.drcr==='CR'?'<span style="color:#d83b01;font-weight:600">CR</span>':'<span style="color:#a19f9d">-</span>';
+    const cctrTxt = l.cctr ? `${l.cctr}` : '-';
+    const pcTxt   = l.pc   ? `${l.pc}` : '-';
+    const subTxt  = l.subpc? `${l.subpc}` : '-';
+    const glTxt   = l.gl   ? l.gl : '-';
+    return `<tr style="cursor:pointer" onclick="openLineModal(${i})">
       <td style="text-align:center;color:#a19f9d">${i+1}</td>
-      <td><select onchange="lines[${i}].drcr=this.value;updateTotals()" style="min-width:80px">
-        <option value="" ${!l.drcr?'selected':''}>선택</option>
-        <option value="DR" ${l.drcr==='DR'?'selected':''}>DR 차변</option>
-        <option value="CR" ${l.drcr==='CR'?'selected':''}>CR 대변</option>
-      </select></td>
-      <td>
-        <div style="display:flex;gap:3px">
-          <input type="text" value="${l.gl}" placeholder="코드" readonly style="width:60px;cursor:pointer" onclick="openGlModal(${i})">
-          <button class="btn-search" style="padding:4px 7px;font-size:11px" onclick="openGlModal(${i})">🔍</button>
-        </div>
-      </td>
-      <td style="font-size:11px;color:#605e5c;min-width:130px">${l.glName||'-'}</td>
-      <td><select onchange="const _c=COST_CENTERS.find(x=>x.code===this.value);lines[${i}].cctr=this.value;lines[${i}].cctrName=_c?_c.name:'';renderLines();" style="min-width:90px">
-        <option value="">-</option>
-        ${COST_CENTERS.map(c=>`<option value="${c.code}" ${l.cctr===c.code?'selected':''}>${c.code}</option>`).join('')}
-      </select></td>
-      <td style="font-size:12px;color:#323130;min-width:120px;white-space:nowrap">${l.cctrName||''}</td>
-      <td><select onchange="const _p=PROFIT_CENTERS.find(x=>x.code===this.value);lines[${i}].pc=this.value;lines[${i}].pcName=_p?_p.name:'';renderLines();" style="min-width:70px">
-        <option value="">-</option>
-        ${PROFIT_CENTERS.map(p=>`<option value="${p.code}" ${l.pc===p.code?'selected':''}>${p.code}</option>`).join('')}
-      </select></td>
-      <td style="font-size:12px;color:#323130;min-width:110px;white-space:nowrap">${l.pcName||''}</td>
-      <td><select onchange="const _s=getSubPCs().find(x=>x.code===this.value);lines[${i}].subpc=this.value;lines[${i}].subpcName=_s?_s.name:'';renderLines();" style="min-width:95px">
-        <option value="">-</option>
-        ${getSubPCs().map(s=>`<option value="${s.code}" ${l.subpc===s.code?'selected':''}>${s.code}</option>`).join('')}
-      </select></td>
-      <td style="font-size:12px;color:#323130;min-width:120px;white-space:nowrap">${l.subpcName||''}</td>
-      <td><input type="text" value="${l.lineDesc}" placeholder="설명" onchange="lines[${i}].lineDesc=this.value" style="min-width:110px"></td>
-      <td><select onchange="lines[${i}].currency=this.value;updateTotals()" style="min-width:90px">
-        ${['EUR','KRW','USD','JPY','CNY','SGD'].map(c=>`<option ${l.currency===c?'selected':''}>${c}</option>`).join('')}
-      </select></td>
-      <td><input type="number" value="${l.amount}" step="0.01" style="text-align:right;width:130px" placeholder="0.00" onchange="lines[${i}].amount=parseFloat(this.value)||0;updateTotals()"></td>
-      <td style="text-align:right;font-weight:700;color:#323130;min-width:130px">${(()=>{
-        const amt=parseFloat(l.amount)||0;
-        const sign=l.drcr==='CR'?-1:1;
-        if(!amt) return '<span style=\"color:#a19f9d\">0.00</span>';
-        if(l.currency==='KRW') return (sign*amt).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
-        const rate=parseFloat(document.getElementById('v-exrate')?.value)||0;
-        if(!rate) return '<span style=\"color:#a19f9d\">-</span>';
-        return 'KRW '+Math.round(sign*amt*rate).toLocaleString();
-      })()}</td>
-      <td><button class="btn-del" onclick="deleteLine(${i})">✕</button></td>
-    </tr>`).join('');
+      <td style="text-align:center">${drcrLabel}</td>
+      <td style="font-size:12px">${glTxt}</td>
+      <td style="font-size:11px;color:#605e5c">${l.glName||'-'}</td>
+      <td style="font-size:11px">${l.cctrName||cctrTxt}</td>
+      <td style="font-size:11px">${l.pcName ? l.pc+' '+l.pcName : pcTxt}</td>
+      <td style="font-size:11px">${l.subpcName ? l.subpc+' '+l.subpcName : subTxt}</td>
+      <td style="font-size:11px;color:#605e5c">${l.lineDesc||'-'}</td>
+      <td style="font-size:11px">${l.currency||'EUR'}</td>
+      <td style="text-align:right;font-weight:600">${amt?fmt(amt):'<span style="color:#a19f9d">0.00</span>'}</td>
+      <td style="text-align:right;font-weight:600;color:#323130">${totalTxt}</td>
+      <td><button class="btn-del" onclick="event.stopPropagation();deleteLine(${i})">✕</button></td>
+    </tr>`;
+  }).join('');
   updateTotals();
 }
+
 
 function updateTotals() {
   let dr=0,cr=0,curr='EUR';
@@ -1078,6 +1131,11 @@ function renderGlResults(list){
 function selectGL(code){
   const gl=GL_LIST.find(g=>g.code===code); if(!gl||currentGlIdx===null) return;
   lines[currentGlIdx].gl=gl.code; lines[currentGlIdx].glName=gl.name;
+  // 라인 모달이 열려있으면 lm 필드도 업데이트
+  if(document.getElementById('line-modal').classList.contains('open')){
+    document.getElementById('lm-gl').value = gl.code;
+    document.getElementById('lm-glname').textContent = gl.name;
+  }
   renderLines(); closeGlModal();
 }
 
@@ -1102,6 +1160,75 @@ function saveVoucher(status) {
   alert(status==='Draft'?'임시저장됐습니다.':'결재 요청이 완료됐습니다.');
   resetForm(); renderList(); switchTab('list');
 }
+
+
+// ── 라인 편집 모달 ──
+let _lineModalIdx = -1;
+
+function openLineModal(i) {
+  _lineModalIdx = i;
+  const l = lines[i] || {};
+  document.getElementById('line-modal-title').textContent = `라인 ${i+1} 편집`;
+
+  // DR/CR
+  document.getElementById('lm-drcr').value = l.drcr || '';
+  // Currency
+  document.getElementById('lm-currency').value = l.currency || 'EUR';
+  // GL
+  document.getElementById('lm-gl').value = l.gl || '';
+  document.getElementById('lm-glname').textContent = l.glName || '';
+  // Cost Center
+  const ccSel = document.getElementById('lm-cctr');
+  ccSel.innerHTML = '<option value="">-</option>' +
+    COST_CENTERS.map(c=>`<option value="${c.code}" ${l.cctr===c.code?'selected':''}>${c.code} ${c.name}</option>`).join('');
+  document.getElementById('lm-cctrname').textContent = l.cctrName || '';
+  // Profit Center
+  const pcSel = document.getElementById('lm-pc');
+  pcSel.innerHTML = '<option value="">-</option>' +
+    PROFIT_CENTERS.map(p=>`<option value="${p.code}" ${l.pc===p.code?'selected':''}>${p.code} ${p.name}</option>`).join('');
+  document.getElementById('lm-pcname').textContent = l.pcName || '';
+  // Sub_PC
+  const subSel = document.getElementById('lm-subpc');
+  subSel.innerHTML = '<option value="">-</option>' +
+    getSubPCs().map(s=>`<option value="${s.code}" ${l.subpc===s.code?'selected':''}>${s.code} ${s.name}</option>`).join('');
+  document.getElementById('lm-subpcname').textContent = l.subpcName || '';
+  // Line Desc / Amount
+  document.getElementById('lm-linedesc').value = l.lineDesc || '';
+  document.getElementById('lm-amount').value = l.amount || '';
+
+  document.getElementById('line-modal').classList.add('open');
+}
+
+function closeLineModal() {
+  document.getElementById('line-modal').classList.remove('open');
+  _lineModalIdx = -1;
+}
+
+function saveLineModal() {
+  if(_lineModalIdx < 0) return;
+  const i = _lineModalIdx;
+  const ccCode  = document.getElementById('lm-cctr').value;
+  const pcCode  = document.getElementById('lm-pc').value;
+  const subCode = document.getElementById('lm-subpc').value;
+  lines[i].drcr     = document.getElementById('lm-drcr').value;
+  lines[i].currency = document.getElementById('lm-currency').value;
+  lines[i].gl       = document.getElementById('lm-gl').value;
+  lines[i].glName   = document.getElementById('lm-glname').textContent;
+  lines[i].cctr     = ccCode;
+  lines[i].cctrName = COST_CENTERS.find(c=>c.code===ccCode)?.name || '';
+  lines[i].pc       = pcCode;
+  lines[i].pcName   = PROFIT_CENTERS.find(p=>p.code===pcCode)?.name || '';
+  lines[i].subpc    = subCode;
+  lines[i].subpcName= getSubPCs().find(s=>s.code===subCode)?.name || '';
+  lines[i].lineDesc = document.getElementById('lm-linedesc').value;
+  lines[i].amount   = parseFloat(document.getElementById('lm-amount').value) || 0;
+  closeLineModal();
+  renderLines();
+}
+
+// GL 모달에서 선택 시 라인 모달에도 반영
+const _origSelectGL = window.selectGL;
+
 
 function resetForm(){
   ['v-type','v-inv-date','v-exrate','v-bp-code','v-bp-name','v-bp-cat','v-purpose'].forEach(id=>{
