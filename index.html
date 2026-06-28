@@ -709,11 +709,8 @@ async function loadCCTRMaster(userName) {
       if(!code||code.length<5) continue;
       if(!newCCTR.find(c=>c.code===code)) newCCTR.push({code,name});
     }
-    if(newCCTR.length > 0) {
-      COST_CENTERS.length = 0;
-      newCCTR.forEach(c=>COST_CENTERS.push(c));
-      console.log('[CCTR] Loaded:', COST_CENTERS.length, 'entries');
-    }
+    // COST_CENTERS는 GL_CCTR_COPA에서 이미 로드됨 - 덮어쓰지 않음
+    console.log('[CCTR] newCCTR loaded:', newCCTR.length, '(COST_CENTERS는 GL_CCTR_COPA 사용)');
     // Employee 시트에서 이름으로 CCTR 매핑
     if(userName) {
       console.log('[CCTR] 시트 목록:', wb.SheetNames.join(', '));
