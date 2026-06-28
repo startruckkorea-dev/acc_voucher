@@ -738,10 +738,15 @@ async function loadAccMasters() {
       for(let i=1;i<rows.length;i++){
         const r=rows[i]; if(!r[0]) continue;
         let dateStr='';
-        if(r[0] instanceof Date) dateStr=r[0].toISOString().slice(0,10);
-        else if(typeof r[0]==='number'){
-          dateStr=new Date(Math.round((r[0]-25569)*86400*1000)).toISOString().slice(0,10);
-        } else dateStr=r[0].toString();
+        if(r[0] instanceof Date) {
+          // KST(+9h) 보정: toISOString()은 UTC 기준이므로 9시간 더함
+          const _d = new Date(r[0].getTime() + 9*3600*1000);
+          dateStr = _d.toISOString().slice(0,10);
+        } else if(typeof r[0]==='number'){
+          // 엑셀 시리얼 날짜 → UTC 변환 후 KST 보정
+          const _d = new Date(Math.round((r[0]-25569)*86400*1000) + 9*3600*1000);
+          dateStr = _d.toISOString().slice(0,10);
+        } else dateStr=r[0].toString().slice(0,10);
         currencies.forEach((curr,ci)=>{
           const rate=parseFloat(r[ci+1])||0;
           if(rate) window._exchangeRates.push({date:dateStr,currency:curr,rate});
