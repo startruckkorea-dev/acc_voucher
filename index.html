@@ -689,15 +689,27 @@ async function loadCCTRMaster(userName) {
     // acc_cctr_list.xlsx: Team 시트, D열(index3)=CCTR Name, E열(index4)=Cost Center 코드
     const sheetName = wb.SheetNames.find(s=>s==='Team')||wb.SheetNames[0];
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1});
+    console.log('[CCTR] Team 시트 총 행수:', rows.length);
+    // 샘플 출력 (row3~6)
+    for(let di=3;di<=6&&di<rows.length;di++) console.log('[CCTR] row'+di+':', JSON.stringify(rows[di]));
     const newCCTR = [];
-    // 헤더: row4(index3), 데이터: row5(index4)~
-    for(let i=4;i<rows.length;i++){
+    // 헤더 행 자동 탐색 (코스트센터 포함 행)
+    let dataStart = 4;
+    for(let i=0;i<rows.length;i++){
+      const r = rows[i]||[];
+      if(r.some(c=>(c||'').toString().includes('코스트센터(') || (c||'').toString().includes('Cost Center'))) {
+        dataStart = i+1; break;
+      }
+    }
+    console.log('[CCTR] dataStart:', dataStart);
+    for(let i=dataStart;i<rows.length;i++){
       const r = rows[i];
       const name = (r[3]!=null?r[3]:'').toString().trim(); // D열 = CCTR Name
       const code = (r[4]!=null?r[4]:'').toString().trim(); // E열 = Cost Center 코드
       if(!code || !name) continue;
       if(!newCCTR.find(c=>c.code===code)) newCCTR.push({code, name});
     }
+    console.log('[CCTR] newCCTR:', newCCTR.length, 'entries');
     // COST_CENTERS에 반영
     if(newCCTR.length > 0){
       COST_CENTERS.length = 0;
