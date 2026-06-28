@@ -218,7 +218,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
   </div>
 
   <!-- ── 전표 목록 ── -->
-  <div class="tab-panel active" id="tab-list" style="display:none">
+  <div id="tab-list" style="display:none" style="display:none">
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
         <div class="card-title" style="margin-bottom:0">전표 목록</div>
@@ -252,7 +252,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
   </div>
 
   <!-- ── 바우처 작성 ── -->
-  <div class="tab-panel" id="tab-new">
+  <div id="tab-new">
     <div class="card">
       <div class="card-title">회계 전표 작성 <span id="voucher-id-badge" style="font-size:11px;font-weight:400;color:#a19f9d"></span></div>
 
@@ -378,6 +378,39 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 </div>
 
 
+<div id="tab-appr" style="display:none">
+  <div class="card">
+    <div class="card-title">결재함</div>
+    <div style="overflow-x:auto">
+      <table class="list-table">
+        <thead><tr>
+          <th>전표번호</th><th>제출일</th><th>유형</th><th>요청자</th><th>BP명</th><th>Purpose</th><th>금액</th><th>상태</th><th>처리</th>
+        </tr></thead>
+        <tbody id="appr-body">
+          <tr><td colspan="9" style="text-align:center;padding:40px;color:#a19f9d">결재 대기 중인 전표가 없습니다.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ── 관리자 ── -->
+<div id="tab-admin" style="display:none">
+  <div class="card">
+    <div class="card-title">관리자</div>
+    <div style="overflow-x:auto">
+      <table class="list-table">
+        <thead><tr>
+          <th>전표번호</th><th>제출일</th><th>유형</th><th>요청자</th><th>BP명</th><th>Purpose</th><th>금액</th><th>상태</th>
+        </tr></thead>
+        <tbody id="admin-body">
+          <tr><td colspan="8" style="text-align:center;padding:40px;color:#a19f9d">전체 전표 목록이 여기에 표시됩니다.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <!-- ── 라인 편집 모달 ── -->
 <div class="modal-overlay" id="line-modal" onclick="if(event.target===this)closeLineModal()">
   <div style="background:#fff;border-radius:8px;width:580px;max-width:95vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.18);overflow:hidden">
@@ -499,39 +532,6 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 <div id="dyn-loading"><div class="spinner"></div><span style="font-size:13px;color:#605e5c">처리 중...</span></div>
 
 <!-- ── 결재함 ── -->
-<div id="tab-appr" style="display:none">
-  <div class="card">
-    <div class="card-title">결재함</div>
-    <div style="overflow-x:auto">
-      <table class="list-table">
-        <thead><tr>
-          <th>전표번호</th><th>제출일</th><th>유형</th><th>요청자</th><th>BP명</th><th>Purpose</th><th>금액</th><th>상태</th><th>처리</th>
-        </tr></thead>
-        <tbody id="appr-body">
-          <tr><td colspan="9" style="text-align:center;padding:40px;color:#a19f9d">결재 대기 중인 전표가 없습니다.</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
-<!-- ── 관리자 ── -->
-<div id="tab-admin" style="display:none">
-  <div class="card">
-    <div class="card-title">관리자</div>
-    <div style="overflow-x:auto">
-      <table class="list-table">
-        <thead><tr>
-          <th>전표번호</th><th>제출일</th><th>유형</th><th>요청자</th><th>BP명</th><th>Purpose</th><th>금액</th><th>상태</th>
-        </tr></thead>
-        <tbody id="admin-body">
-          <tr><td colspan="8" style="text-align:center;padding:40px;color:#a19f9d">전체 전표 목록이 여기에 표시됩니다.</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
 
 <script>
 // ── Constants ──
@@ -642,8 +642,8 @@ async function boot(account) {
   document.getElementById('v-requester').value = account.name||account.username;
   document.getElementById('v-date').value = new Date().toISOString().slice(0,10);
   renderApproval();
-  renderList();
   renderLines();
+  switchTab('new');  // 기본 탭
   // CCTR 로드 후 이름 매핑
   loadCCTRMaster(account.name).catch(e=>console.warn('CCTR 로드 실패:', e.message));
   loadBPMaster().catch(e=>console.warn('BP 마스터 로드 실패:', e.message));
