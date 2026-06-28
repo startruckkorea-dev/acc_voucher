@@ -995,7 +995,7 @@ function renderLines() {
       <td style="font-size:11px;color:#605e5c;min-width:130px">${l.glName||'-'}</td>
       <td><select onchange="lines[${i}].cctr=this.value" style="min-width:100px">
         <option value="">-</option>
-        ${COST_CENTERS.map(c=>`<option value="${c.code}" ${l.cctr===c.code?'selected':''}>${c.name}</option>`).join('')}
+        ${COST_CENTERS.map(c=>`<option value="${c.code}" ${l.cctr===c.code?'selected':''}>${c.code} ${c.name}</option>`).join('')}
       </select></td>
       <td><select onchange="lines[${i}].pc=this.value" style="min-width:90px">
         <option value="">-</option>
