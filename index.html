@@ -361,88 +361,87 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 
 <!-- ── 라인 편집 모달 ── -->
 <div class="modal-overlay" id="line-modal" onclick="if(event.target===this)closeLineModal()">
-  <div class="modal" style="max-width:600px;border-radius:8px;padding:0;overflow:hidden">
-    <!-- 헤더 -->
-    <div style="background:#0078d4;padding:16px 20px;display:flex;justify-content:space-between;align-items:center">
-      <span id="line-modal-title" style="color:#fff;font-size:15px;font-weight:600"></span>
-      <button onclick="closeLineModal()" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer;opacity:.8">✕</button>
-    </div>
-    <!-- 바디 -->
-    <div style="padding:20px 24px;display:flex;flex-direction:column;gap:16px">
+  <div style="background:#fff;border-radius:8px;width:580px;max-width:95vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.18);overflow:hidden">
 
-      <!-- Row 1: DR/CR + Currency -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <!-- 헤더 -->
+    <div style="background:#0078d4;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+      <span id="line-modal-title" style="color:#fff;font-size:15px;font-weight:600;letter-spacing:.2px"></span>
+      <button onclick="closeLineModal()" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:28px;height:28px;border-radius:50%;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
+    </div>
+
+    <!-- 바디 (스크롤 가능) -->
+    <div style="padding:20px 24px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:14px">
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
         <div>
-          <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px">DR/CR <span style="color:#d83b01">*</span></div>
-          <select id="lm-drcr" style="width:100%;padding:8px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px">
+          <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">DR/CR <span style="color:#d83b01">*</span></div>
+          <select id="lm-drcr" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px">
             <option value="">-- 선택 --</option>
-            <option value="DR">DR　차변 (Debit)</option>
-            <option value="CR">CR　대변 (Credit)</option>
+            <option value="DR">DR 차변 (Debit)</option>
+            <option value="CR">CR 대변 (Credit)</option>
           </select>
         </div>
         <div>
-          <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px">Currency</div>
-          <select id="lm-currency" style="width:100%;padding:8px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px">
+          <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">CURRENCY</div>
+          <select id="lm-currency" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px">
             <option>EUR</option><option>KRW</option><option>USD</option><option>JPY</option><option>CNY</option><option>SGD</option>
           </select>
         </div>
       </div>
 
-      <!-- Row 2: GL Account -->
       <div>
-        <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px">GL Account <span style="color:#d83b01">*</span></div>
+        <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">GL ACCOUNT <span style="color:#d83b01">*</span></div>
         <div style="display:flex;gap:8px;align-items:center">
-          <input type="text" id="lm-gl" readonly placeholder="코드" style="width:100px;padding:8px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px;background:#f3f2f1">
-          <button onclick="openGlModal(_lineModalIdx)" style="padding:8px 14px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:12px;cursor:pointer;white-space:nowrap">🔍 GL 검색</button>
-          <span id="lm-glname" style="font-size:12px;color:#323130;flex:1;font-weight:500"></span>
+          <input type="text" id="lm-gl" readonly placeholder="코드" style="width:90px;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px;background:#faf9f8">
+          <button onclick="openGlModal(_lineModalIdx)" style="padding:7px 14px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:12px;cursor:pointer">🔍 GL 검색</button>
+          <span id="lm-glname" style="font-size:12px;color:#323130;font-weight:500"></span>
         </div>
       </div>
 
-      <!-- Row 3: Cost Center -->
-      <div>
-        <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px">Cost Center</div>
-        <select id="lm-cctr" onchange="document.getElementById('lm-cctrname').textContent=COST_CENTERS.find(c=>c.code===this.value)?.name||''" style="width:100%;padding:8px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px">
+      <div style="border-top:1px solid #f3f2f1;padding-top:14px">
+        <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">COST CENTER</div>
+        <select id="lm-cctr" onchange="document.getElementById('lm-cctrname').textContent=COST_CENTERS.find(c=>c.code===this.value)?.name||''" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px">
           <option value="">-</option>
         </select>
-        <div id="lm-cctrname" style="font-size:11px;color:#0078d4;margin-top:4px;min-height:16px"></div>
+        <div id="lm-cctrname" style="font-size:11px;color:#0078d4;margin-top:3px;min-height:15px"></div>
       </div>
 
-      <!-- Row 4: Profit Center + Sub_PC -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
         <div>
-          <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px">Profit Center</div>
-          <select id="lm-pc" onchange="document.getElementById('lm-pcname').textContent=PROFIT_CENTERS.find(p=>p.code===this.value)?.name||''" style="width:100%;padding:8px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px">
+          <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">PROFIT CENTER</div>
+          <select id="lm-pc" onchange="document.getElementById('lm-pcname').textContent=PROFIT_CENTERS.find(p=>p.code===this.value)?.name||''" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px">
             <option value="">-</option>
           </select>
-          <div id="lm-pcname" style="font-size:11px;color:#0078d4;margin-top:4px;min-height:16px"></div>
+          <div id="lm-pcname" style="font-size:11px;color:#0078d4;margin-top:3px;min-height:15px"></div>
         </div>
         <div>
-          <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px">Sub_PC</div>
-          <select id="lm-subpc" onchange="document.getElementById('lm-subpcname').textContent=getSubPCs().find(s=>s.code===this.value)?.name||''" style="width:100%;padding:8px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px">
+          <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">SUB_PC</div>
+          <select id="lm-subpc" onchange="document.getElementById('lm-subpcname').textContent=getSubPCs().find(s=>s.code===this.value)?.name||''" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px">
             <option value="">-</option>
           </select>
-          <div id="lm-subpcname" style="font-size:11px;color:#0078d4;margin-top:4px;min-height:16px"></div>
+          <div id="lm-subpcname" style="font-size:11px;color:#0078d4;margin-top:3px;min-height:15px"></div>
         </div>
       </div>
 
-      <!-- Row 5: Line Description -->
-      <div>
-        <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px">Line Description</div>
-        <input type="text" id="lm-linedesc" placeholder="설명을 입력하세요" style="width:100%;padding:8px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px;box-sizing:border-box">
-      </div>
-
-      <!-- Row 6: Amount -->
-      <div>
-        <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px">Amount</div>
-        <input type="number" id="lm-amount" step="0.01" placeholder="0.00" style="width:200px;padding:8px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:14px;font-weight:600;text-align:right">
+      <div style="display:grid;grid-template-columns:1fr 140px;gap:14px">
+        <div>
+          <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">LINE DESCRIPTION</div>
+          <input type="text" id="lm-linedesc" placeholder="설명을 입력하세요" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px;box-sizing:border-box">
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">AMOUNT</div>
+          <input type="number" id="lm-amount" step="0.01" placeholder="0.00" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px;text-align:right;box-sizing:border-box">
+        </div>
       </div>
 
     </div>
-    <!-- 푸터 -->
-    <div style="padding:14px 24px;background:#f3f2f1;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #edebe9">
-      <button onclick="closeLineModal()" style="padding:8px 20px;border:1px solid #d2d0ce;background:#fff;border-radius:4px;font-size:13px;cursor:pointer">취소</button>
-      <button onclick="saveLineModal()" style="padding:8px 20px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer">✔ 확인</button>
+
+    <!-- 푸터 (항상 고정) -->
+    <div style="padding:12px 24px;background:#f3f2f1;border-top:1px solid #edebe9;display:flex;justify-content:flex-end;gap:8px;flex-shrink:0">
+      <button onclick="closeLineModal()" style="padding:8px 22px;border:1px solid #8a8886;background:#fff;border-radius:4px;font-size:13px;cursor:pointer;color:#323130">취소</button>
+      <button onclick="saveLineModal()" style="padding:8px 22px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer">✔ 확인</button>
     </div>
+
   </div>
 </div>
 <!-- BP 검색 모달 -->
