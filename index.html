@@ -318,7 +318,8 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
               <th style="width:90px">DR/CR <span class="req">*</span></th>
               <th style="width:130px">GL Account <span class="req">*</span></th>
               <th style="min-width:140px">계정명</th>
-              <th style="width:120px">Cost Center</th>
+              <th style="width:100px">Cost Center</th>
+              <th style="min-width:130px">CCTR Name</th>
               <th style="width:110px">Profit Center</th>
               <th style="width:80px">Sub_PC</th>
               <th style="min-width:120px">Line Description</th>
@@ -916,7 +917,7 @@ function renderApproval() {
 
 // ── Account Lines ──
 function addLine() {
-  lines.push({drcr:'',gl:'',glName:'',cctr:'',pc:'',subpc:'',lineDesc:'',currency:'EUR',amount:''});
+  lines.push({drcr:'',gl:'',glName:'',cctr:'',cctrName:'',pc:'',subpc:'',lineDesc:'',currency:'EUR',amount:''});
   renderLines();
 }
 function deleteLine(i) { lines.splice(i,1); renderLines(); }
@@ -942,10 +943,11 @@ function renderLines() {
         </div>
       </td>
       <td style="font-size:11px;color:#605e5c;min-width:130px">${l.glName||'-'}</td>
-      <td><select onchange="lines[${i}].cctr=this.value" style="min-width:100px">
+      <td><select onchange="const _c=COST_CENTERS.find(x=>x.code===this.value);lines[${i}].cctr=this.value;lines[${i}].cctrName=_c?_c.name:'';renderLines();" style="min-width:90px">
         <option value="">-</option>
-        ${COST_CENTERS.map(c=>`<option value="${c.code}" ${l.cctr===c.code?'selected':''}>${c.code} ${c.name}</option>`).join('')}
+        ${COST_CENTERS.map(c=>`<option value="${c.code}" ${l.cctr===c.code?'selected':''}>${c.code}</option>`).join('')}
       </select></td>
+      <td style="font-size:12px;color:#323130;min-width:120px;white-space:nowrap">${l.cctrName||''}</td>
       <td><select onchange="lines[${i}].pc=this.value" style="min-width:90px">
         <option value="">-</option>
         ${PROFIT_CENTERS.map(p=>`<option value="${p.code}" ${l.pc===p.code?'selected':''}>${p.code}</option>`).join('')}
