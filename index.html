@@ -439,7 +439,7 @@ const GL_LIST = [
   {code:'110210',name:'T/R : Customer'},
   {code:'210430',name:'Advance Received : Others (Customer refund)'},
 ];
-const COST_CENTERS = [
+let COST_CENTERS = [
   {code:'47900704',name:'RD Office'},
   {code:'47900705',name:'CEO Office'},
   {code:'47900715',name:'HR'},
@@ -633,7 +633,8 @@ async function loadAccMasters() {
       }
 
       if(newGL.length){ GL_LIST.length=0; newGL.forEach(g=>GL_LIST.push(g)); }
-      if(newCC.length){ COST_CENTERS.length=0; newCC.forEach(c=>COST_CENTERS.push(c)); }
+      // COST_CENTERS는 하드코딩 사용 (동적 로딩 비활성화)
+      // if(newCC.length){ COST_CENTERS.length=0; newCC.forEach(c=>COST_CENTERS.push(c)); }
       if(newPC.length){ PROFIT_CENTERS.length=0; newPC.forEach(p=>PROFIT_CENTERS.push(p)); }
       window._subProfitCenters = newSubPC;
       console.log('[GL_CCTR_COPA] GL:'+newGL.length+' CC:'+newCC.length+' PC:'+newPC.length+' Sub_PC:'+newSubPC.length);
