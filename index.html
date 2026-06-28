@@ -439,7 +439,51 @@ const GL_LIST = [
   {code:'110210',name:'T/R : Customer'},
   {code:'210430',name:'Advance Received : Others (Customer refund)'},
 ];
-const COST_CENTERS = []
+const COST_CENTERS = [
+  {code:'47900704',name:'RD Office'},
+  {code:'47900705',name:'CEO Office'},
+  {code:'47900715',name:'HR'},
+  {code:'47900716',name:'Personnel'},
+  {code:'47900815',name:'Legal'},
+  {code:'47900708',name:'Compliance'},
+  {code:'47900709',name:'Due Diligence'},
+  {code:'47926134',name:'PMM Head Office'},
+  {code:'47926135',name:'Product Management'},
+  {code:'47920205',name:'Sales Training'},
+  {code:'47925185',name:'Delivery Center'},
+  {code:'47926145',name:'Homologation'},
+  {code:'47925155',name:'Marketing_Sales'},
+  {code:'47925160',name:'Marketing_CSP'},
+  {code:'47926114',name:'Sales Head Office'},
+  {code:'47926115',name:'Sales Planning & Operation'},
+  {code:'47927165',name:'Body Builder/Fleet Sales'},
+  {code:'47927115',name:'Unimog Sales'},
+  {code:'47954405',name:'Unimog CSP'},
+  {code:'47941115',name:'STK Field Seoul'},
+  {code:'47928115',name:'STK Field Busan'},
+  {code:'47920115',name:'STK Field Gwangju'},
+  {code:'47910115',name:'STK Field Jecheon'},
+  {code:'47953305',name:'CSP Head Office'},
+  {code:'47955405',name:'Technical Operation'},
+  {code:'47950466',name:'Technical Training'},
+  {code:'47954325',name:'Parts OP & Logistics'},
+  {code:'47955315',name:'Parts Warehouse'},
+  {code:'47954345',name:'Parts Performance'},
+  {code:'47954415',name:'CRM & Call Center'},
+  {code:'47920765',name:'Service & Network'},
+  {code:'47954455',name:'District Management'},
+  {code:'47954435',name:'Warranty'},
+  {code:'47900706',name:'CFO Office'},
+  {code:'47900775',name:'Controlling'},
+  {code:'47900776',name:'Accounting'},
+  {code:'47900745',name:'IT Application'},
+  {code:'47900755',name:'IT Infrastructure'},
+  {code:'47900825',name:'Procurement'},
+  {code:'47900805',name:'Administration'},
+  {code:'47900785',name:'Facility Management'},
+  {code:'47099001',name:'STK transition project_App'},
+  {code:'47099702',name:'STK transition project_Infra'}
+];
 const PROFIT_CENTERS = [
   {code:'2100',name:'TRUCKS NV'},{code:'2420',name:'UNIMOG NV'},
   {code:'7130',name:'PARTS WSL BUS'},{code:'7140',name:'PARTS WSL UNIMOG'},
@@ -567,18 +611,10 @@ async function loadAccMasters() {
           if(!newGL.find(g=>g.code===glOld))
             newGL.push({code:glOld, altCode:'', name:glName});
         }
-        // CCTR: 실제 열 탐색 - 8자리 숫자 패턴으로 자동 감지
-        // 행 전체에서 8자리 숫자 찾기
-        let ccCode='', ccName='';
-        for(let ci=0;ci<r.length;ci++){
-          const v=(r[ci]!=null?r[ci]:'').toString().trim();
-          if(/^\d{8}$/.test(v) && v.startsWith('479')){
-            ccCode=v;
-            ccName=(r[ci+1]||'').toString().trim();
-            break;
-          }
-        }
-        if(ccCode && /^\d{8}$/.test(ccCode)) {
+        // CCTR: H열(index7)=Code, I열(index8)=Name of team
+        const ccCode=(r[7]!=null?r[7]:'').toString().trim();
+        const ccName=(r[8]||'').toString().trim();
+        if(ccCode && /^\d{8}$/.test(ccCode) && ccCode.startsWith('47')) {
           if(!newCC.find(c=>c.code===ccCode)) newCC.push({code:ccCode, name:ccName});
         }
         // PC: col10=Code, col11=Name (숫자 4자리)
