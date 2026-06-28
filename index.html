@@ -759,7 +759,9 @@ function applyTodayExchangeRate() {
   if(!rates.length) return;
 
   // 오늘 날짜(YYYY-MM-DD) 기준 가장 최신 날짜 찾기
-  const today = new Date().toISOString().slice(0,10);
+  // 한국 시간(KST = UTC+9) 기준 오늘 날짜
+  const _kst = new Date(new Date().getTime() + 9*3600*1000);
+  const today = _kst.toISOString().slice(0,10);
   // 오늘 이하 날짜 중 가장 최신 (내림차순 정렬 후 첫 번째)
   const sorted = [...rates].sort((a,b)=>b.date.localeCompare(a.date));
   const latestDate = sorted.find(r=>r.date<=today)?.date || sorted[0]?.date;
