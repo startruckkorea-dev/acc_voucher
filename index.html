@@ -283,7 +283,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         <input type="text" id="f-kw" placeholder="검색..." oninput="renderList()" style="min-width:160px">
       </div>
       <table class="voucher-table">
-        <thead><tr><th>제출일</th><th>유형</th><th>BP명</th><th>Purpose</th><th style="text-align:right">금액</th><th>통화</th><th>상태</th></tr></thead>
+        <thead><tr><th>Voucher ID</th><th>제출일</th><th>유형</th><th>BP명</th><th>Purpose</th><th style="text-align:right">DR (KRW)</th><th style="text-align:right">CR (KRW)</th><th>상태</th></tr></thead>
         <tbody id="list-body"></tbody>
       </table>
     </div>
@@ -1843,12 +1843,20 @@ let voucherListCache = []; // SharePoint에서 로드한 내 전표 캐시
 async function loadMyList() {
   if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
   const email = user?.username||'';
-  const url = `/sites/${siteId}/lists/${LIST_REQUESTS}/items?$expand=fields`+
+  const url = `${GRAPH}/sites/${siteId}/lists/${LIST_REQUESTS}/items?$expand=fields`+
     `&$filter=fields/RequesterEmail eq '${email}'`+
     `&$orderby=fields/SubmittedDate desc&$top=100`;
   try {
-    const res = await api(url);
-    voucherListCache = res.value.map(item=>({
+    const t = await token();
+    const res = await fetch(url, {
+      headers: {
+        Authorization: 'Bearer '+t,
+        Prefer: 'HonorNonIndexedQueriesWarningMayFailRandomly'
+      }
+    });
+    if(!res.ok) throw new Error((await res.json()).error?.message||res.status);
+    const data = await res.json();
+    voucherListCache = data.value.map(item=>({
       _spId: item.id,
       ...item.fields
     }));
@@ -1877,13 +1885,15 @@ function renderList(){
     return;
   }
   const fmtK=n=>Math.round(n||0).toLocaleString('ko-KR');
+  const fmtDate = s => s ? new Date(s).toLocaleDateString('ko-KR',{year:'2-digit',month:'2-digit',day:'2-digit'}) : '-';
   body.innerHTML=list.map(v=>`<tr onclick="openVoucherSP('${v._spId}')">
-    <td style="font-size:12px;color:#605e5c">${v.Title||'-'}</td>
+    <td style="font-family:monospace;font-size:11px;color:#0078d4">${v.Title||'-'}</td>
+    <td style="font-size:12px;color:#605e5c">${fmtDate(v.SubmittedDate)}</td>
     <td><span class="type-badge t-${v.VoucherType}">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span></td>
     <td style="font-size:12px;color:#605e5c">${v.BPName||'-'}</td>
-    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.Purpose||'-'}</td>
-    <td style="text-align:right;font-weight:700">DR ${fmtK(v.TotalDR_KRW)}</td>
-    <td style="text-align:right;font-weight:700;color:#c0392b">CR ${fmtK(v.TotalCR_KRW)}</td>
+    <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.Purpose||'-'}</td>
+    <td style="text-align:right;font-weight:700;color:#0078d4">${fmtK(v.TotalDR_KRW)}</td>
+    <td style="text-align:right;font-weight:700;color:#c0392b">${fmtK(v.TotalCR_KRW)}</td>
     <td><span class="type-badge ${stMap[v.Status]||''}">${stLabel[v.Status]||v.Status}</span></td>
   </tr>`).join('');
 }
