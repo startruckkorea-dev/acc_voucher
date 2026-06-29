@@ -90,8 +90,8 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 .totals-dr-cr .cr-block { background: #fde8e8; color: #c0392b; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
 .totals-dr-cr .eq-block { background: #dff6dd; color: #107c10; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
 .totals-dr-cr .neq-block { background: #fde7e9; color: #a4262c; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
-.verify-ok { color: #107c10; font-weight: 700; font-size: 12px; }
-.verify-err { color: #a4262c; font-weight: 700; font-size: 12px; }
+.appr-box.appr-active { border-color: #0078d4; }
+.appr-box.appr-active .ah { background:#0078d4; color:#fff; }
 
 /* ── Approval ── */
 .appr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px,1fr)); gap: 10px; }
@@ -212,7 +212,10 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
   <div class="header">
     <div>
       <div class="title">Accounting Voucher</div>
-      <div class="sub" id="acc-contact-email">STK 회계 전표 시스템</div>
+      <div class="sub">STK 회계 전표 시스템</div>
+      <div style="font-size:11px;color:rgba(255,255,255,.7);margin-top:2px" id="acc-contact-ap"></div>
+      <div style="font-size:11px;color:rgba(255,255,255,.7);margin-top:1px" id="acc-contact-ar"></div>
+      <div style="font-size:11px;color:rgba(255,255,255,.7);margin-top:1px" id="acc-contact-gl"></div>
     </div>
     <div class="user-info">
       <span id="user-name"></span>
@@ -604,7 +607,43 @@ let lines  = [];
 let currentGlIdx = null;
 let voucherStore = JSON.parse(localStorage.getItem('stk_acc_vouchers') || '[]');
 
-// GL 마스터 (하드코딩 기본셋 — 추후 SharePoint 확장 가능)
+// ── System Config (system_config_final.xlsx) ──
+let _sysConfig = null;
+async function loadSystemConfig() {
+  if (_sysConfig) return _sysConfig;
+  try {
+    if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
+    const drivesRes = await api('/sites/'+siteId+'/drives');
+    let docDrive = (drivesRes.value||[]).find(d=>['Documents','문서','Shared Documents'].includes(d.name));
+    if(!docDrive && drivesRes.value?.length) docDrive = drivesRes.value[0];
+    const t = await token();
+    const res = await fetch(GRAPH+'/drives/'+docDrive.id+'/root:/system_config_final.xlsx:/content',
+      {headers:{Authorization:'Bearer '+t}});
+    if(!res.ok) throw new Error('system_config_final.xlsx not found');
+    const buf = await res.arrayBuffer();
+    const wb = XLSX.read(buf,{type:'array'});
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1});
+    const cfg = {};
+    rows.forEach(row=>{
+      const key=(row[0]||'').toString().trim();
+      if(!key||key.startsWith('■')||key.startsWith('※')||key==='설정 KEY'||key.startsWith('STK')) return;
+      cfg[key]={name:(row[1]||'').toString().trim(), email:(row[2]||'').toString().trim()};
+    });
+    _sysConfig = cfg;
+    console.log('[Config] Loaded:', Object.keys(cfg).length, 'entries');
+    return cfg;
+  } catch(e) {
+    console.warn('[Config] 로드 실패, 기본값 사용:', e.message);
+    return null;
+  }
+}
+function cfgVal(cfg, key, def={name:'',email:''}) {
+  if(!cfg||!cfg[key]) return def;
+  const v=cfg[key];
+  return {name:v.name||def.name, email:v.email||def.email};
+}
+
+
 const GL_LIST = [
   {code:'119813',name:'Invoice received/Goods not received_Parts'},
   {code:'110510',name:'VAT recoverable'},
@@ -680,16 +719,26 @@ async function boot(account) {
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='block';
   document.getElementById('user-name').textContent=(account.name||account.username)+' ('+(account.username)+')';
-  // 자동 필드
   document.getElementById('v-requester').value = account.name||account.username;
   document.getElementById('v-date').value = new Date().toISOString().slice(0,10);
   renderApproval();
   renderLines();
-  switchTab('new');  // 기본 탭
-  // CCTR 로드 후 이름 매핑
+  switchTab('new');
   loadCCTRMaster(account.name).catch(e=>console.warn('CCTR 로드 실패:', e.message));
   loadBPMaster().catch(e=>console.warn('BP 마스터 로드 실패:', e.message));
   loadAccMasters().catch(e=>console.warn('회계 마스터 로드 실패:', e.message));
+  // system_config 로드 → 헤더 문의 이메일 + 결재라인 재렌더
+  loadSystemConfig().then(cfg=>{
+    if(!cfg) return;
+    const ap = cfgVal(cfg,'ACC-Voucher_CONTACT_AP');
+    const ar = cfgVal(cfg,'ACC-Voucher_CONTACT_AR');
+    const gl = cfgVal(cfg,'ACC-Voucher_CONTACT_GL');
+    const el = id=>document.getElementById(id);
+    if(ap.email) el('acc-contact-ap').textContent = 'AP 담당 문의: '+ap.name+' ('+ap.email+')';
+    if(ar.email) el('acc-contact-ar').textContent = 'AR 담당 문의: '+ar.name+' ('+ar.email+')';
+    if(gl.email) el('acc-contact-gl').textContent = 'GL 담당 문의: '+gl.name+' ('+gl.email+')';
+    renderApproval(); // config 로드 후 재렌더
+  }).catch(()=>{});
 }
 
 function getCCTR(nameOrEmail) {
@@ -1097,45 +1146,88 @@ function onTypeChange() {
 function renderApproval() {
   const type = document.getElementById('v-type').value;
   const rules = APPROVAL_RULES[type]||{};
-  const handler = ACC_HANDLER[type]||'-';
+  const cfg = _sysConfig || {};
 
-  // 6-1. Business 승인라인
-  const biz = [
-    {title:'TL',name:'',dept:'',range:rules.TL||'-'},
-    {title:'MC',name:'',dept:'',range:rules.MC||'-'},
-    {title:'CEO',name:'Antonio Randazzo',dept:'CEO Office',range:rules.CEO||'-'},
-    {title:'RD',name:'Keuntae Dong',dept:'RD Office',range:rules.RD||'-'},
-  ];
-  document.getElementById('appr-business').innerHTML = biz.map(b=>`
-    <div class="appr-box"><div class="ah">${b.title}</div><div class="ab">
-      ${b.name?`<div class="an">${b.name}</div><div class="ad">${b.dept}</div>`:'<div class="an" style="color:#a19f9d">담당자 TBD</div>'}
-      <div class="ar">${b.range}</div>
-      <span class="${b.range==='-'?'badge-na':'badge-req'}">${b.range==='-'?'해당없음':'대기'}</span>
-    </div></div>`).join('');
+  // system_config에서 고정 결재자 읽기
+  const CEO  = cfgVal(cfg,'ACC-Voucher_CEO',  {name:'Keuntae Dong',  email:'keuntae.dong@hyosung.com'});
+  const RD   = cfgVal(cfg,'ACC-Voucher_RD',   {name:'Keuntae Dong',  email:'keuntae.dong@hyosung.com'});
+  const CTRL = cfgVal(cfg,'ACC-Voucher_CONTROLLING',{name:'Jungho Yoo', email:'jungho.yoo@hyosung.com'});
+  const AMGR = cfgVal(cfg,'ACC-Voucher_ACCOUNTING', {name:'Gina Shin',  email:'gina.shin@hyosung.com'});
+  const CFO  = cfgVal(cfg,'ACC-Voucher_CFO',  {name:'Martin Schindele',email:'martin.s.schindele@hyosung.com'});
 
-  // 6-2. F&C 승인라인
-  const fc = [
-    {title:'Controller',name:'Jungho Yoo',dept:'Controlling',range:'필요시'},
-    {title:'Accounting Mgr.',name:'Gina Shin',dept:'Accounting',range:'필수'},
-    {title:'CFO',name:'Martin Schindele',dept:'F&C',range:rules.CFO||'-'},
-  ];
-  document.getElementById('appr-fc').innerHTML = fc.map(f=>`
-    <div class="appr-box"><div class="ah">${f.title}</div><div class="ab">
-      <div class="an">${f.name}</div><div class="ad">${f.dept}</div>
-      <div class="ar">${f.range}</div>
-      <span class="${f.range==='-'?'badge-na':'badge-req'}">${f.range==='-'?'해당없음':f.range==='필수'?'필수':'대기'}</span>
-    </div></div>`).join('');
+  // Accounting 담당자 (type별)
+  const ACC_HANDLER_MAP = {
+    AP:'ACC-Voucher_CONTACT_AP', AP_IMS:'ACC-Voucher_CONTACT_AP',
+    AP_CR:'ACC-Voucher_CONTACT_AP', AR:'ACC-Voucher_CONTACT_AR',
+    GL:'ACC-Voucher_CONTACT_GL', FA:'ACC-Voucher_CONTACT_GL',
+    ADV:'ACC-Voucher_CONTACT_AP', SET:'ACC-Voucher_CONTACT_AP'
+  };
+  const accKey = ACC_HANDLER_MAP[type]||'ACC-Voucher_CONTACT_GL';
+  const ACC = cfgVal(cfg, accKey, {name:'-', email:''});
 
-  // 6-3. Accounting 담당자 (최종)
+  // 금액 읽기 (DR KRW 기준)
+  let drKrw = 0;
+  lines.forEach(l=>{
+    if(l.drcr!=='DR') return;
+    const a=parseFloat(l.amount)||0;
+    const rate=l.currency==='KRW'?1:(getExchangeRate(l.currency)||0);
+    drKrw += l.currency==='KRW'?a:Math.round(a*rate);
+  });
+
+  // 금액 기준 해당 여부 판단 함수
+  function isRequired(rule, amt) {
+    if(!rule||rule==='-') return false;
+    if(rule==='필수'||rule==='필요시') return true;
+    // 금액 비교: < 1,000,000 / >= 20,000,000 등
+    const clean = rule.replace(/,/g,'').replace(/\s/g,'');
+    const m = clean.match(/^([<>]=?)\s*([\d]+)$/);
+    if(!m) return true;
+    const op=m[1], threshold=parseInt(m[2]);
+    if(op==='<')  return amt < threshold;
+    if(op==='<=') return amt <= threshold;
+    if(op==='>')  return amt > threshold;
+    if(op==='>=') return amt >= threshold;
+    return true;
+  }
+
+  // 박스 렌더 헬퍼
+  function box(title, person, rule, isFixed=false) {
+    const active = isFixed || isRequired(rule, drKrw);
+    const rangeText = rule||'-';
+    const badge = !rule||rule==='-' ? 'badge-na' : (active?'badge-req':'badge-na');
+    const badgeLabel = !rule||rule==='-' ? '해당없음' : (active?(rule==='필요시'?'필요시':'대기'):'해당없음');
+    return `<div class="appr-box${active?' appr-active':''}">
+      <div class="ah">${title}</div>
+      <div class="ab">
+        ${person.name?`<div class="an">${person.name}</div><div class="ad" style="font-size:10px;color:#a19f9d">${person.email||''}</div>`:'<div class="an" style="color:#a19f9d">담당자 TBD</div>'}
+        <div class="ar">${rangeText}</div>
+        <span class="${badge}">${badgeLabel}</span>
+      </div></div>`;
+  }
+
+  // 6-1. Business
+  document.getElementById('appr-business').innerHTML =
+    box('TL',    {name:'',email:''},     rules.TL)  +
+    box('MC',    {name:'',email:''},     rules.MC)  +
+    box('CEO',   CEO,                    rules.CEO) +
+    box('RD',    RD,                     rules.RD);
+
+  // 6-2. F&C
+  document.getElementById('appr-fc').innerHTML =
+    box('Controller',    CTRL, rules.Controller||'필요시') +
+    box('Accounting Mgr.', AMGR, '필수', true) +
+    box('CFO',           CFO,  rules.CFO);
+
+  // 6-3. Accounting (최종)
   document.getElementById('appr-accounting').innerHTML = `
     <div class="appr-box" style="border:2px solid #0078d4">
       <div class="ah" style="background:#0078d4;color:#fff">Accounting (최종)</div>
       <div class="ab">
-        <div class="an">${handler}</div>
-        <div class="ad">Accounting</div>
+        <div class="an">${ACC.name}</div>
+        <div class="ad" style="font-size:10px;color:#a19f9d">${ACC.email}</div>
+        <div class="ar">필수</div>
         <span class="badge-req">필수</span>
-      </div>
-    </div>`;
+      </div></div>`;
 }
 
 // ── Account Lines ──
@@ -1226,6 +1318,12 @@ function updateTotals() {
       `<span style="color:#a19f9d;font-size:13px">≠</span>`+
       `<span class="cr-block">CR <span style="font-size:10px;opacity:.8">Total(KRW)</span> ${fmtK(crKrw)}</span>`+
       `<span class="neq-block">✕ 불일치</span>`;
+  }
+  // 금액 변경 시 결재라인 재렌더 (금액 기반 해당/해당없음 업데이트)
+  if(!updateTotals._apprRendering) {
+    updateTotals._apprRendering=true;
+    renderApproval();
+    updateTotals._apprRendering=false;
   }
 }
 
@@ -1408,47 +1506,54 @@ async function saveVoucher(status) {
 
 function buildApprovers() {
   const type = document.getElementById('v-type').value;
-  const rules = APPROVAL_RULES[type] || {};
-  const handler = ACC_HANDLER[type] || '';
+  const rules = APPROVAL_RULES[type]||{};
+  const cfg = _sysConfig||{};
 
-  // 고정 결재자 이메일 상수 (system_config 동일)
-  const FIXED = {
-    CEO:  {email:'antonio.randazzo@daimler.com', name:'Antonio Randazzo'},
-    RD:   {email:'keuntae.dong@hyosung.com',     name:'Keuntae Dong'},
-    CTRL: {email:'jungho.yoo@hyosung.com',       name:'Jungho Yoo'},
-    AMGR: {email:'gina.shin@hyosung.com',         name:'Gina Shin'},
-    CFO:  {email:'martin.schindele@hyosung.com', name:'Martin Schindele'},
+  const CEO  = cfgVal(cfg,'ACC-Voucher_CEO',  {name:'Keuntae Dong',  email:'keuntae.dong@hyosung.com'});
+  const RD   = cfgVal(cfg,'ACC-Voucher_RD',   {name:'Keuntae Dong',  email:'keuntae.dong@hyosung.com'});
+  const CTRL = cfgVal(cfg,'ACC-Voucher_CONTROLLING',{name:'Jungho Yoo', email:'jungho.yoo@hyosung.com'});
+  const AMGR = cfgVal(cfg,'ACC-Voucher_ACCOUNTING', {name:'Gina Shin',  email:'gina.shin@hyosung.com'});
+  const CFO  = cfgVal(cfg,'ACC-Voucher_CFO',  {name:'Martin Schindele',email:'martin.s.schindele@hyosung.com'});
+  const ACC_MAP = {
+    AP:'ACC-Voucher_CONTACT_AP',AP_IMS:'ACC-Voucher_CONTACT_AP',AP_CR:'ACC-Voucher_CONTACT_AP',
+    AR:'ACC-Voucher_CONTACT_AR',GL:'ACC-Voucher_CONTACT_GL',FA:'ACC-Voucher_CONTACT_GL',
+    ADV:'ACC-Voucher_CONTACT_AP',SET:'ACC-Voucher_CONTACT_AP'
   };
+  const ACC = cfgVal(cfg, ACC_MAP[type]||'ACC-Voucher_CONTACT_GL', {name:'-',email:''});
 
-  // ACC_HANDLER 이름 → 이메일 매핑
-  const handlerEmailMap = {
-    '공현주': 'hyunju.gong@hyosung.com',
-    '김소라': 'sora.kim@hyosung.com',
-    '마지현': 'jihyun.ma@hyosung.com',
-  };
+  // DR KRW 합계
+  let drKrw=0;
+  lines.forEach(l=>{
+    if(l.drcr!=='DR') return;
+    const a=parseFloat(l.amount)||0;
+    const rate=l.currency==='KRW'?1:(getExchangeRate(l.currency)||0);
+    drKrw+=l.currency==='KRW'?a:Math.round(a*rate);
+  });
 
-  const ap = [];
-  const na = (r) => !r || r === '-';  // 해당없음 판단
-
-  // Business 라인
-  // TL: 동적 선택 — 현재는 requester 본인 팀장으로 처리 (추후 드롭다운)
-  if(!na(rules.TL)) ap.push({role:'TL', email:'', name:'담당자 TBD', order:1});
-  if(!na(rules.MC)) ap.push({role:'MC', email:'', name:'담당자 TBD', order:2});
-  if(!na(rules.CEO)) ap.push({role:'CEO', email:FIXED.CEO.email, name:FIXED.CEO.name, order:3});
-  if(!na(rules.RD))  ap.push({role:'RD',  email:FIXED.RD.email,  name:FIXED.RD.name,  order:4});
-
-  // F&C 라인
-  if(rules.Controller !== '-') ap.push({role:'Controller', email:FIXED.CTRL.email, name:FIXED.CTRL.name, order:5});
-  ap.push({role:'Accounting Mgr', email:FIXED.AMGR.email, name:FIXED.AMGR.name, order:6});
-  if(!na(rules.CFO)) ap.push({role:'CFO', email:FIXED.CFO.email, name:FIXED.CFO.name, order:7});
-
-  // Accounting 최종
-  if(handler && handler !== '-') {
-    ap.push({role:'Accounting', email:handlerEmailMap[handler]||'', name:handler, order:8});
+  function needed(rule, amt) {
+    if(!rule||rule==='-') return false;
+    if(rule==='필수'||rule==='필요시') return true;
+    const clean=rule.replace(/,/g,'').replace(/\s/g,'');
+    const m=clean.match(/^([<>]=?)([\d]+)$/);
+    if(!m) return true;
+    const op=m[1],th=parseInt(m[2]);
+    if(op==='<') return amt<th; if(op==='<=') return amt<=th;
+    if(op==='>') return amt>th; if(op==='>=') return amt>=th;
+    return true;
   }
 
-  // order 재정렬
-  return ap.map((a,i)=>({...a, order:i+1}));
+  const ap=[];
+  let order=1;
+  if(needed(rules.TL,drKrw))   ap.push({role:'TL',          email:'',           name:'담당자 TBD', order:order++});
+  if(needed(rules.MC,drKrw))   ap.push({role:'MC',          email:'',           name:'담당자 TBD', order:order++});
+  if(needed(rules.CEO,drKrw))  ap.push({role:'CEO',         email:CEO.email,    name:CEO.name,     order:order++});
+  if(needed(rules.RD,drKrw))   ap.push({role:'RD',          email:RD.email,     name:RD.name,      order:order++});
+  // Controller: 필요시도 포함
+  if(needed(rules.Controller||'필요시',drKrw)) ap.push({role:'Controller', email:CTRL.email, name:CTRL.name, order:order++});
+  ap.push({role:'Accounting Mgr', email:AMGR.email, name:AMGR.name, order:order++}); // 항상 필수
+  if(needed(rules.CFO,drKrw))  ap.push({role:'CFO',         email:CFO.email,    name:CFO.name,     order:order++});
+  if(ACC.email) ap.push({role:'Accounting',   email:ACC.email,    name:ACC.name,     order:order++});
+  return ap;
 }
 
 
