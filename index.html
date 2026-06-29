@@ -45,7 +45,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #f3f2f1; min-height: 100
 /* ── Form ── */
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px; }
 .form-row.three { grid-template-columns: 1fr 1fr 1fr; }
-.form-row.three { grid-template-columns: 1fr 1fr 1fr; }
 .form-row.four { grid-template-columns: 1fr 1fr 1fr 1fr; }
 .form-row.full { grid-template-columns: 1fr; }
 .form-group { display: flex; flex-direction: column; gap: 5px; }
@@ -255,7 +254,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
       <div class="card-title">회계 전표 작성 <span id="voucher-id-badge" style="font-size:11px;font-weight:400;color:#a19f9d"></span></div>
 
       <div class="section-title">1. 바우처 정보 (Voucher Information)</div>
-      <div class="form-row three">
+      <div class="form-row four">
         <div class="form-group">
           <label>Voucher Type <span class="req">*</span></label>
           <select id="v-type" onchange="onTypeChange()">
@@ -278,34 +277,26 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
           <label>Invoice Date <span class="req">*</span></label>
           <input type="date" id="v-inv-date">
         </div>
-      </div>
-      <div class="form-row" style="grid-template-columns:1fr 1fr;align-items:start">
-        <div class="form-group" style="grid-column:span 2">
-          <label style="display:flex;align-items:baseline;gap:6px">
-            <span>Exchange Rate</span>
-            <span style="font-size:10px;color:#605e5c;font-weight:400">— EUR 기준 자동 입력 &nbsp;·&nbsp; Manual 변경 시 BU Admin 확인 후 입력</span>
-          </label>
-          <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-            <div style="display:flex;align-items:center;gap:6px">
-              <span style="font-size:11px;color:#605e5c;white-space:nowrap">EUR</span>
-              <input type="number" id="v-exrate" placeholder="EUR 환율" step="0.01" oninput="updateTotals()" style="width:120px;padding:6px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px">
-            </div>
-            <div id="extra-rates-inline" style="display:flex;align-items:center;gap:6px;flex:1">
-              <span style="font-size:11px;color:#a19f9d">|</span>
-              <span style="font-size:11px;color:#605e5c;white-space:nowrap">SGD</span>
-              <input type="number" id="v-exrate-sgd" placeholder="SGD" step="0.01" style="width:90px;padding:6px 8px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px">
-              <span style="font-size:11px;color:#a19f9d">|</span>
-              <span style="font-size:11px;color:#605e5c;white-space:nowrap">USD</span>
-              <input type="number" id="v-exrate-usd" placeholder="USD" step="0.01" style="width:90px;padding:6px 8px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px">
-              <span style="font-size:11px;color:#a19f9d">|</span>
-              <span style="font-size:11px;color:#605e5c;white-space:nowrap">JPY</span>
-              <input type="number" id="v-exrate-jpy" placeholder="JPY" step="0.01" style="width:80px;padding:6px 8px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px">
-              <span style="font-size:11px;color:#a19f9d">|</span>
-              <span style="font-size:11px;color:#605e5c;white-space:nowrap">CNY</span>
-              <input type="number" id="v-exrate-cny" placeholder="CNY" step="0.01" style="width:80px;padding:6px 8px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px">
+        <div class="form-group">
+          <label>Exchange Rate <span style="font-size:10px;color:#605e5c;font-weight:400">— EUR 기준 자동 입력</span>
+          <div style="font-size:10px;color:#a19f9d;font-weight:400;margin-top:1px">· Manual 변경 시 BU Admin 확인 후 입력</div>
+        </label>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="number" id="v-exrate" placeholder="EUR 환율" step="0.01" oninput="updateTotals()" style="flex:1">
+            <button type="button" onclick="toggleExtraRates()" style="white-space:nowrap;padding:6px 10px;border:1px solid #d2d0ce;border-radius:4px;background:#fff;font-size:12px;cursor:pointer;color:#0078d4">
+              ＋ 기타 통화
+            </button>
+          </div>
+          <div id="extra-rates" style="display:none;margin-top:8px;display:none">
+            <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:6px">
+              <div><label style="font-size:11px;color:#605e5c">USD</label><input type="number" id="v-exrate-usd" placeholder="USD" step="0.01" style="width:100%;min-width:0;padding:6px 8px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px;box-sizing:border-box"></div>
+              <div><label style="font-size:11px;color:#605e5c">SGD</label><input type="number" id="v-exrate-sgd" placeholder="SGD" step="0.01" style="width:100%;min-width:0;padding:6px 8px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px;box-sizing:border-box"></div>
+              <div><label style="font-size:11px;color:#605e5c">JPY</label><input type="number" id="v-exrate-jpy" placeholder="JPY" step="0.01" style="width:100%;min-width:0;padding:6px 8px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px;box-sizing:border-box"></div>
+              <div><label style="font-size:11px;color:#605e5c">CNY</label><input type="number" id="v-exrate-cny" placeholder="CNY" step="0.01" style="width:100%;min-width:0;padding:6px 8px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px;box-sizing:border-box"></div>
             </div>
           </div>
         </div>
+      </div>
       <div id="exchange-banner" style="display:none;margin-bottom:12px"></div>
       <div class="form-row">
         <div class="form-group">
