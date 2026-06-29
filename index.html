@@ -1188,14 +1188,19 @@ function renderLines() {
 
 
 function updateTotals() {
-  let dr=0,cr=0;
-  const curr = lines.find(l=>l.currency)?.currency || 'KRW';
-  lines.forEach(l=>{ const a=parseFloat(l.amount)||0; if(l.drcr==='DR')dr+=a; if(l.drcr==='CR')cr+=a; });
-  const fmt = n=>n.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
-  const fmtK = n=>n.toLocaleString('ko-KR');
-  document.getElementById('total-amt').textContent = curr+' '+fmt(dr||cr||0);
-  const rate = getExchangeRate(curr);
-  document.getElementById('total-krw').textContent = (curr!=='KRW'&&rate)?'≈ KRW '+Math.round((dr||cr||0)*rate).toLocaleString('ko-KR'):'';
+  let drKrw=0, crKrw=0, drAmt=0, crAmt=0;
+  const fmtK = n=>Math.round(n).toLocaleString('ko-KR');
+  lines.forEach(l=>{
+    const a = parseFloat(l.amount)||0;
+    if(!a) return;
+    const rate = l.currency==='KRW' ? 1 : (getExchangeRate(l.currency)||0);
+    const krw = l.currency==='KRW' ? a : (rate ? Math.round(a*rate) : 0);
+    if(l.drcr==='DR'){ drAmt+=a; drKrw+=krw; }
+    if(l.drcr==='CR'){ crAmt+=a; crKrw+=krw; }
+  });
+  const totalKrw = drKrw || crKrw || 0;
+  document.getElementById('total-amt').textContent = 'KRW '+fmtK(totalKrw);
+  document.getElementById('total-krw').textContent = '';
   // Total 컬럼 갱신
   if(!updateTotals._rendering) {
     updateTotals._rendering=true;
@@ -1203,21 +1208,21 @@ function updateTotals() {
     if(tbody&&lines.length) renderLines();
     updateTotals._rendering=false;
   }
-  // DR/CR 블록 렌더
+  // DR/CR 블록 — KRW 환산 기준 비교
   const blocks = document.getElementById('dr-cr-blocks');
   if(!lines.length){
     blocks.innerHTML = '<span style="font-size:12px;color:#a19f9d">-</span>';
-  } else if(Math.abs(dr-cr)<0.01){
+  } else if(Math.abs(drKrw-crKrw)<1){
     blocks.innerHTML =
-      `<span class="dr-block">DR ${fmtK(Math.round(dr))}</span>`+
+      `<span class="dr-block">DR <span style="font-size:10px;opacity:.8">Total(KRW)</span> ${fmtK(drKrw)}</span>`+
       `<span style="color:#a19f9d;font-size:13px">=</span>`+
-      `<span class="cr-block">CR ${fmtK(Math.round(cr))}</span>`+
+      `<span class="cr-block">CR <span style="font-size:10px;opacity:.8">Total(KRW)</span> ${fmtK(crKrw)}</span>`+
       `<span class="eq-block">✔ 일치</span>`;
   } else {
     blocks.innerHTML =
-      `<span class="dr-block">DR ${fmtK(Math.round(dr))}</span>`+
+      `<span class="dr-block">DR <span style="font-size:10px;opacity:.8">Total(KRW)</span> ${fmtK(drKrw)}</span>`+
       `<span style="color:#a19f9d;font-size:13px">≠</span>`+
-      `<span class="cr-block">CR ${fmtK(Math.round(cr))}</span>`+
+      `<span class="cr-block">CR <span style="font-size:10px;opacity:.8">Total(KRW)</span> ${fmtK(crKrw)}</span>`+
       `<span class="neq-block">✕ 불일치</span>`;
   }
 }
