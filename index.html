@@ -1126,8 +1126,10 @@ function renderLines() {
 
 
 function updateTotals() {
-  let dr=0,cr=0,curr='EUR';
-  lines.forEach(l=>{ const a=parseFloat(l.amount)||0; if(l.drcr==='DR')dr+=a; if(l.drcr==='CR')cr+=a; if(l.currency)curr=l.currency; });
+  let dr=0,cr=0;
+  // 1열(첫 번째 라인)의 currency 기준
+  const curr = lines.find(l=>l.currency)?.currency || 'EUR';
+  lines.forEach(l=>{ const a=parseFloat(l.amount)||0; if(l.drcr==='DR')dr+=a; if(l.drcr==='CR')cr+=a; });
   const fmt = n=>n.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
   document.getElementById('total-amt').textContent = curr+' '+fmt(dr);
   const rate = parseFloat(document.getElementById('v-exrate').value)||{EUR:1730.51,USD:1476.13,JPY:9.38,CNY:216.03,SGD:1158.06}[curr]||0;
