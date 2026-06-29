@@ -25,7 +25,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #f3f2f1; min-height: 100
 .login-page-footer{position:fixed;bottom:0;left:0;right:0;padding:10px 24px;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:rgba(255,255,255,.55);background:rgba(0,0,0,.18)}
 
 /* ── App ── */
-#app { display: none; max-width: 960px; margin: 0 auto; padding: 0 16px 24px; }
+#app { display: none; max-width: 960px; margin: 0 auto; padding: 24px 16px 48px; }
 #app-header { display: none; }
 .app-header{background:#fff;border-radius:8px;padding:18px 24px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-start;box-shadow:0 1px 4px rgba(0,0,0,.08)}
 .app-title{font-size:1.1rem;font-weight:700;color:#323130}
@@ -226,8 +226,10 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
   </div>
 </div>
 
-<div id="app-header" style="display:none">
-  <div class="app-header">
+
+<div id="app">
+
+  <div class="app-header" id="app-header" style="display:none">
     <div>
       <div class="app-title">Accounting Voucher</div>
       <div class="app-sub">STK 회계 전표 시스템</div>
@@ -245,9 +247,6 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
       <a href="https://aps.startruckkorea.com/" target="_self" title="STK 통합 결재함" style="text-decoration:none;display:inline-flex;align-items:center;gap:7px;background:#0078d4;color:#fff;border-radius:6px;padding:7px 14px;font-size:.8rem;font-weight:600;font-family:'Segoe UI',sans-serif;letter-spacing:-.2px;box-shadow:0 1px 4px rgba(0,120,212,.25);transition:background .15s" onmouseover="this.style.background='#106ebe'" onmouseout="this.style.background='#0078d4'"><span style="font-size:1rem;line-height:1">📬</span><span>돌아가기</span></a>
     </div>
   </div>
-</div>
-
-<div id="app">
 
   <div class="tabs">
     <button class="tab-btn active" id="tab-new-btn" onclick="switchTab('new')">바우처 작성</button>
@@ -750,8 +749,8 @@ async function api(path,method='GET',body=null) {
 async function boot(account) {
   user = account;
   document.getElementById('login-screen').style.display='none';
-  document.getElementById('app-header').style.display='block';
   document.getElementById('app').style.display='block';
+  document.getElementById('app-header').style.display='flex';
   document.getElementById('user-name').textContent=(account.name||account.username)+' ('+(account.username)+')';
   document.getElementById('v-requester').value = account.name||account.username;
   document.getElementById('v-date').value = new Date().toISOString().slice(0,10);
