@@ -670,7 +670,7 @@ async function loadAccMasters() {
       if(!r.ok) throw new Error(name+' HTTP '+r.status);
       const buf = await r.arrayBuffer();
       console.log('[fetchXlsx] 버퍼 크기:', name, buf.byteLength);
-      return XLSX.read(buf, {type:'array', cellDates:true});
+      return XLSX.read(buf, {type:'array', cellDates:false});
     }
 
     // ── GL_CCTR_COPA 통합 파일 파싱
