@@ -278,8 +278,21 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
           <input type="date" id="v-inv-date">
         </div>
         <div class="form-group">
-          <label>Exchange Rate <span style="font-size:11px;color:#605e5c;font-weight:400">(EUR 기준)</span></label>
-          <input type="number" id="v-exrate" placeholder="환율 자동 로드 또는 직접 입력" step="0.01" oninput="updateTotals()">
+          <label>Exchange Rate <span style="font-size:11px;color:#605e5c;font-weight:400">(EUR 기준 자동)</span></label>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="number" id="v-exrate" placeholder="EUR 환율" step="0.01" oninput="updateTotals()" style="flex:1">
+            <button type="button" onclick="toggleExtraRates()" style="white-space:nowrap;padding:6px 10px;border:1px solid #d2d0ce;border-radius:4px;background:#fff;font-size:12px;cursor:pointer;color:#0078d4">
+              ＋ 기타 통화
+            </button>
+          </div>
+          <div id="extra-rates" style="display:none;margin-top:8px;display:none">
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:6px">
+              <div><label style="font-size:11px;color:#605e5c">USD</label><input type="number" id="v-exrate-usd" placeholder="USD" step="0.01" style="width:100%;padding:5px 8px;border:1px solid #d2d0ce;border-radius:4px;font-size:12px"></div>
+              <div><label style="font-size:11px;color:#605e5c">SGD</label><input type="number" id="v-exrate-sgd" placeholder="SGD" step="0.01" style="width:100%;padding:5px 8px;border:1px solid #d2d0ce;border-radius:4px;font-size:12px"></div>
+              <div><label style="font-size:11px;color:#605e5c">JPY</label><input type="number" id="v-exrate-jpy" placeholder="JPY" step="0.01" style="width:100%;padding:5px 8px;border:1px solid #d2d0ce;border-radius:4px;font-size:12px"></div>
+              <div><label style="font-size:11px;color:#605e5c">CNY</label><input type="number" id="v-exrate-cny" placeholder="CNY" step="0.01" style="width:100%;padding:5px 8px;border:1px solid #d2d0ce;border-radius:4px;font-size:12px"></div>
+            </div>
+          </div>
         </div>
       </div>
       <div id="exchange-banner" style="display:none;margin-bottom:12px"></div>
@@ -482,7 +495,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
           <input type="number" id="lm-qty" step="1" value="1" min="1" oninput="calcLmAmount()" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px;text-align:right;box-sizing:border-box">
         </div>
         <div>
-          <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">AMOUNT <span style="color:#a19f9d;font-weight:400">(= Price × Qty)</span></div>
+          <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">AMOUNT</div>
           <input type="number" id="lm-amount" step="0.01" placeholder="0.00" readonly style="width:100%;padding:7px 10px;border:1px solid #edebe9;border-radius:4px;font-size:13px;text-align:right;box-sizing:border-box;background:#faf9f8;font-weight:600">
         </div>
       </div>
@@ -801,6 +814,12 @@ function applyTodayExchangeRate() {
     const eur = todayRates.find(r=>r.currency==='EUR');
     if(eur) { exEl.value=eur.rate; exEl.dispatchEvent(new Event('input')); }
   }
+  // 기타 통화도 자동 입력
+  ['USD','SGD','JPY','CNY'].forEach(cur=>{
+    const el = document.getElementById('v-exrate-'+cur.toLowerCase());
+    const r = todayRates.find(x=>x.currency===cur);
+    if(el && r && !el.value) el.value = r.rate;
+  });
 
   if(banner){
     const parts = ['USD','SGD','JPY','EUR','CNY'].map(cur=>{
@@ -1138,7 +1157,7 @@ function updateTotals() {
   lines.forEach(l=>{ const a=parseFloat(l.amount)||0; if(l.drcr==='DR')dr+=a; if(l.drcr==='CR')cr+=a; });
   const fmt = n=>n.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
   document.getElementById('total-amt').textContent = curr+' '+fmt(dr);
-  const rate = parseFloat(document.getElementById('v-exrate').value)||{EUR:1730.51,USD:1476.13,JPY:9.38,CNY:216.03,SGD:1158.06}[curr]||0;
+  const rate = getExchangeRate(curr);
   document.getElementById('total-krw').textContent = (curr!=='KRW'&&rate)?'≈ KRW '+Math.round(dr*rate).toLocaleString():'';
   // Total 컬럼 갱신 (환율 변경 시, 무한루프 방지)
   if(!updateTotals._rendering) {
@@ -1339,6 +1358,26 @@ function saveLineModal() {
 
 // GL 모달에서 선택 시 라인 모달에도 반영
 const _origSelectGL = window.selectGL;
+
+
+
+function toggleExtraRates() {
+  const el = document.getElementById('extra-rates');
+  const btn = el.previousElementSibling.querySelector('button');
+  const isHidden = el.style.display === 'none' || el.style.display === '';
+  el.style.display = isHidden ? 'block' : 'none';
+  btn.textContent = isHidden ? '－ 기타 통화' : '＋ 기타 통화';
+}
+
+function getExchangeRate(currency) {
+  if(currency === 'EUR') return parseFloat(document.getElementById('v-exrate')?.value)||0;
+  if(currency === 'USD') return parseFloat(document.getElementById('v-exrate-usd')?.value)||0;
+  if(currency === 'SGD') return parseFloat(document.getElementById('v-exrate-sgd')?.value)||0;
+  if(currency === 'JPY') return parseFloat(document.getElementById('v-exrate-jpy')?.value)||0;
+  if(currency === 'CNY') return parseFloat(document.getElementById('v-exrate-cny')?.value)||0;
+  if(currency === 'KRW') return 1;
+  return parseFloat(document.getElementById('v-exrate')?.value)||0;
+}
 
 
 function resetForm(){
