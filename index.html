@@ -752,9 +752,13 @@ async function loadAccMasters() {
         });
       }
       console.log('[Exchange] Loaded:', window._exchangeRates.length);
-      // 날짜 파싱 확인용 - 최신 5개 날짜 출력
-      const _latestDates = [...new Set(window._exchangeRates.map(r=>r.date))].sort().slice(-5);
-      console.log('[Exchange] 최신 날짜들:', _latestDates);
+      const _allDates = [...new Set(window._exchangeRates.map(r=>r.date))].sort();
+      console.log('[Exchange] 최신 날짜들:', _allDates.slice(-5));
+      // 06-29 데이터 직접 확인
+      const _jun29 = window._exchangeRates.filter(r=>r.date==='2026-06-29');
+      console.log('[Exchange] 06-29 데이터:', _jun29.length, '건', _jun29);
+      // 마지막 행 raw 데이터 확인용
+      console.log('[Exchange] 전체 날짜 수:', _allDates.length, '마지막:', _allDates[_allDates.length-1]);
       applyTodayExchangeRate();
     } catch(e){ console.warn('[Exchange]', e.message); }
 
