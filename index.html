@@ -831,9 +831,12 @@ function applyTodayExchangeRate() {
     banner.style.display='block';
     banner.innerHTML = `
       <div style="background:#f0f6ff;border:1px solid #c7e0f4;border-radius:4px;padding:8px 14px;margin-top:10px">
-        <div style="margin-bottom:4px">
+        <div style="margin-bottom:2px">
           <span style="color:#0078d4;font-weight:600;font-size:12px">${today} 기준 참고 환율</span>
-          <span style="font-size:11px;color:#a19f9d;margin-left:8px">오늘 날짜 환율로 자동 기입 · 수정 필요 시 BU Admin 확인</span>
+          <span style="font-size:11px;color:#a19f9d;margin-left:8px">오늘 날짜 환율로 자동 기입</span>
+        </div>
+        <div style="font-size:11px;color:#a19f9d;margin-bottom:4px">
+          · 수정 필요 시 BU Admin 확인 &nbsp;·&nbsp; 이전 날짜 환율이 뜨는 경우 <b>Ctrl+Shift+R</b> 로 새로고침
         </div>
         <div style="font-size:12px;color:#323130">${parts}</div>
       </div>`;
