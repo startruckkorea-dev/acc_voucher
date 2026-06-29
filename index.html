@@ -435,9 +435,8 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
       <div class="section-title">6. 결재라인 (Authorization)</div>
 
       <!-- 결재 라인 프리뷰 -->
-      <div id="appr-line-preview" style="display:none;background:#f0f6ff;border:1px solid #c7e0f4;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#323130">
-        <span style="font-weight:600;color:#0078d4;margin-right:8px">📋 결재 라인 (Voucher Type & 금액 기준 자동 구성)</span>
-        <span id="appr-line-preview-content"></span>
+      <div id="appr-line-preview" style="display:none;background:#f0f6ff;border:1px solid #c7e0f4;border-radius:6px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:#323130">
+        <div id="appr-line-preview-content"></div>
       </div>
 
       <!-- 결재자 블록 컨테이너 -->
@@ -1245,12 +1244,25 @@ function renderApproval() {
     preview.style.display='none'; return;
   }
 
-  const fmtRule = r => r && r!=='-' ? ` (${r.replace(/,/g,'').replace(/\s/g,'').replace(/([<>]=?)/,'$1 ').trim()})` : '';
+  const fmtRule = r => {
+    if(!r||r==='-') return '';
+    // 콤마 추가 + 한국어 표현
+    let s = r.replace(/([<>]=?)\s*([\d]+)/g, (m,op,num) => {
+      const n = parseInt(num).toLocaleString('ko-KR');
+      const label = op==='<'?'미만':op==='<='?'이하':op==='>'?'초과':'이상';
+      return `${label} ${n}`;
+    });
+    return ` (${s})`;
+  };
 
   preview.style.display='block';
-  previewContent.innerHTML = apLine.map((a,i)=>
-    `<span class="line-step"><span class="line-step-badge ${a.fixed?'fixed':''}">${i+1}차</span><span style="font-size:.75rem">${a.label}${fmtRule(a.rule)}</span>${i<apLine.length-1?'<span class="line-arrow">→</span>':''}</span>`
-  ).join('');
+  previewContent.innerHTML =
+    `<div style="font-weight:600;color:#0078d4;margin-bottom:6px">📋 결재 라인 (Voucher Type &amp; 금액 기준 자동 구성)</div>`+
+    `<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">`+
+    apLine.map((a,i)=>
+      `<span class="line-step"><span class="line-step-badge ${a.fixed?'fixed':''}">${i+1}차</span><span style="font-size:.75rem">${a.label}${fmtRule(a.rule)}</span>${i<apLine.length-1?'<span class="line-arrow">→</span>':''}</span>`
+    ).join('')+
+    `</div>`;
 
   const depts=[...new Set((window._employeeData||[]).map(e=>e.dept))].sort();
   const deptOpts=depts.map(d=>`<option value="${d}">${d}</option>`).join('');
