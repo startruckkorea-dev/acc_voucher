@@ -25,12 +25,13 @@ body { font-family: 'Segoe UI', sans-serif; background: #f3f2f1; min-height: 100
 .login-page-footer{position:fixed;bottom:0;left:0;right:0;padding:10px 24px;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:rgba(255,255,255,.55);background:rgba(0,0,0,.18)}
 
 /* ── App ── */
-#app { display: none; max-width: 960px; margin: 0 auto; padding: 24px 16px; }
-.header { background: #fff; border-radius: 8px; padding: 18px 24px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: flex-start; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
-.header .title { font-size: 18px; font-weight: 600; color: #323130; }
-.header .sub { font-size: 12px; color: #605e5c; margin-top: 2px; }
-.header .user-info { font-size: 13px; color: #605e5c; display: flex; align-items: center; gap: 12px; }
-#btn-logout { background: none; border: 1px solid #d2d0ce; border-radius: 4px; padding: 4px 12px; font-size: 12px; cursor: pointer; color: #323130; }
+#app { display: none; max-width: 960px; margin: 0 auto; padding: 0 16px 24px; }
+#app-header { display: none; background: linear-gradient(135deg,#0f2744,#0078d4); }
+.header { max-width:960px; margin:0 auto; padding:16px 16px; display:flex; justify-content:space-between; align-items:flex-start; }
+.header .title { font-size: 18px; font-weight: 600; color: #fff; }
+.header .sub { font-size: 12px; color: rgba(255,255,255,.8); margin-top: 2px; }
+.header .user-info { font-size: 13px; color: rgba(255,255,255,.9); display: flex; align-items: center; gap: 12px; }
+#btn-logout { background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.4); border-radius: 4px; padding: 4px 12px; font-size: 12px; cursor: pointer; color: #fff; }
 
 /* ── Tabs ── */
 .tabs { display: flex; gap: 2px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -117,10 +118,13 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 .badge-na  { background: #f3f2f1; color: #a19f9d; border: 1px solid #edebe9; font-size: 10px; padding: 2px 7px; border-radius: 10px; display: inline-block; margin-top: 5px; font-style: italic; }
 
 /* ── Buttons ── */
-.file-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
-.file-row input[type=file] { flex:1; border:1px solid #d2d0ce; border-radius:4px; padding:6px 8px; font-size:12px; font-family:inherit; }
-.btn-file-reset { padding:5px 12px; border:1px solid #d2d0ce; border-radius:4px; background:#fff; font-size:12px; cursor:pointer; white-space:nowrap; color:#605e5c; }
-.btn-file-reset:hover { background:#f3f2f1; }
+.file-area { border: 1.5px dashed #d2d0ce; border-radius: 4px; padding: 20px; text-align: center; cursor: pointer; transition: border-color .2s; }
+.file-area:hover { border-color: #0078d4; background: #f0f6ff; }
+.file-area input { display: none; }
+.file-area .hint { font-size: 13px; color: #605e5c; }
+.file-list { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+.file-item { display: flex; justify-content: space-between; align-items: center; background: #f3f2f1; border-radius: 4px; padding: 5px 10px; font-size: 12px; }
+.file-item button { background: none; border: none; color: #a4262c; cursor: pointer; font-size: 14px; }
 .btn { padding: 8px 18px; border-radius: 4px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; transition: all .15s; }
 .btn-primary { background: #0078d4; color: #fff; }
 .btn-primary:hover { background: #005a9e; }
@@ -223,20 +227,23 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
   </div>
 </div>
 
-<div id="app">
+<div id="app-header" style="display:none">
   <div class="header">
     <div>
       <div class="title">Accounting Voucher</div>
       <div class="sub">STK 회계 전표 시스템</div>
-      <div style="font-size:11px;color:rgba(255,255,255,.7);margin-top:2px" id="acc-contact-ap">AP 담당 문의: hyunju.gong@hyosung.com</div>
-      <div style="font-size:11px;color:rgba(255,255,255,.7);margin-top:1px" id="acc-contact-ar">AR 담당 문의: jihyun.ma@hyosung.com</div>
-      <div style="font-size:11px;color:rgba(255,255,255,.7);margin-top:1px" id="acc-contact-gl">GL 담당 문의: sora.kim@hyosung.com</div>
+      <div id="acc-contact-ap" style="font-size:11px;color:rgba(255,255,255,.7);margin-top:2px">BU Admin(AP 관련) 문의 Email: hyunju.gong@hyosung.com</div>
+      <div id="acc-contact-ar" style="font-size:11px;color:rgba(255,255,255,.7);margin-top:1px">BU Admin(AR 관련) 문의 Email: jihyun.ma@hyosung.com</div>
+      <div id="acc-contact-gl" style="font-size:11px;color:rgba(255,255,255,.7);margin-top:1px">BU Admin(GL 관련) 문의 Email: sora.kim@hyosung.com</div>
     </div>
     <div class="user-info">
       <span id="user-name"></span>
       <button id="btn-logout" onclick="signOut()">로그아웃</button>
     </div>
   </div>
+</div>
+
+<div id="app">
 
   <div class="tabs">
     <button class="tab-btn active" id="tab-new-btn" onclick="switchTab('new')">바우처 작성</button>
@@ -415,11 +422,12 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
       </div>
 
       <div class="section-title">5. 첨부파일</div>
-      <div style="font-size:12px;color:#605e5c;margin-bottom:8px">세금계산서 또는 Invoice를 첨부해주세요. (파일당 최대 20MB, 전체 20MB)</div>
-      <div class="file-row"><input type="file" id="att1" onchange="checkFileSize(this)"><button class="btn-file-reset" onclick="rfAtt('att1')">Reset</button></div>
-      <div class="file-row"><input type="file" id="att2" onchange="checkFileSize(this)"><button class="btn-file-reset" onclick="rfAtt('att2')">Reset</button></div>
-      <div class="file-row"><input type="file" id="att3" onchange="checkFileSize(this)"><button class="btn-file-reset" onclick="rfAtt('att3')">Reset</button></div>
-      <div class="file-row"><input type="file" id="att4" onchange="checkFileSize(this)"><button class="btn-file-reset" onclick="rfAtt('att4')">Reset</button></div>
+      <div style="font-size:12px;color:#605e5c;margin-bottom:8px">세금계산서 또는 Invoice를 첨부해주세요. (최대 20MB)</div>
+      <div class="file-area" onclick="document.getElementById('acc-file-input').click()">
+        <input type="file" id="acc-file-input" multiple onchange="onAccFileSelect(event)">
+        <div class="hint">📎 클릭하여 파일 첨부 (최대 20MB)</div>
+      </div>
+      <div class="file-list" id="acc-file-list"></div>
 
       <div class="section-title">6. 결재라인 (Authorization)</div>
 
@@ -432,7 +440,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
       <!-- 결재자 블록 컨테이너 -->
       <div id="appr-blocks-container"></div>
 
-      <div class="btn-row">
+      <div class="btn-row" style="margin-top:24px">
         <button class="btn btn-default" onclick="resetForm()">Reset</button>
         <button class="btn btn-primary" onclick="saveVoucher('Pending')">Submit</button>
       </div>
@@ -738,6 +746,7 @@ async function api(path,method='GET',body=null) {
 async function boot(account) {
   user = account;
   document.getElementById('login-screen').style.display='none';
+  document.getElementById('app-header').style.display='block';
   document.getElementById('app').style.display='block';
   document.getElementById('user-name').textContent=(account.name||account.username)+' ('+(account.username)+')';
   document.getElementById('v-requester').value = account.name||account.username;
@@ -1484,11 +1493,22 @@ function selectGL(code){
   renderLines(); closeGlModal();
 }
 
-function rfAtt(id){ const el=document.getElementById(id); if(el) el.value=''; }
-function checkFileSize(input){
-  if(!input.files[0]) return;
-  const mb=input.files[0].size/1024/1024;
-  if(mb>20){ alert(input.files[0].name+'\n파일 크기('+mb.toFixed(1)+'MB)가 최대 허용 용량(20MB)을 초과합니다.'); input.value=''; }
+// ── 첨부파일 (BP 방식) ──
+let accFiles = [];
+function onAccFileSelect(e) {
+  const newFiles = Array.from(e.target.files);
+  for(const f of newFiles) { if(!accFiles.find(x=>x.name===f.name)) accFiles.push(f); }
+  const totalMB = accFiles.reduce((s,f)=>s+f.size,0)/1024/1024;
+  if(totalMB>20){ alert('첨부파일 총 용량이 '+totalMB.toFixed(1)+'MB입니다. 20MB 이하로 첨부해주세요.'); accFiles=accFiles.filter(f=>!newFiles.includes(f)); }
+  document.getElementById('acc-file-input').value='';
+  renderAccFiles();
+}
+function removeAccFile(i){ accFiles.splice(i,1); renderAccFiles(); }
+function renderAccFiles(){
+  const totalMB=accFiles.reduce((s,f)=>s+f.size,0)/1024/1024;
+  document.getElementById('acc-file-list').innerHTML = accFiles.map((f,i)=>
+    `<div class="file-item"><span>📄 ${f.name} <span style="color:#a19f9d">(${(f.size/1024/1024).toFixed(2)}MB)</span></span><button onclick="removeAccFile(${i})">✕</button></div>`
+  ).join('')+(accFiles.length?`<div style="font-size:11px;color:#605e5c;text-align:right;margin-top:4px">합계: ${totalMB.toFixed(2)}MB / 20MB</div>`:'');
 }
 
 
@@ -1553,16 +1573,13 @@ async function saveVoucher(status) {
     const requestId = reqRes.id;
 
     // 2. 첨부파일 업로드 → AttachedFiles/ACC-Voucher_AttachedFiles/{voucherId}/
-    const attIds=['att1','att2','att3','att4'];
-    const allFiles=[];
-    attIds.forEach(id=>{const el=document.getElementById(id);if(el&&el.files[0])allFiles.push(el.files[0]);});
-    if(allFiles.length){
+    if(accFiles.length){
       try{
         const drivesData=await api(`/sites/${siteId}/drives`);
         const drive=drivesData.value.find(d=>d.name==='AttachedFiles')||drivesData.value[0];
         const t=await token();
         const links=[];
-        for(const file of allFiles){
+        for(const file of accFiles){
           try{
             const buf=await file.arrayBuffer();
             const res=await fetch(
@@ -1790,7 +1807,7 @@ function resetForm(){
     const el=document.getElementById(id); if(el) el.value='';
   });
   document.getElementById('voucher-id-badge').textContent='';
-  ['att1','att2','att3','att4'].forEach(id=>rfAtt(id));
+  accFiles=[]; renderAccFiles();
   lines=[];renderLines();renderApproval();
 }
 
