@@ -126,11 +126,11 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 .file-item { display: flex; justify-content: space-between; align-items: center; background: #f3f2f1; border-radius: 4px; padding: 5px 10px; font-size: 12px; }
 .file-item button { background: none; border: none; color: #a4262c; cursor: pointer; font-size: 14px; }
 .btn { padding: 8px 18px; border-radius: 4px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; transition: all .15s; }
-.btn-primary { background: #0078d4; color: #fff; }
-.btn-primary:hover { background: #005a9e; }
-.btn-row { display:flex; justify-content:flex-end; gap:8px; margin-top:20px; }
-.btn-secondary { background:#fff; border:1px solid #d2d0ce; border-radius:4px; padding:8px 24px; font-size:.85rem; cursor:pointer; font-family:inherit; }
-.btn-secondary:hover { background:#f3f2f1; }
+.btn-primary{background:#0078d4;color:#fff;border:none;border-radius:4px;padding:8px 24px;font-size:.85rem;cursor:pointer;font-family:inherit}
+.btn-primary:hover{background:#106ebe}
+.btn-row{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+.btn-secondary{background:#fff;border:1px solid #d2d0ce;border-radius:4px;padding:8px 24px;font-size:.85rem;cursor:pointer;font-family:inherit}
+.btn-secondary:hover{background:#f3f2f1}
 .btn-add { background: #f0f6ff; border: 1px solid #c7e0f4; color: #0078d4; font-size: 12px; padding: 6px 12px; }
 .btn-add:hover { background: #deecf9; }
 
@@ -444,7 +444,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
       <!-- 결재자 블록 컨테이너 -->
       <div id="appr-blocks-container"></div>
 
-      <div class="btn-row" style="margin-top:24px">
+      <div class="btn-row">
         <button class="btn-secondary" onclick="resetForm()">Reset</button>
         <button class="btn-primary" onclick="saveVoucher('Pending')">Submit</button>
       </div>
