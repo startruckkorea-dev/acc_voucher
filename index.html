@@ -90,8 +90,20 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 .totals-dr-cr .cr-block { background: #fde8e8; color: #c0392b; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
 .totals-dr-cr .eq-block { background: #dff6dd; color: #107c10; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
 .totals-dr-cr .neq-block { background: #fde7e9; color: #a4262c; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
-.appr-box.appr-active { border-color: #0078d4; }
-.appr-box.appr-active .ah { background:#0078d4; color:#fff; }
+.appr-block { background:#fff; border:1px solid #edebe9; border-radius:8px; padding:14px 16px; margin-bottom:10px; }
+.appr-block.appr-fixed { background:#f0f6ff; border-color:#c7e0f4; }
+.appr-block-title { font-size:12px; font-weight:700; color:#323130; margin-bottom:10px; }
+.appr-block-title .hint { font-weight:400; color:#605e5c; margin-left:4px; }
+.appr-block-title .req-mark { color:#d83b01; }
+.appr-info { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+.appr-info input { padding:7px 10px; border:1px solid #d2d0ce; border-radius:4px; font-size:12px; font-family:inherit; background:#faf9f8; color:#323130; }
+.appr-info input[readonly] { background:#f3f2f1; color:#605e5c; }
+.appr-select-row { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:8px; }
+.appr-select-row select { padding:7px 10px; border:1px solid #d2d0ce; border-radius:4px; font-size:12px; font-family:inherit; }
+.line-step { display:inline-flex; align-items:center; gap:4px; margin-right:4px; }
+.line-step-badge { background:#0078d4; color:#fff; border-radius:10px; padding:1px 8px; font-size:11px; font-weight:700; }
+.line-step-badge.fixed { background:#107c10; }
+.line-arrow { color:#a19f9d; font-size:13px; }
 
 /* ── Approval ── */
 .appr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px,1fr)); gap: 10px; }
@@ -403,12 +415,15 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
       <div style="border:2px dashed #edebe9;border-radius:4px;padding:20px;text-align:center;color:#a19f9d;font-size:13px">📎 파일 첨부 기능은 다음 버전에서 제공됩니다</div>
 
       <div class="section-title">6. 결재라인 (Authorization)</div>
-      <div style="font-size:12px;color:#605e5c;font-weight:500;margin-bottom:8px">6-1. Business 승인라인</div>
-      <div class="appr-grid" id="appr-business" style="margin-bottom:16px"></div>
-      <div style="font-size:12px;color:#605e5c;font-weight:500;margin-bottom:8px">6-2. F&amp;C 승인라인</div>
-      <div class="appr-grid" id="appr-fc" style="margin-bottom:16px"></div>
-      <div style="font-size:12px;color:#605e5c;font-weight:500;margin-bottom:8px">6-3. Accounting 담당자 <span style="font-size:11px;color:#a19f9d;font-weight:400">(최종)</span></div>
-      <div class="appr-grid" id="appr-accounting"></div>
+
+      <!-- 결재 라인 프리뷰 -->
+      <div id="appr-line-preview" style="display:none;background:#f0f6ff;border:1px solid #c7e0f4;border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#323130">
+        <span style="font-weight:600;color:#0078d4;margin-right:8px">📋 결재 라인 (Voucher Type & 금액 기준 자동 구성)</span>
+        <span id="appr-line-preview-content"></span>
+      </div>
+
+      <!-- 결재자 블록 컨테이너 -->
+      <div id="appr-blocks-container"></div>
 
       <div class="btn-row">
         <button class="btn btn-default" onclick="resetForm()">초기화</button>
@@ -995,7 +1010,22 @@ async function loadCCTRMaster(userName) {
         const cctrCol2   = empHeader.findIndex(h=>(h||'').toString().includes('Cost Center'));
         const nameEngCol = empHeader.findIndex(h=>(h||'').toString().includes('Name_ENG'));
         const nameKoCol  = empHeader.findIndex(h=>(h||'').toString().includes('성함'));
+        const deptCol    = empHeader.findIndex(h=>(h||'').toString().includes('Function')||(h||'').toString().includes('부서'));
+        const teamCol    = empHeader.findIndex(h=>(h||'').toString().includes('팀'));
         console.log('[CCTR] 컬럼 인덱스 - CCTR:'+cctrCol2+' ENG:'+nameEngCol+' KO:'+nameKoCol);
+
+        // _employeeData 구성 (부서/팀 드롭다운용)
+        const empData=[];
+        for(let i=empHeaderIdx+1;i<empRows.length;i++){
+          const r = empRows[i]||[];
+          const eng=(r[nameEngCol]||'').toString().trim();
+          const ko=(r[nameKoCol]||'').toString().trim();
+          const dept=(deptCol>=0?(r[deptCol]||''):'').toString().trim();
+          const team=(teamCol>=0?(r[teamCol]||''):'').toString().trim();
+          if(eng) empData.push({name:eng, nameKo:ko, dept:dept||'기타', team:team||'기타', email:''});
+        }
+        window._employeeData = empData;
+        console.log('[CCTR] _employeeData:', empData.length, 'entries');
 
         for(let i=empHeaderIdx+1;i<empRows.length;i++){
           const r = empRows[i];
@@ -1146,88 +1176,114 @@ function onTypeChange() {
 function renderApproval() {
   const type = document.getElementById('v-type').value;
   const rules = APPROVAL_RULES[type]||{};
-  const cfg = _sysConfig || {};
+  const cfg = _sysConfig||{};
 
-  // system_config에서 고정 결재자 읽기
-  const CEO  = cfgVal(cfg,'ACC-Voucher_CEO',  {name:'Keuntae Dong',  email:'keuntae.dong@hyosung.com'});
-  const RD   = cfgVal(cfg,'ACC-Voucher_RD',   {name:'Keuntae Dong',  email:'keuntae.dong@hyosung.com'});
-  const CTRL = cfgVal(cfg,'ACC-Voucher_CONTROLLING',{name:'Jungho Yoo', email:'jungho.yoo@hyosung.com'});
-  const AMGR = cfgVal(cfg,'ACC-Voucher_ACCOUNTING', {name:'Gina Shin',  email:'gina.shin@hyosung.com'});
+  const CEO  = cfgVal(cfg,'ACC-Voucher_CEO',  {name:'Keuntae Dong',   email:'keuntae.dong@hyosung.com'});
+  const RD   = cfgVal(cfg,'ACC-Voucher_RD',   {name:'Keuntae Dong',   email:'keuntae.dong@hyosung.com'});
+  const CTRL = cfgVal(cfg,'ACC-Voucher_CONTROLLING',{name:'Jungho Yoo',email:'jungho.yoo@hyosung.com'});
+  const AMGR = cfgVal(cfg,'ACC-Voucher_ACCOUNTING', {name:'Gina Shin', email:'gina.shin@hyosung.com'});
   const CFO  = cfgVal(cfg,'ACC-Voucher_CFO',  {name:'Martin Schindele',email:'martin.s.schindele@hyosung.com'});
+  const ACC_MAP={AP:'ACC-Voucher_CONTACT_AP',AP_IMS:'ACC-Voucher_CONTACT_AP',AP_CR:'ACC-Voucher_CONTACT_AP',
+    AR:'ACC-Voucher_CONTACT_AR',GL:'ACC-Voucher_CONTACT_GL',FA:'ACC-Voucher_CONTACT_GL',
+    ADV:'ACC-Voucher_CONTACT_AP',SET:'ACC-Voucher_CONTACT_AP'};
+  const ACC = cfgVal(cfg, ACC_MAP[type]||'ACC-Voucher_CONTACT_GL',{name:'-',email:''});
 
-  // Accounting 담당자 (type별)
-  const ACC_HANDLER_MAP = {
-    AP:'ACC-Voucher_CONTACT_AP', AP_IMS:'ACC-Voucher_CONTACT_AP',
-    AP_CR:'ACC-Voucher_CONTACT_AP', AR:'ACC-Voucher_CONTACT_AR',
-    GL:'ACC-Voucher_CONTACT_GL', FA:'ACC-Voucher_CONTACT_GL',
-    ADV:'ACC-Voucher_CONTACT_AP', SET:'ACC-Voucher_CONTACT_AP'
-  };
-  const accKey = ACC_HANDLER_MAP[type]||'ACC-Voucher_CONTACT_GL';
-  const ACC = cfgVal(cfg, accKey, {name:'-', email:''});
-
-  // 금액 읽기 (DR KRW 기준)
-  let drKrw = 0;
+  let drKrw=0;
   lines.forEach(l=>{
     if(l.drcr!=='DR') return;
     const a=parseFloat(l.amount)||0;
     const rate=l.currency==='KRW'?1:(getExchangeRate(l.currency)||0);
-    drKrw += l.currency==='KRW'?a:Math.round(a*rate);
+    drKrw+=l.currency==='KRW'?a:Math.round(a*rate);
   });
 
-  // 금액 기준 해당 여부 판단 함수
-  function isRequired(rule, amt) {
+  function needed(rule,amt){
     if(!rule||rule==='-') return false;
     if(rule==='필수'||rule==='필요시') return true;
-    // 금액 비교: < 1,000,000 / >= 20,000,000 등
-    const clean = rule.replace(/,/g,'').replace(/\s/g,'');
-    const m = clean.match(/^([<>]=?)\s*([\d]+)$/);
+    const c=rule.replace(/,/g,'').replace(/\s/g,'');
+    const m=c.match(/^([<>]=?)([\d]+)$/);
     if(!m) return true;
-    const op=m[1], threshold=parseInt(m[2]);
-    if(op==='<')  return amt < threshold;
-    if(op==='<=') return amt <= threshold;
-    if(op==='>')  return amt > threshold;
-    if(op==='>=') return amt >= threshold;
+    const op=m[1],th=parseInt(m[2]);
+    if(op==='<') return amt<th; if(op==='<=') return amt<=th;
+    if(op==='>') return amt>th; if(op==='>=') return amt>=th;
     return true;
   }
 
-  // 박스 렌더 헬퍼
-  function box(title, person, rule, isFixed=false) {
-    const active = isFixed || isRequired(rule, drKrw);
-    const rangeText = rule||'-';
-    const badge = !rule||rule==='-' ? 'badge-na' : (active?'badge-req':'badge-na');
-    const badgeLabel = !rule||rule==='-' ? '해당없음' : (active?(rule==='필요시'?'필요시':'대기'):'해당없음');
-    return `<div class="appr-box${active?' appr-active':''}">
-      <div class="ah">${title}</div>
-      <div class="ab">
-        ${person.name?`<div class="an">${person.name}</div><div class="ad" style="font-size:10px;color:#a19f9d">${person.email||''}</div>`:'<div class="an" style="color:#a19f9d">담당자 TBD</div>'}
-        <div class="ar">${rangeText}</div>
-        <span class="${badge}">${badgeLabel}</span>
-      </div></div>`;
+  const apLine=[];
+  if(needed(rules.TL,drKrw))  apLine.push({role:'TL',  label:'TL (팀장)',                      fixed:false});
+  if(needed(rules.MC,drKrw))  apLine.push({role:'MC',  label:'MC (본부장)',                     fixed:false});
+  if(needed(rules.CEO,drKrw)) apLine.push({role:'CEO', label:'CEO (자동 지정)',                  fixed:true, person:CEO});
+  if(needed(rules.RD,drKrw))  apLine.push({role:'RD',  label:'RD (자동 지정)',                   fixed:true, person:RD});
+  if(needed(rules.Controller||'필요시',drKrw)) apLine.push({role:'CTRL',label:'Controller (자동 지정)', fixed:true, person:CTRL});
+  apLine.push({role:'AMGR',label:'Accounting Mgr. (자동 지정)', fixed:true, person:AMGR});
+  if(needed(rules.CFO,drKrw)) apLine.push({role:'CFO', label:'CFO (자동 지정)',                  fixed:true, person:CFO});
+  if(ACC.email) apLine.push({role:'ACC',label:'Accounting 담당자 (자동 지정)',                    fixed:true, person:ACC});
+
+  const container = document.getElementById('appr-blocks-container');
+  const preview   = document.getElementById('appr-line-preview');
+  const previewContent = document.getElementById('appr-line-preview-content');
+
+  if(!type || !apLine.length) {
+    container.innerHTML='<div style="background:#f9f8f7;border:1px dashed #c8c6c4;border-radius:6px;padding:18px;text-align:center;color:#a19f9d;font-size:.82rem">Voucher Type을 선택하면 결재 라인이 자동으로 구성됩니다</div>';
+    preview.style.display='none'; return;
   }
 
-  // 6-1. Business
-  document.getElementById('appr-business').innerHTML =
-    box('TL',    {name:'',email:''},     rules.TL)  +
-    box('MC',    {name:'',email:''},     rules.MC)  +
-    box('CEO',   CEO,                    rules.CEO) +
-    box('RD',    RD,                     rules.RD);
+  preview.style.display='block';
+  previewContent.innerHTML = apLine.map((a,i)=>
+    `<span class="line-step"><span class="line-step-badge ${a.fixed?'fixed':''}">${i+1}차</span><span style="font-size:.75rem">${a.label}</span>${i<apLine.length-1?'<span class="line-arrow">→</span>':''}</span>`
+  ).join('');
 
-  // 6-2. F&C
-  document.getElementById('appr-fc').innerHTML =
-    box('Controller',    CTRL, rules.Controller||'필요시') +
-    box('Accounting Mgr.', AMGR, '필수', true) +
-    box('CFO',           CFO,  rules.CFO);
+  const depts=[...new Set((window._employeeData||[]).map(e=>e.dept))].sort();
+  const deptOpts=depts.map(d=>`<option value="${d}">${d}</option>`).join('');
+  container.innerHTML = apLine.map((a,i)=>{
+    const order=i+1;
+    if(a.fixed){
+      return `<div class="appr-block appr-fixed">
+        <div class="appr-block-title">${order}차 결재자 <span class="hint">— ${a.label}</span></div>
+        <div class="appr-info">
+          <input type="text"  value="${a.person.name}"  readonly placeholder="이름">
+          <input type="email" value="${a.person.email}" readonly placeholder="이메일">
+        </div></div>`;
+    } else {
+      return `<div class="appr-block">
+        <div class="appr-block-title">${order}차 결재자 <span class="req-mark">*</span> <span class="hint">— ${a.label}</span></div>
+        <div class="appr-select-row">
+          <select id="ga${order}-dept" onchange="gwDeptChange(${order})"><option value="">부서</option>${deptOpts}</select>
+          <select id="ga${order}-team" onchange="gwTeamChange(${order})" disabled><option value="">팀</option></select>
+          <select id="ga${order}-person" onchange="gwPersonChange(${order})" disabled><option value="">직원 선택</option></select>
+        </div>
+        <div class="appr-info">
+          <input type="text"  id="ga${order}-name"  readonly placeholder="이름">
+          <input type="email" id="ga${order}-email" readonly placeholder="이메일">
+        </div></div>`;
+    }
+  }).join('');
+}
 
-  // 6-3. Accounting (최종)
-  document.getElementById('appr-accounting').innerHTML = `
-    <div class="appr-box" style="border:2px solid #0078d4">
-      <div class="ah" style="background:#0078d4;color:#fff">Accounting (최종)</div>
-      <div class="ab">
-        <div class="an">${ACC.name}</div>
-        <div class="ad" style="font-size:10px;color:#a19f9d">${ACC.email}</div>
-        <div class="ar">필수</div>
-        <span class="badge-req">필수</span>
-      </div></div>`;
+function gwDeptChange(order){
+  const dept=document.getElementById('ga'+order+'-dept').value;
+  const tSel=document.getElementById('ga'+order+'-team');
+  const pSel=document.getElementById('ga'+order+'-person');
+  document.getElementById('ga'+order+'-name').value='';
+  document.getElementById('ga'+order+'-email').value='';
+  const teams=[...new Set((window._employeeData||[]).filter(e=>e.dept===dept).map(e=>e.team))].sort();
+  tSel.innerHTML='<option value="">팀</option>'+teams.map(t=>`<option value="${t}">${t}</option>`).join('');
+  tSel.disabled=!dept; pSel.innerHTML='<option value="">직원 선택</option>'; pSel.disabled=true;
+}
+function gwTeamChange(order){
+  const dept=document.getElementById('ga'+order+'-dept').value;
+  const team=document.getElementById('ga'+order+'-team').value;
+  const pSel=document.getElementById('ga'+order+'-person');
+  document.getElementById('ga'+order+'-name').value='';
+  document.getElementById('ga'+order+'-email').value='';
+  const persons=(window._employeeData||[]).filter(e=>e.dept===dept&&e.team===team);
+  pSel.innerHTML='<option value="">직원 선택</option>'+persons.map(p=>`<option value="${p.email}">${p.name}</option>`).join('');
+  pSel.disabled=!team;
+}
+function gwPersonChange(order){
+  const email=document.getElementById('ga'+order+'-person').value;
+  const p=(window._employeeData||[]).find(e=>e.email===email);
+  document.getElementById('ga'+order+'-name').value=p?p.name:'';
+  document.getElementById('ga'+order+'-email').value=p?p.email:'';
 }
 
 // ── Account Lines ──
@@ -1508,20 +1564,15 @@ function buildApprovers() {
   const type = document.getElementById('v-type').value;
   const rules = APPROVAL_RULES[type]||{};
   const cfg = _sysConfig||{};
-
-  const CEO  = cfgVal(cfg,'ACC-Voucher_CEO',  {name:'Keuntae Dong',  email:'keuntae.dong@hyosung.com'});
-  const RD   = cfgVal(cfg,'ACC-Voucher_RD',   {name:'Keuntae Dong',  email:'keuntae.dong@hyosung.com'});
-  const CTRL = cfgVal(cfg,'ACC-Voucher_CONTROLLING',{name:'Jungho Yoo', email:'jungho.yoo@hyosung.com'});
-  const AMGR = cfgVal(cfg,'ACC-Voucher_ACCOUNTING', {name:'Gina Shin',  email:'gina.shin@hyosung.com'});
+  const CEO  = cfgVal(cfg,'ACC-Voucher_CEO',  {name:'Keuntae Dong',   email:'keuntae.dong@hyosung.com'});
+  const RD   = cfgVal(cfg,'ACC-Voucher_RD',   {name:'Keuntae Dong',   email:'keuntae.dong@hyosung.com'});
+  const CTRL = cfgVal(cfg,'ACC-Voucher_CONTROLLING',{name:'Jungho Yoo',email:'jungho.yoo@hyosung.com'});
+  const AMGR = cfgVal(cfg,'ACC-Voucher_ACCOUNTING', {name:'Gina Shin', email:'gina.shin@hyosung.com'});
   const CFO  = cfgVal(cfg,'ACC-Voucher_CFO',  {name:'Martin Schindele',email:'martin.s.schindele@hyosung.com'});
-  const ACC_MAP = {
-    AP:'ACC-Voucher_CONTACT_AP',AP_IMS:'ACC-Voucher_CONTACT_AP',AP_CR:'ACC-Voucher_CONTACT_AP',
+  const ACC_MAP={AP:'ACC-Voucher_CONTACT_AP',AP_IMS:'ACC-Voucher_CONTACT_AP',AP_CR:'ACC-Voucher_CONTACT_AP',
     AR:'ACC-Voucher_CONTACT_AR',GL:'ACC-Voucher_CONTACT_GL',FA:'ACC-Voucher_CONTACT_GL',
-    ADV:'ACC-Voucher_CONTACT_AP',SET:'ACC-Voucher_CONTACT_AP'
-  };
+    ADV:'ACC-Voucher_CONTACT_AP',SET:'ACC-Voucher_CONTACT_AP'};
   const ACC = cfgVal(cfg, ACC_MAP[type]||'ACC-Voucher_CONTACT_GL', {name:'-',email:''});
-
-  // DR KRW 합계
   let drKrw=0;
   lines.forEach(l=>{
     if(l.drcr!=='DR') return;
@@ -1529,31 +1580,38 @@ function buildApprovers() {
     const rate=l.currency==='KRW'?1:(getExchangeRate(l.currency)||0);
     drKrw+=l.currency==='KRW'?a:Math.round(a*rate);
   });
-
-  function needed(rule, amt) {
+  function needed(rule,amt){
     if(!rule||rule==='-') return false;
     if(rule==='필수'||rule==='필요시') return true;
-    const clean=rule.replace(/,/g,'').replace(/\s/g,'');
-    const m=clean.match(/^([<>]=?)([\d]+)$/);
+    const c=rule.replace(/,/g,'').replace(/\s/g,'');
+    const m=c.match(/^([<>]=?)([\d]+)$/);
     if(!m) return true;
     const op=m[1],th=parseInt(m[2]);
     if(op==='<') return amt<th; if(op==='<=') return amt<=th;
     if(op==='>') return amt>th; if(op==='>=') return amt>=th;
     return true;
   }
-
-  const ap=[];
-  let order=1;
-  if(needed(rules.TL,drKrw))   ap.push({role:'TL',          email:'',           name:'담당자 TBD', order:order++});
-  if(needed(rules.MC,drKrw))   ap.push({role:'MC',          email:'',           name:'담당자 TBD', order:order++});
-  if(needed(rules.CEO,drKrw))  ap.push({role:'CEO',         email:CEO.email,    name:CEO.name,     order:order++});
-  if(needed(rules.RD,drKrw))   ap.push({role:'RD',          email:RD.email,     name:RD.name,      order:order++});
-  // Controller: 필요시도 포함
-  if(needed(rules.Controller||'필요시',drKrw)) ap.push({role:'Controller', email:CTRL.email, name:CTRL.name, order:order++});
-  ap.push({role:'Accounting Mgr', email:AMGR.email, name:AMGR.name, order:order++}); // 항상 필수
-  if(needed(rules.CFO,drKrw))  ap.push({role:'CFO',         email:CFO.email,    name:CFO.name,     order:order++});
-  if(ACC.email) ap.push({role:'Accounting',   email:ACC.email,    name:ACC.name,     order:order++});
-  return ap;
+  const apLine=[];
+  if(needed(rules.TL,drKrw))  apLine.push({fixed:false,role:'TL'});
+  if(needed(rules.MC,drKrw))  apLine.push({fixed:false,role:'MC'});
+  if(needed(rules.CEO,drKrw)) apLine.push({fixed:true,role:'CEO',person:CEO});
+  if(needed(rules.RD,drKrw))  apLine.push({fixed:true,role:'RD',person:RD});
+  if(needed(rules.Controller||'필요시',drKrw)) apLine.push({fixed:true,role:'CTRL',person:CTRL});
+  apLine.push({fixed:true,role:'AMGR',person:AMGR});
+  if(needed(rules.CFO,drKrw)) apLine.push({fixed:true,role:'CFO',person:CFO});
+  if(ACC.email) apLine.push({fixed:true,role:'ACC',person:ACC});
+  const result=[];
+  apLine.forEach((a,i)=>{
+    const order=i+1;
+    if(a.fixed){
+      if(a.person.email) result.push({role:a.role,name:a.person.name,email:a.person.email,order});
+    } else {
+      const nm=(document.getElementById('ga'+order+'-name')||{}).value||'';
+      const em=(document.getElementById('ga'+order+'-email')||{}).value||'';
+      result.push({role:a.role,name:nm||'TBD',email:em,order});
+    }
+  });
+  return result;
 }
 
 
