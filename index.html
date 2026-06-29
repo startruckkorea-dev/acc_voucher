@@ -117,7 +117,10 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 .badge-na  { background: #f3f2f1; color: #a19f9d; border: 1px solid #edebe9; font-size: 10px; padding: 2px 7px; border-radius: 10px; display: inline-block; margin-top: 5px; font-style: italic; }
 
 /* ── Buttons ── */
-.btn-row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; margin-bottom: 24px; }
+.file-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.file-row input[type=file] { flex:1; border:1px solid #d2d0ce; border-radius:4px; padding:6px 8px; font-size:12px; font-family:inherit; }
+.btn-file-reset { padding:5px 12px; border:1px solid #d2d0ce; border-radius:4px; background:#fff; font-size:12px; cursor:pointer; white-space:nowrap; color:#605e5c; }
+.btn-file-reset:hover { background:#f3f2f1; }
 .btn { padding: 8px 18px; border-radius: 4px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; transition: all .15s; }
 .btn-primary { background: #0078d4; color: #fff; }
 .btn-primary:hover { background: #005a9e; }
@@ -412,7 +415,11 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
       </div>
 
       <div class="section-title">5. 첨부파일</div>
-      <div style="border:2px dashed #edebe9;border-radius:4px;padding:20px;text-align:center;color:#a19f9d;font-size:13px">📎 파일 첨부 기능은 다음 버전에서 제공됩니다</div>
+      <div style="font-size:12px;color:#605e5c;margin-bottom:8px">세금계산서 또는 Invoice를 첨부해주세요. (파일당 최대 20MB, 전체 20MB)</div>
+      <div class="file-row"><input type="file" id="att1" onchange="checkFileSize(this)"><button class="btn-file-reset" onclick="rfAtt('att1')">Reset</button></div>
+      <div class="file-row"><input type="file" id="att2" onchange="checkFileSize(this)"><button class="btn-file-reset" onclick="rfAtt('att2')">Reset</button></div>
+      <div class="file-row"><input type="file" id="att3" onchange="checkFileSize(this)"><button class="btn-file-reset" onclick="rfAtt('att3')">Reset</button></div>
+      <div class="file-row"><input type="file" id="att4" onchange="checkFileSize(this)"><button class="btn-file-reset" onclick="rfAtt('att4')">Reset</button></div>
 
       <div class="section-title">6. 결재라인 (Authorization)</div>
 
@@ -426,9 +433,8 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
       <div id="appr-blocks-container"></div>
 
       <div class="btn-row">
-        <button class="btn btn-default" onclick="resetForm()">초기화</button>
-        <button class="btn btn-outline" onclick="saveVoucher('Draft')">임시저장</button>
-        <button class="btn btn-primary" onclick="saveVoucher('Pending')">✔ 결재 요청</button>
+        <button class="btn btn-default" onclick="resetForm()">Reset</button>
+        <button class="btn btn-primary" onclick="saveVoucher('Pending')">Submit</button>
       </div>
     </div>
   </div>
@@ -1470,7 +1476,14 @@ function selectGL(code){
   renderLines(); closeGlModal();
 }
 
-// ── Save / Reset ──
+function rfAtt(id){ const el=document.getElementById(id); if(el) el.value=''; }
+function checkFileSize(input){
+  if(!input.files[0]) return;
+  const mb=input.files[0].size/1024/1024;
+  if(mb>20){ alert(input.files[0].name+'\n파일 크기('+mb.toFixed(1)+'MB)가 최대 허용 용량(20MB)을 초과합니다.'); input.value=''; }
+}
+
+
 async function saveVoucher(status) {
   const type=document.getElementById('v-type').value;
   if(!type){alert('Voucher Type을 선택하세요.');return;}
@@ -1531,7 +1544,37 @@ async function saveVoucher(status) {
     const reqRes = await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items`, 'POST', reqBody);
     const requestId = reqRes.id;
 
-    // 2. Pending이면 Approvals에 결재자 행 INSERT
+    // 2. 첨부파일 업로드 → AttachedFiles/ACC-Voucher_AttachedFiles/{voucherId}/
+    const attIds=['att1','att2','att3','att4'];
+    const allFiles=[];
+    attIds.forEach(id=>{const el=document.getElementById(id);if(el&&el.files[0])allFiles.push(el.files[0]);});
+    if(allFiles.length){
+      try{
+        const drivesData=await api(`/sites/${siteId}/drives`);
+        const drive=drivesData.value.find(d=>d.name==='AttachedFiles')||drivesData.value[0];
+        const t=await token();
+        const links=[];
+        for(const file of allFiles){
+          try{
+            const buf=await file.arrayBuffer();
+            const res=await fetch(
+              GRAPH+'/drives/'+drive.id+'/root:/ACC-Voucher_AttachedFiles/'+voucherId+'/'+encodeURIComponent(file.name)+':/content',
+              {method:'PUT',headers:{Authorization:'Bearer '+t,'Content-Type':file.type||'application/octet-stream'},body:buf}
+            );
+            if(res.ok){
+              const u=await res.json();
+              const safeKey=btoa(unescape(encodeURIComponent(drive.id+'###'+u.id)));
+              links.push(file.name+'||ENC||'+safeKey);
+            }
+          }catch(fe){console.error('File upload error:',fe);}
+        }
+        if(links.length){
+          await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${requestId}/fields`,'PATCH',{AttachmentRef:links.join(';')});
+        }
+      }catch(fe){console.error('Drive error:',fe);}
+    }
+
+    // 3. Pending이면 Approvals에 결재자 행 INSERT
     if(status==='Pending') {
       for(let i=0;i<approvers.length;i++){
         const ap=approvers[i];
@@ -1739,6 +1782,7 @@ function resetForm(){
     const el=document.getElementById(id); if(el) el.value='';
   });
   document.getElementById('voucher-id-badge').textContent='';
+  ['att1','att2','att3','att4'].forEach(id=>rfAtt(id));
   lines=[];renderLines();renderApproval();
 }
 
