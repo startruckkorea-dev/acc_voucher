@@ -1508,6 +1508,16 @@ function selectGL(code){
   renderLines(); closeGlModal();
 }
 
+function showAccAlert(title, sub='', icon='✅') {
+  document.getElementById('acc-alert-icon').textContent = icon;
+  document.getElementById('acc-alert-title').textContent = title;
+  document.getElementById('acc-alert-sub').textContent = sub;
+  document.getElementById('acc-alert-modal').style.display = 'flex';
+}
+function closeAccAlert() {
+  document.getElementById('acc-alert-modal').style.display = 'none';
+}
+
 // ── 첨부파일 (BP 방식) ──
 let accFiles = [];
 function onAccFileSelect(e) {
@@ -1553,7 +1563,7 @@ async function saveVoucher(status) {
   const today=new Date();
   const kst=new Date(today.getTime()+9*3600000);
   const dateStr=kst.toISOString().slice(0,10).replace(/-/g,'');
-  const voucherId='AV-'+dateStr+'-'+String(Date.now()).slice(-4);
+  const voucherId='ACC-Voucher-'+dateStr+'-'+String(Date.now()).slice(-4);
 
   // 결재 순서 구성
   const approvers = buildApprovers();
@@ -1633,11 +1643,11 @@ async function saveVoucher(status) {
       }
     }
 
-    alert(status==='Draft'?'임시저장됐습니다.':'결재 요청이 완료됐습니다.\nVoucher ID: '+voucherId);
+    showAccAlert('결재 요청이 완료되었습니다.', 'Voucher ID: '+voucherId);
     resetForm(); await loadMyList(); switchTab('list');
   } catch(e) {
     console.error('saveVoucher error:', e);
-    alert('저장 중 오류가 발생했습니다.\n'+e.message);
+    showAccAlert('오류가 발생했습니다.', e.message, '⚠️');
   } finally {
     if(btn){btn.disabled=false; btn.textContent=status==='Draft'?'임시저장':'✔ 결재 요청';}
   }
@@ -1987,7 +1997,17 @@ window.addEventListener('load',async()=>{
   }
 });
 </script>
-<!-- 전표 상세 모달 -->
+<!-- GW 스타일 알림 모달 -->
+<div id="acc-alert-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;padding:28px 32px;max-width:380px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.18);text-align:center">
+    <div id="acc-alert-icon" style="font-size:2rem;margin-bottom:10px">✅</div>
+    <div id="acc-alert-title" style="font-size:1rem;font-weight:700;color:#1e293b;margin-bottom:6px;line-height:1.6"></div>
+    <div id="acc-alert-sub" style="font-size:.8rem;color:#64748b;margin-bottom:20px;word-break:break-all"></div>
+    <button style="background:#0078d4;color:#fff;border:none;border-radius:8px;padding:9px 32px;font-size:.88rem;font-weight:600;cursor:pointer;font-family:inherit" onclick="closeAccAlert()">확인</button>
+  </div>
+</div>
+
+</body>
 <div id="voucher-detail-modal" onclick="if(event.target===this)closeDetailModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto">
   <div style="background:#fff;border-radius:10px;max-width:760px;width:100%;position:relative;box-shadow:0 24px 60px rgba(0,0,0,.25)">
     <!-- 모달 헤더 -->
