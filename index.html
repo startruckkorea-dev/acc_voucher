@@ -26,12 +26,11 @@ body { font-family: 'Segoe UI', sans-serif; background: #f3f2f1; min-height: 100
 
 /* ── App ── */
 #app { display: none; max-width: 960px; margin: 0 auto; padding: 0 16px 24px; }
-#app-header { display: none; background: linear-gradient(135deg,#0f2744,#0078d4); }
-.header { max-width:960px; margin:0 auto; padding:16px 16px; display:flex; justify-content:space-between; align-items:flex-start; }
-.header .title { font-size: 18px; font-weight: 600; color: #fff; }
-.header .sub { font-size: 12px; color: rgba(255,255,255,.8); margin-top: 2px; }
-.header .user-info { font-size: 13px; color: rgba(255,255,255,.9); display: flex; align-items: center; gap: 12px; }
-#btn-logout { background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.4); border-radius: 4px; padding: 4px 12px; font-size: 12px; cursor: pointer; color: #fff; }
+#app-header { display: none; }
+.app-header { background:#fff; border-radius:8px; padding:18px 24px; margin-bottom:18px; display:flex; justify-content:space-between; align-items:flex-start; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+.app-title { font-size:1.1rem; font-weight:700; color:#1a1a2e; }
+.app-sub { font-size:.8rem; color:#605e5c; margin-top:2px; }
+#btn-logout { background:none; border:1px solid #d2d0ce; border-radius:4px; padding:4px 12px; font-size:12px; cursor:pointer; color:#323130; font-family:inherit; }
 
 /* ── Tabs ── */
 .tabs { display: flex; gap: 2px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -128,10 +127,9 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 .btn { padding: 8px 18px; border-radius: 4px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; transition: all .15s; }
 .btn-primary { background: #0078d4; color: #fff; }
 .btn-primary:hover { background: #005a9e; }
-.btn-outline { background: #fff; border: 1px solid #0078d4; color: #0078d4; }
-.btn-outline:hover { background: #f0f6ff; }
-.btn-default { background: #f3f2f1; border: 1px solid #d2d0ce; color: #323130; }
-.btn-default:hover { background: #edebe9; }
+.btn-row { display:flex; justify-content:flex-end; gap:8px; margin-top:20px; }
+.btn-secondary { background:#fff; border:1px solid #d2d0ce; border-radius:4px; padding:8px 24px; font-size:.85rem; cursor:pointer; font-family:inherit; }
+.btn-secondary:hover { background:#f3f2f1; }
 .btn-add { background: #f0f6ff; border: 1px solid #c7e0f4; color: #0078d4; font-size: 12px; padding: 6px 12px; }
 .btn-add:hover { background: #deecf9; }
 
@@ -228,16 +226,18 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 </div>
 
 <div id="app-header" style="display:none">
-  <div class="header">
+  <div class="app-header">
     <div>
-      <div class="title">Accounting Voucher</div>
-      <div class="sub">STK 회계 전표 시스템</div>
-      <div id="acc-contact-ap" style="font-size:11px;color:rgba(255,255,255,.7);margin-top:2px">BU Admin(AP 관련) 문의 Email: hyunju.gong@hyosung.com</div>
-      <div id="acc-contact-ar" style="font-size:11px;color:rgba(255,255,255,.7);margin-top:1px">BU Admin(AR 관련) 문의 Email: jihyun.ma@hyosung.com</div>
-      <div id="acc-contact-gl" style="font-size:11px;color:rgba(255,255,255,.7);margin-top:1px">BU Admin(GL 관련) 문의 Email: sora.kim@hyosung.com</div>
+      <div class="app-title">Accounting Voucher</div>
+      <div class="app-sub">STK 회계 전표 시스템</div>
+      <div style="font-size:11px;color:#605e5c;margin-top:4px">
+        <div id="acc-contact-ap">BU Admin(AP 관련) 문의 Email: hyunju.gong@hyosung.com</div>
+        <div id="acc-contact-ar">BU Admin(AR 관련) 문의 Email: jihyun.ma@hyosung.com</div>
+        <div id="acc-contact-gl">BU Admin(GL 관련) 문의 Email: sora.kim@hyosung.com</div>
+      </div>
     </div>
-    <div class="user-info">
-      <span id="user-name"></span>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span id="user-name" style="font-size:.8rem;color:#605e5c"></span>
       <button id="btn-logout" onclick="signOut()">로그아웃</button>
     </div>
   </div>
@@ -441,8 +441,8 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
       <div id="appr-blocks-container"></div>
 
       <div class="btn-row" style="margin-top:24px">
-        <button class="btn btn-default" onclick="resetForm()">Reset</button>
-        <button class="btn btn-primary" onclick="saveVoucher('Pending')">Submit</button>
+        <button class="btn-secondary" onclick="resetForm()">Reset</button>
+        <button class="btn-primary" onclick="saveVoucher('Pending')">Submit</button>
       </div>
     </div>
   </div>
