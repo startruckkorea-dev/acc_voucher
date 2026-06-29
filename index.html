@@ -746,21 +746,14 @@ async function loadAccMasters() {
           const _d = new Date(Math.round((r[0]-25569)*86400*1000));
           dateStr = _d.getUTCFullYear()+'-'+String(_d.getUTCMonth()+1).padStart(2,'0')+'-'+String(_d.getUTCDate()).padStart(2,'0');
         } else dateStr=r[0].toString().slice(0,10);
-        // 마지막 5개 행 로그
-        if(i >= rows.length - 5) console.log('[Exchange] row'+i+' dateStr='+dateStr+' full='+JSON.stringify(r));
+
         currencies.forEach((curr,ci)=>{
           const rate=parseFloat(r[ci+1])||0;
           if(rate) window._exchangeRates.push({date:dateStr,currency:curr,rate});
         });
       }
       console.log('[Exchange] Loaded:', window._exchangeRates.length);
-      const _allDates = [...new Set(window._exchangeRates.map(r=>r.date))].sort();
-      console.log('[Exchange] 최신 날짜들:', _allDates.slice(-5));
-      // 06-29 데이터 직접 확인
-      const _jun29 = window._exchangeRates.filter(r=>r.date==='2026-06-29');
-      console.log('[Exchange] 06-29 데이터:', _jun29.length, '건', _jun29);
-      // 마지막 행 raw 데이터 확인용
-      console.log('[Exchange] 전체 날짜 수:', _allDates.length, '마지막:', _allDates[_allDates.length-1]);
+console.log('[Exchange] Loaded:', window._exchangeRates.length);
       applyTodayExchangeRate();
     } catch(e){ console.warn('[Exchange]', e.message); }
 
@@ -776,53 +769,52 @@ function applyTodayExchangeRate() {
   const today = _kst.toISOString().slice(0,10);
 
   const sorted = [...rates].sort((a,b)=>b.date.localeCompare(a.date));
-  // 오늘 날짜 데이터가 있는지 확인
+  // 오늘 날짜 데이터 확인
   const todayRates = sorted.filter(r=>r.date===today);
   const hasToday = todayRates.length > 0;
+
+  // 오늘 데이터 없으면 가장 최신 날짜 사용
+  const latestDate = sorted[0]?.date;
+  const useRates = hasToday ? todayRates : sorted.filter(r=>r.date===latestDate);
+  const isStale = !hasToday; // 오래된 데이터 여부
 
   const banner = document.getElementById('exchange-banner');
   const exEl = document.getElementById('v-exrate');
 
-  if(!hasToday) {
-    // 오늘 데이터 없음 → 경고 배너, 환율 미입력
-    if(banner){
-      banner.style.display='block';
-      banner.innerHTML = `
-        <div style="background:#fff4e5;border:1px solid #f7c948;border-radius:4px;padding:8px 14px;margin-top:10px">
-          <span style="color:#835c00;font-weight:600;font-size:12px">⚠️ ${today} 기준 환율 정보가 없습니다.</span>
-          <span style="font-size:11px;color:#a19f9d;margin-left:8px">BU Admin에게 문의해주세요.</span>
-          <div style="font-size:12px;color:#a19f9d;margin-top:4px">
-            ${['USD','SGD','JPY','EUR','CNY'].map(c=>`<span><b>${c}</b> -</span>`).join('<span style="color:#d2d0ce;margin:0 4px">|</span>')}
-          </div>
-        </div>`;
-    }
-    return; // EUR 환율 자동 입력 안 함
-  }
-
-  // 오늘 데이터 있음 → 정상 처리
-  const useRates = todayRates;
-
-  // EUR 환율 자동 입력
-  if(exEl && !exEl.value) {
+  // EUR 환율 자동 입력 (오늘 데이터 있을 때만)
+  if(hasToday && exEl && !exEl.value) {
     const eur = useRates.find(r=>r.currency==='EUR');
     if(eur) { exEl.value=eur.rate; exEl.dispatchEvent(new Event('input')); }
   }
 
-  // 참고 환율 배너
-  if(banner){
+  if(banner) {
     const parts = ['USD','SGD','JPY','EUR','CNY'].map(cur=>{
-      const r=useRates.find(x=>x.currency===cur);
-      return r?`<span><b>${cur}</b> ${Number(r.rate).toLocaleString()}</span>`:'';
-    }).filter(Boolean).join('<span style="color:#d2d0ce;margin:0 4px">|</span>');
-    banner.style.display='block';
-    banner.innerHTML = `
-      <div style="background:#f0f6ff;border:1px solid #c7e0f4;border-radius:4px;padding:8px 14px;margin-top:10px">
-        <div style="margin-bottom:4px">
-          <span style="color:#0078d4;font-weight:600;font-size:12px">${today} 기준 참고 환율</span>
-          <span style="font-size:11px;color:#a19f9d;margin-left:8px">오늘 날짜 환율로 자동 기입 · 수정 필요 시 BU Admin 확인</span>
-        </div>
-        <div style="font-size:12px;color:#323130">${parts}</div>
-      </div>`;
+      const r = useRates.find(x=>x.currency===cur);
+      return r ? `<span><b>${cur}</b> ${Number(r.rate).toLocaleString()}</span>` : `<span><b>${cur}</b> -</span>`;
+    }).join('<span style="color:#d2d0ce;margin:0 4px">|</span>');
+
+    if(isStale) {
+      // 최신 데이터로 표시하되 경고
+      banner.style.display='block';
+      banner.innerHTML = `
+        <div style="background:#fff4e5;border:1px solid #f7c948;border-radius:4px;padding:8px 14px;margin-top:10px">
+          <div style="margin-bottom:4px">
+            <span style="color:#835c00;font-weight:600;font-size:12px">⚠️ ${today} 환율 미등록 — ${latestDate} 기준 최신 환율 표시 중</span>
+            <span style="font-size:11px;color:#a19f9d;margin-left:8px">수정 필요 시 BU Admin 확인</span>
+          </div>
+          <div style="font-size:12px;color:#605e5c">${parts}</div>
+        </div>`;
+    } else {
+      banner.style.display='block';
+      banner.innerHTML = `
+        <div style="background:#f0f6ff;border:1px solid #c7e0f4;border-radius:4px;padding:8px 14px;margin-top:10px">
+          <div style="margin-bottom:4px">
+            <span style="color:#0078d4;font-weight:600;font-size:12px">${today} 기준 참고 환율</span>
+            <span style="font-size:11px;color:#a19f9d;margin-left:8px">오늘 날짜 환율로 자동 기입 · 수정 필요 시 BU Admin 확인</span>
+          </div>
+          <div style="font-size:12px;color:#323130">${parts}</div>
+        </div>`;
+    }
   }
 }
 
