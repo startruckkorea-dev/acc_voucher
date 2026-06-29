@@ -81,9 +81,15 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 .btn-del:hover { color: #a4262c; background: #fde7e9; }
 
 /* ── Totals ── */
-.totals-bar { display: flex; justify-content: flex-end; align-items: center; gap: 20px; padding: 10px 12px; background: #f9f8f7; border-top: 1px solid #edebe9; border-radius: 0 0 4px 4px; margin-top: -1px; }
-.totals-bar .total-amt { font-size: 15px; font-weight: 700; color: #0078d4; }
-.totals-bar .total-krw { font-size: 12px; color: #605e5c; }
+.totals-bar { display: flex; justify-content: flex-end; align-items: center; gap: 12px; padding: 12px 16px; background: #f3f2f1; border-top: 2px solid #edebe9; border-radius: 0 0 4px 4px; margin-top: -1px; flex-wrap: wrap; }
+.totals-bar .total-label { font-size: 11px; color: #605e5c; font-weight: 600; letter-spacing: .3px; margin-right: 2px; }
+.totals-bar .total-main { font-size: 16px; font-weight: 700; color: #0078d4; }
+.totals-bar .total-krw { font-size: 11px; color: #605e5c; }
+.totals-dr-cr { display: flex; gap: 6px; align-items: center; }
+.totals-dr-cr .dr-block { background: #dbeafe; color: #1d4ed8; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
+.totals-dr-cr .cr-block { background: #fde8e8; color: #c0392b; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
+.totals-dr-cr .eq-block { background: #dff6dd; color: #107c10; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
+.totals-dr-cr .neq-block { background: #fde7e9; color: #a4262c; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
 .verify-ok { color: #107c10; font-weight: 700; font-size: 12px; }
 .verify-err { color: #a4262c; font-weight: 700; font-size: 12px; }
 
@@ -385,8 +391,9 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
       </div>
       <div class="totals-bar">
         <span class="total-krw" id="total-krw"></span>
-        <span class="total-amt" id="total-amt">0.00</span>
-        <span id="verify-badge" style="font-size:12px;color:#a19f9d">-</span>
+        <span class="total-label">합계</span>
+        <span class="total-main" id="total-amt">0.00</span>
+        <div class="totals-dr-cr" id="dr-cr-blocks"></div>
       </div>
 
       <div class="section-title">5. 첨부파일</div>
@@ -1182,13 +1189,38 @@ function renderLines() {
 
 function updateTotals() {
   let dr=0,cr=0;
-  // 1열(첫 번째 라인)의 currency 기준
-  const curr = lines.find(l=>l.currency)?.currency || 'EUR';
+  const curr = lines.find(l=>l.currency)?.currency || 'KRW';
   lines.forEach(l=>{ const a=parseFloat(l.amount)||0; if(l.drcr==='DR')dr+=a; if(l.drcr==='CR')cr+=a; });
   const fmt = n=>n.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
-  document.getElementById('total-amt').textContent = curr+' '+fmt(dr);
+  const fmtK = n=>n.toLocaleString('ko-KR');
+  document.getElementById('total-amt').textContent = curr+' '+fmt(dr||cr||0);
   const rate = getExchangeRate(curr);
-  document.getElementById('total-krw').textContent = (curr!=='KRW'&&rate)?'≈ KRW '+Math.round(dr*rate).toLocaleString():'';
+  document.getElementById('total-krw').textContent = (curr!=='KRW'&&rate)?'≈ KRW '+Math.round((dr||cr||0)*rate).toLocaleString('ko-KR'):'';
+  // Total 컬럼 갱신
+  if(!updateTotals._rendering) {
+    updateTotals._rendering=true;
+    const tbody=document.getElementById('lines-body');
+    if(tbody&&lines.length) renderLines();
+    updateTotals._rendering=false;
+  }
+  // DR/CR 블록 렌더
+  const blocks = document.getElementById('dr-cr-blocks');
+  if(!lines.length){
+    blocks.innerHTML = '<span style="font-size:12px;color:#a19f9d">-</span>';
+  } else if(Math.abs(dr-cr)<0.01){
+    blocks.innerHTML =
+      `<span class="dr-block">DR ${fmtK(Math.round(dr))}</span>`+
+      `<span style="color:#a19f9d;font-size:13px">=</span>`+
+      `<span class="cr-block">CR ${fmtK(Math.round(cr))}</span>`+
+      `<span class="eq-block">✔ 일치</span>`;
+  } else {
+    blocks.innerHTML =
+      `<span class="dr-block">DR ${fmtK(Math.round(dr))}</span>`+
+      `<span style="color:#a19f9d;font-size:13px">≠</span>`+
+      `<span class="cr-block">CR ${fmtK(Math.round(cr))}</span>`+
+      `<span class="neq-block">✕ 불일치</span>`;
+  }
+}
   // Total 컬럼 갱신 (환율 변경 시, 무한루프 방지)
   if(!updateTotals._rendering) {
     updateTotals._rendering=true;
@@ -1296,8 +1328,8 @@ function saveVoucher(status) {
   const purpose=document.getElementById('v-purpose').value.trim();
   if(!purpose){alert('Purpose를 입력하세요.');return;}
   if(!lines.length){alert('회계 라인을 1개 이상 추가하세요.');return;}
-  const vb=document.getElementById('verify-badge');
-  if(status==='Pending'&&!vb.classList.contains('verify-ok')){
+  const blocks = document.getElementById('dr-cr-blocks');
+  if(status==='Pending' && !blocks.querySelector('.eq-block')){
     alert('DR/CR 합계가 일치하지 않습니다.\n결재 요청을 진행할 수 없습니다.\n\n라인 항목을 확인하고 DR/CR 합계를 맞춰주세요.');
     return;
   }
