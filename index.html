@@ -27,10 +27,11 @@ body { font-family: 'Segoe UI', sans-serif; background: #f3f2f1; min-height: 100
 /* ── App ── */
 #app { display: none; max-width: 960px; margin: 0 auto; padding: 0 16px 24px; }
 #app-header { display: none; }
-.app-header { background:#fff; border-radius:8px; padding:18px 24px; margin-bottom:18px; display:flex; justify-content:space-between; align-items:flex-start; box-shadow:0 1px 4px rgba(0,0,0,.08); }
-.app-title { font-size:1.1rem; font-weight:700; color:#1a1a2e; }
-.app-sub { font-size:.8rem; color:#605e5c; margin-top:2px; }
-#btn-logout { background:none; border:1px solid #d2d0ce; border-radius:4px; padding:4px 12px; font-size:12px; cursor:pointer; color:#323130; font-family:inherit; }
+.app-header{background:#fff;border-radius:8px;padding:18px 24px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-start;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.app-title{font-size:1.1rem;font-weight:700;color:#323130}
+.app-sub{font-size:.72rem;color:#605e5c;margin-top:3px}
+.btn-logout{background:#fff;border:1px solid #d2d0ce;border-radius:4px;padding:5px 14px;font-size:.78rem;cursor:pointer;color:#323130;font-family:inherit}
+.btn-logout:hover{background:#f3f2f1}
 
 /* ── Tabs ── */
 .tabs { display: flex; gap: 2px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -236,9 +237,12 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         <div id="acc-contact-gl">BU Admin(GL 관련) 문의 Email: sora.kim@hyosung.com</div>
       </div>
     </div>
-    <div style="display:flex;align-items:center;gap:10px">
-      <span id="user-name" style="font-size:.8rem;color:#605e5c"></span>
-      <button id="btn-logout" onclick="signOut()">로그아웃</button>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span id="user-name" style="font-size:.8rem;color:#605e5c"></span>
+        <button class="btn-logout" onclick="signOut()">로그아웃</button>
+      </div>
+      <a href="https://aps.startruckkorea.com/" target="_self" title="STK 통합 결재함" style="text-decoration:none;display:inline-flex;align-items:center;gap:7px;background:#0078d4;color:#fff;border-radius:6px;padding:7px 14px;font-size:.8rem;font-weight:600;font-family:'Segoe UI',sans-serif;letter-spacing:-.2px;box-shadow:0 1px 4px rgba(0,120,212,.25);transition:background .15s" onmouseover="this.style.background='#106ebe'" onmouseout="this.style.background='#0078d4'"><span style="font-size:1rem;line-height:1">📬</span><span>돌아가기</span></a>
     </div>
   </div>
 </div>
