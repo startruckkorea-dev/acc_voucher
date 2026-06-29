@@ -21,6 +21,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #f3f2f1; min-height: 100
 .btn-login:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(0,120,212,.4)}
 .btn-login:disabled{background:#cbd5e0;cursor:not-allowed;transform:none;box-shadow:none}
 #login-err{color:#e53e3e;font-size:.78rem;margin-top:10px;display:none}
+.login-page-footer{position:fixed;bottom:0;left:0;right:0;padding:10px 24px;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:rgba(255,255,255,.55);background:rgba(0,0,0,.18)}
 
 /* ── App ── */
 #app { display: none; max-width: 960px; margin: 0 auto; padding: 24px 16px; }
@@ -190,10 +191,11 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
     <div class="login-title">Accounting Voucher</div>
     <div class="login-co">STK 회계 전표 시스템</div>
     <button class="btn-login" id="btn-login" onclick="signIn()" disabled>로딩 중...</button>
-    <div style="font-size:.72rem;color:#555;margin-top:20px">© Star Truck Korea · acc_voucher</div>
     <div id="login-err"></div>
-  <div style="font-size:11px;color:#a19f9d;margin-top:20px">© 2026 Star Truck Korea · ACC Voucher</div>
-    <div style="font-size:10px;color:#c8c6c4;margin-top:2px">This system is internally developed by Star Truck Korea IT Dept.<br>Unauthorized access is strictly prohibited.</div>
+  </div>
+  <div class="login-page-footer">
+    <span>© 2026 Star Truck Korea · ACC Voucher</span>
+    <span>This system is internally developed by Star Truck Korea IT Dept. Unauthorized access is strictly prohibited.</span>
   </div>
 </div>
 
