@@ -228,9 +228,9 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
     <div>
       <div class="title">Accounting Voucher</div>
       <div class="sub">STK 회계 전표 시스템</div>
-      <div style="font-size:11px;color:rgba(255,255,255,.7);margin-top:2px" id="acc-contact-ap"></div>
-      <div style="font-size:11px;color:rgba(255,255,255,.7);margin-top:1px" id="acc-contact-ar"></div>
-      <div style="font-size:11px;color:rgba(255,255,255,.7);margin-top:1px" id="acc-contact-gl"></div>
+      <div style="font-size:11px;color:rgba(255,255,255,.7);margin-top:2px" id="acc-contact-ap">AP 담당 문의: hyunju.gong@hyosung.com</div>
+      <div style="font-size:11px;color:rgba(255,255,255,.7);margin-top:1px" id="acc-contact-ar">AR 담당 문의: jihyun.ma@hyosung.com</div>
+      <div style="font-size:11px;color:rgba(255,255,255,.7);margin-top:1px" id="acc-contact-gl">GL 담당 문의: sora.kim@hyosung.com</div>
     </div>
     <div class="user-info">
       <span id="user-name"></span>
@@ -755,9 +755,9 @@ async function boot(account) {
     const ar = cfgVal(cfg,'ACC-Voucher_CONTACT_AR');
     const gl = cfgVal(cfg,'ACC-Voucher_CONTACT_GL');
     const el = id=>document.getElementById(id);
-    if(ap.email) el('acc-contact-ap').textContent = 'AP 담당 문의: '+ap.name+' ('+ap.email+')';
-    if(ar.email) el('acc-contact-ar').textContent = 'AR 담당 문의: '+ar.name+' ('+ar.email+')';
-    if(gl.email) el('acc-contact-gl').textContent = 'GL 담당 문의: '+gl.name+' ('+gl.email+')';
+    if(ap.email) el('acc-contact-ap').textContent = 'BU Admin(AP 관련) 문의 Email: '+ap.name+' ('+ap.email+')';
+    if(ar.email) el('acc-contact-ar').textContent = 'BU Admin(AR 관련) 문의 Email: '+ar.name+' ('+ar.email+')';
+    if(gl.email) el('acc-contact-gl').textContent = 'BU Admin(GL 관련) 문의 Email: '+gl.name+' ('+gl.email+')';
     renderApproval(); // config 로드 후 재렌더
   }).catch(()=>{});
 }
