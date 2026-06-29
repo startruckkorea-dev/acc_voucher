@@ -1347,7 +1347,7 @@ async function saveVoucher(status) {
 
   // 결재 순서 구성
   const approvers = buildApprovers();
-  const btn = event?.target || document.querySelector('[onclick*="saveVoucher"]');
+  const btn = document.querySelector(`button[onclick*="saveVoucher('${status}')"]`);
 
   try {
     if(btn){btn.disabled=true; btn.textContent='저장 중...';}
@@ -1407,24 +1407,48 @@ async function saveVoucher(status) {
 }
 
 function buildApprovers() {
-  // 결재라인 DOM에서 이메일/이름/역할 수집
+  const type = document.getElementById('v-type').value;
+  const rules = APPROVAL_RULES[type] || {};
+  const handler = ACC_HANDLER[type] || '';
+
+  // 고정 결재자 이메일 상수 (system_config 동일)
+  const FIXED = {
+    CEO:  {email:'antonio.randazzo@daimler.com', name:'Antonio Randazzo'},
+    RD:   {email:'keuntae.dong@hyosung.com',     name:'Keuntae Dong'},
+    CTRL: {email:'jungho.yoo@hyosung.com',       name:'Jungho Yoo'},
+    AMGR: {email:'gina.shin@hyosung.com',         name:'Gina Shin'},
+    CFO:  {email:'martin.schindele@hyosung.com', name:'Martin Schindele'},
+  };
+
+  // ACC_HANDLER 이름 → 이메일 매핑
+  const handlerEmailMap = {
+    '공현주': 'hyunju.gong@hyosung.com',
+    '김소라': 'sora.kim@hyosung.com',
+    '마지현': 'jihyun.ma@hyosung.com',
+  };
+
   const ap = [];
-  const slots = [
-    {role:'TL',       emailId:'ap-tl-email',   nameId:'ap-tl-name'},
-    {role:'MC',       emailId:'ap-mc-email',   nameId:'ap-mc-name'},
-    {role:'CEO',      emailId:'ap-ceo-email',  nameId:'ap-ceo-name'},
-    {role:'RD',       emailId:'ap-rd-email',   nameId:'ap-rd-name'},
-    {role:'Controller',    emailId:'ap-ctrl-email', nameId:'ap-ctrl-name'},
-    {role:'Accounting Mgr',emailId:'ap-amgr-email', nameId:'ap-amgr-name'},
-    {role:'CFO',      emailId:'ap-cfo-email',  nameId:'ap-cfo-name'},
-    {role:'Accounting',    emailId:'ap-acc-email',  nameId:'ap-acc-name'},
-  ];
-  slots.forEach(s=>{
-    const emailEl=document.getElementById(s.emailId);
-    const nameEl =document.getElementById(s.nameId);
-    if(emailEl?.value) ap.push({role:s.role, email:emailEl.value, name:nameEl?.textContent||''});
-  });
-  return ap;
+  const na = (r) => !r || r === '-';  // 해당없음 판단
+
+  // Business 라인
+  // TL: 동적 선택 — 현재는 requester 본인 팀장으로 처리 (추후 드롭다운)
+  if(!na(rules.TL)) ap.push({role:'TL', email:'', name:'담당자 TBD', order:1});
+  if(!na(rules.MC)) ap.push({role:'MC', email:'', name:'담당자 TBD', order:2});
+  if(!na(rules.CEO)) ap.push({role:'CEO', email:FIXED.CEO.email, name:FIXED.CEO.name, order:3});
+  if(!na(rules.RD))  ap.push({role:'RD',  email:FIXED.RD.email,  name:FIXED.RD.name,  order:4});
+
+  // F&C 라인
+  if(rules.Controller !== '-') ap.push({role:'Controller', email:FIXED.CTRL.email, name:FIXED.CTRL.name, order:5});
+  ap.push({role:'Accounting Mgr', email:FIXED.AMGR.email, name:FIXED.AMGR.name, order:6});
+  if(!na(rules.CFO)) ap.push({role:'CFO', email:FIXED.CFO.email, name:FIXED.CFO.name, order:7});
+
+  // Accounting 최종
+  if(handler && handler !== '-') {
+    ap.push({role:'Accounting', email:handlerEmailMap[handler]||'', name:handler, order:8});
+  }
+
+  // order 재정렬
+  return ap.map((a,i)=>({...a, order:i+1}));
 }
 
 
