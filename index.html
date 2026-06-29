@@ -1608,14 +1608,90 @@ function renderList(){
 }
 
 async function openVoucherSP(spId){
-  const v=voucherListCache.find(x=>x._spId===spId);if(!v)return;
-  document.getElementById('v-type').value=v.VoucherType||'';
-  document.getElementById('v-bp-code').value=v.BPCode||'';
-  document.getElementById('v-bp-name').value=v.BPName||'';
-  document.getElementById('v-purpose').value=v.Purpose||'';
-  document.getElementById('voucher-id-badge').textContent=v.Title||'';
-  lines=JSON.parse(v.LinesJSON||'[]');
-  onTypeChange();renderLines();switchTab('new');
+  const v = voucherListCache.find(x=>x._spId===spId);
+  if(!v) return;
+  const lines_data = JSON.parse(v.LinesJSON||'[]');
+  const fmtK = n=>Math.round(n||0).toLocaleString('ko-KR');
+  const stMap={Draft:'s-Draft',Pending:'s-Pending',Approved:'s-Approved',Rejected:'s-Rejected'};
+  const stLabel={Draft:'임시저장',Pending:'결재 중',Approved:'승인완료',Rejected:'반려'};
+
+  // 회계 라인 테이블
+  const lineRows = lines_data.map((l,i)=>`
+    <tr style="border-bottom:1px solid #f3f2f1">
+      <td style="padding:7px 8px;color:#605e5c;font-size:12px">${i+1}</td>
+      <td style="padding:7px 8px;font-weight:600;color:${l.drcr==='DR'?'#0078d4':'#c0392b'}">${l.drcr||'-'}</td>
+      <td style="padding:7px 8px;font-size:12px">${l.gl||'-'}</td>
+      <td style="padding:7px 8px;font-size:12px">${l.glName||'-'}</td>
+      <td style="padding:7px 8px;font-size:12px">${l.cctrName||l.cctr||'-'}</td>
+      <td style="padding:7px 8px;font-size:12px">${l.currency||'-'}</td>
+      <td style="padding:7px 8px;text-align:right;font-weight:600">${(parseFloat(l.amount)||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+    </tr>`).join('');
+
+  const row = (label, value) => `
+    <tr>
+      <td style="padding:9px 12px;color:#605e5c;font-size:12px;font-weight:600;width:140px;white-space:nowrap">${label}</td>
+      <td style="padding:9px 12px;font-size:13px;color:#323130">${value||'-'}</td>
+    </tr>`;
+
+  const submittedDate = v.SubmittedDate ? new Date(v.SubmittedDate).toLocaleString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '-';
+
+  document.getElementById('voucher-detail-content').innerHTML = `
+    <!-- 기본 정보 -->
+    <div style="background:#f0f6ff;border-left:4px solid #0078d4;border-radius:0 4px 4px 0;padding:8px 14px;margin-bottom:16px;font-size:13px;font-weight:700;color:#0078d4">기본 정보</div>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:20px;background:#faf9f8;border-radius:6px;overflow:hidden">
+      ${row('Voucher ID', `<span style="font-family:monospace;font-weight:700;color:#323130">${v.Title||'-'}</span>`)}
+      ${row('Voucher Type', `<span class="type-badge t-${v.VoucherType}">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span>`)}
+      ${row('상태', `<span class="type-badge ${stMap[v.Status]||''}">${stLabel[v.Status]||v.Status||'-'}</span>`)}
+      ${row('신청자', (v.RequesterName||'')+(v.RequesterEmail?` (${v.RequesterEmail})`:'-'))}
+      ${row('Cost Center', v.RequesterCCTR||'-')}
+      ${row('신청일시', submittedDate)}
+    </table>
+
+    <!-- BP 정보 -->
+    <div style="background:#f0f6ff;border-left:4px solid #0078d4;border-radius:0 4px 4px 0;padding:8px 14px;margin-bottom:16px;font-size:13px;font-weight:700;color:#0078d4">BP 정보</div>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:20px;background:#faf9f8;border-radius:6px;overflow:hidden">
+      ${row('BP Code', v.BPCode||'-')}
+      ${row('BP Name', v.BPName||'-')}
+      ${row('BP Category', v.BPCategory||'-')}
+    </table>
+
+    <!-- Purpose -->
+    <div style="background:#f0f6ff;border-left:4px solid #0078d4;border-radius:0 4px 4px 0;padding:8px 14px;margin-bottom:16px;font-size:13px;font-weight:700;color:#0078d4">Purpose / Description</div>
+    <div style="background:#faf9f8;border-radius:6px;padding:14px 16px;font-size:13px;color:#323130;white-space:pre-wrap;margin-bottom:20px;line-height:1.6">${v.Purpose||'-'}</div>
+
+    <!-- 회계 라인 -->
+    <div style="background:#f0f6ff;border-left:4px solid #0078d4;border-radius:0 4px 4px 0;padding:8px 14px;margin-bottom:16px;font-size:13px;font-weight:700;color:#0078d4">회계 정보 (Account Information)</div>
+    <div style="overflow-x:auto;margin-bottom:8px">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="background:#f3f2f1">
+            <th style="padding:8px;text-align:left;color:#605e5c;font-weight:600">No</th>
+            <th style="padding:8px;text-align:left;color:#605e5c;font-weight:600">DR/CR</th>
+            <th style="padding:8px;text-align:left;color:#605e5c;font-weight:600">GL</th>
+            <th style="padding:8px;text-align:left;color:#605e5c;font-weight:600">계정명</th>
+            <th style="padding:8px;text-align:left;color:#605e5c;font-weight:600">Cost Center</th>
+            <th style="padding:8px;text-align:left;color:#605e5c;font-weight:600">CCY</th>
+            <th style="padding:8px;text-align:right;color:#605e5c;font-weight:600">Amount</th>
+          </tr>
+        </thead>
+        <tbody>${lineRows||'<tr><td colspan="7" style="padding:12px;text-align:center;color:#a19f9d">라인 없음</td></tr>'}</tbody>
+      </table>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;padding:10px 8px;background:#f3f2f1;border-radius:0 0 6px 6px;margin-bottom:20px">
+      <span style="font-size:12px;color:#605e5c">DR Total(KRW)</span>
+      <span style="font-weight:700;color:#0078d4">${fmtK(v.TotalDR_KRW)}</span>
+      <span style="font-size:12px;color:#a19f9d">|</span>
+      <span style="font-size:12px;color:#605e5c">CR Total(KRW)</span>
+      <span style="font-weight:700;color:#c0392b">${fmtK(v.TotalCR_KRW)}</span>
+    </div>
+  `;
+
+  const modal = document.getElementById('voucher-detail-modal');
+  modal.style.display = 'flex';
+}
+
+function closeDetailModal(){
+  document.getElementById('voucher-detail-modal').style.display = 'none';
 }
 
 // ── Init ──
@@ -1640,5 +1716,18 @@ window.addEventListener('load',async()=>{
   }
 });
 </script>
+<!-- 전표 상세 모달 -->
+<div id="voucher-detail-modal" onclick="if(event.target===this)closeDetailModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto">
+  <div style="background:#fff;border-radius:10px;max-width:760px;width:100%;position:relative;box-shadow:0 24px 60px rgba(0,0,0,.25)">
+    <!-- 모달 헤더 -->
+    <div style="background:linear-gradient(135deg,#0078d4,#005a9e);border-radius:10px 10px 0 0;padding:18px 24px;display:flex;align-items:center;justify-content:space-between">
+      <span style="color:#fff;font-size:1rem;font-weight:700">전표 상세 내용</span>
+      <button onclick="closeDetailModal()" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:50%;width:28px;height:28px;font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center">×</button>
+    </div>
+    <!-- 모달 본문 -->
+    <div id="voucher-detail-content" style="padding:24px 28px;max-height:75vh;overflow-y:auto"></div>
+  </div>
+</div>
+
 </body>
 </html>
