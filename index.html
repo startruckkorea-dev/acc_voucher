@@ -581,15 +581,7 @@ const GL_LIST = [
   {code:'210430',name:'Advance Received : Others (Customer refund)'},
 ];
 let COST_CENTERS = []
-const PROFIT_CENTERS = [
-  {code:'2100',name:'TRUCKS NV'},{code:'2420',name:'UNIMOG NV'},
-  {code:'7130',name:'PARTS WSL BUS'},{code:'7140',name:'PARTS WSL UNIMOG'},
-  {code:'7160',name:'PARTS CV OTHERS'},{code:'7200',name:'PARTS WSL CV'},
-  {code:'7210',name:'PARTS WSL TRUCKS'},{code:'7240',name:'PARTS CV OTHERS'},
-  {code:'7250',name:'PARTS UNIMOG'},{code:'7260',name:'BUS'},
-  {code:'7270',name:'PARTS TRUCKS (EX-BRA'},{code:'7280',name:'PARTS REMAN'},
-  {code:'8210',name:'SERVICE TRUCKS EX WO'}
-];
+let PROFIT_CENTERS = [];
 const APPROVAL_RULES = {
   AP:    {TL:'< 1,000,000',MC:'< 20,000,000',CEO:'>= 20,000,000',RD:'>= 20,000,000',CFO:'>= 1,000,000'},
   AP_IMS:{TL:'<= 1,000,000',MC:'<= 20,000,000',CEO:'> 50,000,000',RD:'> 50,000,000',CFO:'<= 50,000,000'},
@@ -714,14 +706,20 @@ async function loadAccMasters() {
         if(ccCode && /^\d{8}$/.test(ccCode) && ccCode.startsWith('47')) {
           if(!newCC.find(c=>c.code===ccCode)) newCC.push({code:ccCode, name:ccName});
         }
-        // PC/Sub_PC: PROFIT_CENTERS는 하드코딩, 동적 로딩 비활성화
-        // Sub_PC만 동적 로딩 (K열=index9, L열=index10 - XLSX.js 빈열 스킵)
+        // PC: K열(index9), L열(index10) - XLSX.js 빈A열 스킵
+        // 엑셀 row5~18(index4~17) = PC, row28~34(index27~33) = Sub_PC
         const pcCode=(r[9]!=null?r[9]:'').toString().trim();
         const pcName=(r[10]||'').toString().trim();
-        // Sub_PC: _ 포함 또는 NA
-        if(pcCode==='NA' && !newSubPC.find(s=>s.code==='NA')) newSubPC.push({code:'NA',name:'NA'});
-        if(pcCode && /^\d{4}$/.test(pcCode) && pcName.includes('_')) {
-          if(!newSubPC.find(s=>s.code===pcCode)) newSubPC.push({code:pcCode, name:pcName});
+        if(pcCode && pcName && pcName!=='WSL DUMMY' && pcCode!=='DUMMY' && pcCode!=='Distribution Rule') {
+          if(i>=4 && i<=17) {
+            // PC 영역: 숫자 코드만
+            if(/^\d+$/.test(pcCode) && !newPC.find(p=>p.code===pcCode))
+              newPC.push({code:pcCode, name:pcName});
+          } else if(i>=27 && i<=33) {
+            // Sub_PC 영역
+            if(!newSubPC.find(s=>s.code===pcCode))
+              newSubPC.push({code:pcCode, name:pcName});
+          }
         };
       }
 
