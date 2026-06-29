@@ -731,7 +731,7 @@ async function loadAccMasters() {
     // ── Exchange Rate (acc_voucher_exchange.xlsx)
     try {
       const wb = await fetchXlsx(EXCHANGE_FILE_NAME);
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, cellDates:true});
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, cellDates:true, defval:null});
       const hRow=rows[0]; // [None, 'CNY', 'EUR', 'JPY', 'SGD', 'USD']
       const currencies=hRow.slice(1).map(c=>(c||'').toString().trim()).filter(Boolean);
       window._exchangeRates=[];
