@@ -767,9 +767,9 @@ async function boot(account) {
     const ar = cfgVal(cfg,'ACC-Voucher_CONTACT_AR');
     const gl = cfgVal(cfg,'ACC-Voucher_CONTACT_GL');
     const el = id=>document.getElementById(id);
-    if(ap.email) el('acc-contact-ap').textContent = 'BU Admin(AP 관련) 문의 Email: '+ap.name+' ('+ap.email+')';
-    if(ar.email) el('acc-contact-ar').textContent = 'BU Admin(AR 관련) 문의 Email: '+ar.name+' ('+ar.email+')';
-    if(gl.email) el('acc-contact-gl').textContent = 'BU Admin(GL 관련) 문의 Email: '+gl.name+' ('+gl.email+')';
+    if(ap.email) el('acc-contact-ap').textContent = 'BU Admin(AP 관련) 문의 Email: '+ap.email;
+    if(ar.email) el('acc-contact-ar').textContent = 'BU Admin(AR 관련) 문의 Email: '+ar.email;
+    if(gl.email) el('acc-contact-gl').textContent = 'BU Admin(GL 관련) 문의 Email: '+gl.email;
     renderApproval(); // config 로드 후 재렌더
   }).catch(()=>{});
 }
