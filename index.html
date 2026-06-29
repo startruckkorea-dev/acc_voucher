@@ -585,6 +585,8 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 // ── Constants ──
 const CLIENT_ID = '432976c2-b43a-492e-8213-ece505fa1f51';
 const TENANT_ID = '19cab1f5-21f4-44df-8ac6-96d6ca595203';
+const LIST_REQUESTS  = '060b5c19-b1ed-40a3-9dbd-fae9a6648a57';
+const LIST_APPROVALS = 'bf0412d9-6556-46d9-a165-149461a4f286';
 const SITE_PATH_DB  = 'startruckkorea.sharepoint.com:/sites/STK-DB:';
 const SITE_PATH_NAS = 'startruckkorea.sharepoint.com:/sites/STK-NAS:';
 const GRAPH  = 'https://graph.microsoft.com/v1.0';
@@ -1082,7 +1084,7 @@ function switchTab(tab) {
     const b = document.getElementById('tab-'+t+'-btn');
     if(b) b.classList.toggle('active', t===tab);
   });
-  if(tab==='list') renderList();
+  if(tab==='list') loadMyList();
 }
 
 // ── Form ──
@@ -1315,7 +1317,7 @@ function selectGL(code){
 }
 
 // ── Save / Reset ──
-function saveVoucher(status) {
+async function saveVoucher(status) {
   const type=document.getElementById('v-type').value;
   if(!type){alert('Voucher Type을 선택하세요.');return;}
   const purpose=document.getElementById('v-purpose').value.trim();
@@ -1326,16 +1328,103 @@ function saveVoucher(status) {
     alert('DR/CR 합계가 일치하지 않습니다.\n결재 요청을 진행할 수 없습니다.\n\n라인 항목을 확인하고 DR/CR 합계를 맞춰주세요.');
     return;
   }
-  const v={id:'VCH-'+Date.now(),type,date:document.getElementById('v-date').value,
-    invDate:document.getElementById('v-inv-date').value,
-    requester:document.getElementById('v-requester').value,
-    bpCode:document.getElementById('v-bp-code').value,
-    bpName:document.getElementById('v-bp-name').value,
-    purpose,lines:JSON.parse(JSON.stringify(lines)),status,createdAt:new Date().toISOString()};
-  voucherStore.unshift(v);
-  localStorage.setItem('stk_acc_vouchers',JSON.stringify(voucherStore));
-  alert(status==='Draft'?'임시저장됐습니다.':'결재 요청이 완료됐습니다.');
-  resetForm(); renderList(); switchTab('list');
+
+  // KRW 환산 합계 계산
+  let drKrw=0, crKrw=0;
+  lines.forEach(l=>{
+    const a=parseFloat(l.amount)||0;
+    const rate=l.currency==='KRW'?1:(getExchangeRate(l.currency)||0);
+    const krw=l.currency==='KRW'?a:Math.round(a*rate);
+    if(l.drcr==='DR') drKrw+=krw;
+    if(l.drcr==='CR') crKrw+=krw;
+  });
+
+  // Voucher ID 생성: AV-YYYYMMDD-XXX
+  const today=new Date();
+  const kst=new Date(today.getTime()+9*3600000);
+  const dateStr=kst.toISOString().slice(0,10).replace(/-/g,'');
+  const voucherId='AV-'+dateStr+'-'+String(Date.now()).slice(-4);
+
+  // 결재 순서 구성
+  const approvers = buildApprovers();
+  const btn = event?.target || document.querySelector('[onclick*="saveVoucher"]');
+
+  try {
+    if(btn){btn.disabled=true; btn.textContent='저장 중...';}
+    if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
+
+    // 1. Requests 목록에 전표 저장
+    const reqBody = {
+      fields: {
+        Title: voucherId,
+        VoucherType: type,
+        Status: status,
+        RequesterName: user?.name||'',
+        RequesterEmail: user?.username||'',
+        RequesterCCTR: document.getElementById('v-cctr').value||'',
+        BPCode: document.getElementById('v-bp-code').value||'',
+        BPName: document.getElementById('v-bp-name').value||'',
+        BPCategory: document.getElementById('v-bp-cat').value||'',
+        Purpose: purpose,
+        LinesJSON: JSON.stringify(lines),
+        TotalDR_KRW: drKrw,
+        TotalCR_KRW: crKrw,
+        SubmittedDate: status==='Pending'?new Date().toISOString():null,
+        CurrentStep: status==='Pending'?1:0,
+        TotalSteps: status==='Pending'?approvers.length:0
+      }
+    };
+    const reqRes = await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items`, 'POST', reqBody);
+    const requestId = reqRes.id;
+
+    // 2. Pending이면 Approvals에 결재자 행 INSERT
+    if(status==='Pending') {
+      for(let i=0;i<approvers.length;i++){
+        const ap=approvers[i];
+        await api(`/sites/${siteId}/lists/${LIST_APPROVALS}/items`, 'POST', {
+          fields: {
+            Title: voucherId+'_'+(i+1),
+            RequestID: parseInt(requestId),
+            VoucherID: voucherId,
+            ApproverEmail: ap.email,
+            ApproverName: ap.name,
+            ApproverRole: ap.role,
+            ApprovalOrder: i+1,
+            Status: 'Pending'
+          }
+        });
+      }
+    }
+
+    alert(status==='Draft'?'임시저장됐습니다.':'결재 요청이 완료됐습니다.\nVoucher ID: '+voucherId);
+    resetForm(); await loadMyList(); switchTab('list');
+  } catch(e) {
+    console.error('saveVoucher error:', e);
+    alert('저장 중 오류가 발생했습니다.\n'+e.message);
+  } finally {
+    if(btn){btn.disabled=false; btn.textContent=status==='Draft'?'임시저장':'✔ 결재 요청';}
+  }
+}
+
+function buildApprovers() {
+  // 결재라인 DOM에서 이메일/이름/역할 수집
+  const ap = [];
+  const slots = [
+    {role:'TL',       emailId:'ap-tl-email',   nameId:'ap-tl-name'},
+    {role:'MC',       emailId:'ap-mc-email',   nameId:'ap-mc-name'},
+    {role:'CEO',      emailId:'ap-ceo-email',  nameId:'ap-ceo-name'},
+    {role:'RD',       emailId:'ap-rd-email',   nameId:'ap-rd-name'},
+    {role:'Controller',    emailId:'ap-ctrl-email', nameId:'ap-ctrl-name'},
+    {role:'Accounting Mgr',emailId:'ap-amgr-email', nameId:'ap-amgr-name'},
+    {role:'CFO',      emailId:'ap-cfo-email',  nameId:'ap-cfo-name'},
+    {role:'Accounting',    emailId:'ap-acc-email',  nameId:'ap-acc-name'},
+  ];
+  slots.forEach(s=>{
+    const emailEl=document.getElementById(s.emailId);
+    const nameEl =document.getElementById(s.nameId);
+    if(emailEl?.value) ap.push({role:s.role, email:emailEl.value, name:nameEl?.textContent||''});
+  });
+  return ap;
 }
 
 
@@ -1468,46 +1557,64 @@ function resetForm(){
 
 // ── List ──
 const TYPE_LABEL={AP:'AP',AP_IMS:'AP (IMS)',AP_CR:'AP (CR)',AR:'AR',GL:'GL',FA:'FA',ADV:'ADV',SET:'SET'};
+let voucherListCache = []; // SharePoint에서 로드한 내 전표 캐시
+
+async function loadMyList() {
+  if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
+  const email = user?.username||'';
+  const url = `/sites/${siteId}/lists/${LIST_REQUESTS}/items?$expand=fields`+
+    `&$filter=fields/RequesterEmail eq '${email}'`+
+    `&$orderby=fields/SubmittedDate desc&$top=100`;
+  try {
+    const res = await api(url);
+    voucherListCache = res.value.map(item=>({
+      _spId: item.id,
+      ...item.fields
+    }));
+  } catch(e) {
+    console.error('loadMyList error:', e);
+    voucherListCache = [];
+  }
+  renderList();
+}
+
 function renderList(){
   const ft=document.getElementById('f-type')?.value||'';
   const fs=document.getElementById('f-status')?.value||'';
   const fk=(document.getElementById('f-kw')?.value||'').toLowerCase();
-  const list=voucherStore.filter(v=>{
-    if(ft&&v.type!==ft)return false;
-    if(fs&&v.status!==fs)return false;
-    if(fk&&!v.purpose?.toLowerCase().includes(fk)&&!v.bpName?.toLowerCase().includes(fk))return false;
+  const list=voucherListCache.filter(v=>{
+    if(ft&&v.VoucherType!==ft)return false;
+    if(fs&&v.Status!==fs)return false;
+    if(fk&&!v.Purpose?.toLowerCase().includes(fk)&&!v.BPName?.toLowerCase().includes(fk)&&!v.Title?.toLowerCase().includes(fk))return false;
     return true;
   });
-  const getAmt=v=>{let t=0,c='EUR';v.lines?.forEach(l=>{if(l.drcr==='DR'){t+=parseFloat(l.amount)||0;c=l.currency||c;}});return{t,c};};
-  const stMap={Draft:'s-Draft',Pending:'s-Pending',Approved:'s-Approved'};
-  const stLabel={Draft:'임시저장',Pending:'결재 중',Approved:'승인완료'};
+  const stMap={Draft:'s-Draft',Pending:'s-Pending',Approved:'s-Approved',Rejected:'s-Rejected'};
+  const stLabel={Draft:'임시저장',Pending:'결재 중',Approved:'승인완료',Rejected:'반려'};
   const body=document.getElementById('list-body');
   if(!list.length){
-    body.innerHTML=`<tr><td colspan="7" class="list-empty">${voucherStore.length?'검색 결과가 없습니다.':'작성된 바우처가 없습니다.'}</td></tr>`;
+    body.innerHTML=`<tr><td colspan="7" class="list-empty">${voucherListCache.length?'검색 결과가 없습니다.':'작성된 바우처가 없습니다.'}</td></tr>`;
     return;
   }
-  const fmt=n=>n.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
-  body.innerHTML=list.map(v=>{
-    const {t,c}=getAmt(v);
-    return`<tr onclick="openVoucher('${v.id}')">
-      <td>${v.date||'-'}</td>
-      <td><span class="type-badge t-${v.type}">${TYPE_LABEL[v.type]||v.type}</span></td>
-      <td style="font-size:12px;color:#605e5c">${v.bpName||'-'}</td>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.purpose||'-'}</td>
-      <td style="text-align:right;font-weight:700">${fmt(t)}</td>
-      <td style="color:#605e5c;font-size:12px">${c}</td>
-      <td><span class="type-badge ${stMap[v.status]||''}">${stLabel[v.status]||v.status}</span></td>
-    </tr>`;}).join('');
+  const fmtK=n=>Math.round(n||0).toLocaleString('ko-KR');
+  body.innerHTML=list.map(v=>`<tr onclick="openVoucherSP('${v._spId}')">
+    <td style="font-size:12px;color:#605e5c">${v.Title||'-'}</td>
+    <td><span class="type-badge t-${v.VoucherType}">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span></td>
+    <td style="font-size:12px;color:#605e5c">${v.BPName||'-'}</td>
+    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.Purpose||'-'}</td>
+    <td style="text-align:right;font-weight:700">DR ${fmtK(v.TotalDR_KRW)}</td>
+    <td style="text-align:right;font-weight:700;color:#c0392b">CR ${fmtK(v.TotalCR_KRW)}</td>
+    <td><span class="type-badge ${stMap[v.Status]||''}">${stLabel[v.Status]||v.Status}</span></td>
+  </tr>`).join('');
 }
-function openVoucher(id){
-  const v=voucherStore.find(x=>x.id===id);if(!v)return;
-  document.getElementById('v-type').value=v.type;
-  document.getElementById('v-inv-date').value=v.invDate||'';
-  document.getElementById('v-bp-code').value=v.bpCode||'';
-  document.getElementById('v-bp-name').value=v.bpName||'';
-  document.getElementById('v-purpose').value=v.purpose||'';
-  document.getElementById('voucher-id-badge').textContent=v.id;
-  lines=JSON.parse(JSON.stringify(v.lines||[]));
+
+async function openVoucherSP(spId){
+  const v=voucherListCache.find(x=>x._spId===spId);if(!v)return;
+  document.getElementById('v-type').value=v.VoucherType||'';
+  document.getElementById('v-bp-code').value=v.BPCode||'';
+  document.getElementById('v-bp-name').value=v.BPName||'';
+  document.getElementById('v-purpose').value=v.Purpose||'';
+  document.getElementById('voucher-id-badge').textContent=v.Title||'';
+  lines=JSON.parse(v.LinesJSON||'[]');
   onTypeChange();renderLines();switchTab('new');
 }
 
