@@ -1844,22 +1844,21 @@ async function loadMyList() {
   if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
   const email = user?.username||'';
   const url = `${GRAPH}/sites/${siteId}/lists/${LIST_REQUESTS}/items?$expand=fields`+
-    `&$filter=fields/RequesterEmail eq '${email}'`+
-    `&$orderby=fields/SubmittedDate desc&$top=100`;
+    `&$filter=fields/RequesterEmail eq '${email}'&$top=500`;
   try {
     const t = await token();
     const res = await fetch(url, {
       headers: {
         Authorization: 'Bearer '+t,
+        'Content-Type': 'application/json',
         Prefer: 'HonorNonIndexedQueriesWarningMayFailRandomly'
       }
     });
-    if(!res.ok) throw new Error((await res.json()).error?.message||res.status);
+    if(!res.ok){const err=await res.json();throw new Error(err.error?.message||res.status);}
     const data = await res.json();
-    voucherListCache = data.value.map(item=>({
-      _spId: item.id,
-      ...item.fields
-    }));
+    voucherListCache = data.value
+      .map(item=>({_spId:item.id,...item.fields}))
+      .sort((a,b)=>new Date(b.SubmittedDate||0)-new Date(a.SubmittedDate||0));
   } catch(e) {
     console.error('loadMyList error:', e);
     voucherListCache = [];
