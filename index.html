@@ -466,14 +466,22 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 140px;gap:14px">
+      <div>
+        <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">LINE DESCRIPTION</div>
+        <input type="text" id="lm-linedesc" placeholder="설명을 입력하세요" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px;box-sizing:border-box">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 120px 120px;gap:12px;align-items:end">
         <div>
-          <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">LINE DESCRIPTION</div>
-          <input type="text" id="lm-linedesc" placeholder="설명을 입력하세요" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px;box-sizing:border-box">
+          <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">UNIT PRICE</div>
+          <input type="number" id="lm-unitprice" step="0.01" placeholder="0.00" oninput="calcLmAmount()" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px;text-align:right;box-sizing:border-box">
         </div>
         <div>
-          <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">AMOUNT</div>
-          <input type="number" id="lm-amount" step="0.01" placeholder="0.00" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px;text-align:right;box-sizing:border-box">
+          <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">QTY</div>
+          <input type="number" id="lm-qty" step="1" value="1" min="1" oninput="calcLmAmount()" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px;text-align:right;box-sizing:border-box">
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">AMOUNT <span style="color:#a19f9d;font-weight:400">(= Price × Qty)</span></div>
+          <input type="number" id="lm-amount" step="0.01" placeholder="0.00" readonly style="width:100%;padding:7px 10px;border:1px solid #edebe9;border-radius:4px;font-size:13px;text-align:right;box-sizing:border-box;background:#faf9f8;font-weight:600">
         </div>
       </div>
 
@@ -1078,7 +1086,7 @@ function renderApproval() {
 
 // ── Account Lines ──
 function addLine() {
-  lines.push({drcr:'',gl:'',glName:'',cctr:'',cctrName:'',pc:'',pcName:'',subpc:'',subpcName:'',lineDesc:'',currency:'EUR',amount:''});
+  lines.push({drcr:'',gl:'',glName:'',cctr:'',cctrName:'',pc:'',pcName:'',subpc:'',subpcName:'',lineDesc:'',currency:'EUR',unitPrice:'',qty:1,amount:0});
   renderLines();
 }
 function deleteLine(i) { lines.splice(i,1); renderLines(); }
@@ -1289,9 +1297,17 @@ function openLineModal(i) {
   document.getElementById('lm-subpcname').textContent = l.subpcName || '';
   // Line Desc / Amount
   document.getElementById('lm-linedesc').value = l.lineDesc || '';
+  document.getElementById('lm-unitprice').value = l.unitPrice || '';
+  document.getElementById('lm-qty').value = l.qty || 1;
   document.getElementById('lm-amount').value = l.amount || '';
 
   document.getElementById('line-modal').classList.add('open');
+}
+
+function calcLmAmount() {
+  const price = parseFloat(document.getElementById('lm-unitprice').value) || 0;
+  const qty   = parseFloat(document.getElementById('lm-qty').value) || 1;
+  document.getElementById('lm-amount').value = (price * qty).toFixed(2);
 }
 
 function closeLineModal() {
@@ -1315,8 +1331,10 @@ function saveLineModal() {
   lines[i].pcName   = PROFIT_CENTERS.find(p=>p.code===pcCode)?.name || '';
   lines[i].subpc    = subCode;
   lines[i].subpcName= getSubPCs().find(s=>s.code===subCode)?.name || '';
-  lines[i].lineDesc = document.getElementById('lm-linedesc').value;
-  lines[i].amount   = parseFloat(document.getElementById('lm-amount').value) || 0;
+  lines[i].lineDesc  = document.getElementById('lm-linedesc').value;
+  lines[i].unitPrice = parseFloat(document.getElementById('lm-unitprice').value) || 0;
+  lines[i].qty       = parseFloat(document.getElementById('lm-qty').value) || 1;
+  lines[i].amount    = parseFloat(document.getElementById('lm-amount').value) || 0;
   closeLineModal();
   renderLines();
 }
