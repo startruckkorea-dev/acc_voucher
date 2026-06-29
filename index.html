@@ -587,8 +587,8 @@ const PROFIT_CENTERS = [
   {code:'7160',name:'PARTS CV OTHERS'},{code:'7200',name:'PARTS WSL CV'},
   {code:'7210',name:'PARTS WSL TRUCKS'},{code:'7240',name:'PARTS CV OTHERS'},
   {code:'7250',name:'PARTS UNIMOG'},{code:'7260',name:'BUS'},
-  {code:'7270',name:'PARTS TRUCKS (EX-BRA)'},{code:'7280',name:'PARTS REMAN'},
-  {code:'8210',name:'SERVICE TRUCKS EX WO'},
+  {code:'7270',name:'PARTS TRUCKS (EX-BRA'},{code:'7280',name:'PARTS REMAN'},
+  {code:'8210',name:'SERVICE TRUCKS EX WO'}
 ];
 const APPROVAL_RULES = {
   AP:    {TL:'< 1,000,000',MC:'< 20,000,000',CEO:'>= 20,000,000',RD:'>= 20,000,000',CFO:'>= 1,000,000'},
@@ -714,19 +714,15 @@ async function loadAccMasters() {
         if(ccCode && /^\d{8}$/.test(ccCode) && ccCode.startsWith('47')) {
           if(!newCC.find(c=>c.code===ccCode)) newCC.push({code:ccCode, name:ccName});
         }
-        // PC: col10=Code, col11=Name (숫자 4자리)
+        // PC/Sub_PC: PROFIT_CENTERS는 하드코딩, 동적 로딩 비활성화
+        // Sub_PC만 동적 로딩 (K열=index9, L열=index10 - XLSX.js 빈열 스킵)
         const pcCode=(r[9]!=null?r[9]:'').toString().trim();
         const pcName=(r[10]||'').toString().trim();
-        if(pcCode && /^\d{4}$/.test(pcCode) && pcName && pcName!=='WSL DUMMY') {
-          if(!newPC.find(p=>p.code===pcCode)) newPC.push({code:pcCode, name:pcName});
-        }
-        // Sub_PC: 같은 col10/11이지만 4자리+영문 패턴 (2121 TRUCKS_ATEGO 21)
-        // Sub_PC 데이터는 PC 목록과 분리: col10이 4자리이고 col11에 '_' 포함
+        // Sub_PC: _ 포함 또는 NA
+        if(pcCode==='NA' && !newSubPC.find(s=>s.code==='NA')) newSubPC.push({code:'NA',name:'NA'});
         if(pcCode && /^\d{4}$/.test(pcCode) && pcName.includes('_')) {
           if(!newSubPC.find(s=>s.code===pcCode)) newSubPC.push({code:pcCode, name:pcName});
-        }
-        // NA
-        if(pcCode==='NA' && !newSubPC.find(s=>s.code==='NA')) newSubPC.push({code:'NA',name:'NA'});
+        };
       }
 
       if(newGL.length){ GL_LIST.length=0; newGL.forEach(g=>GL_LIST.push(g)); }
