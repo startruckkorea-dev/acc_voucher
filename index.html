@@ -1221,18 +1221,6 @@ function updateTotals() {
       `<span class="neq-block">✕ 불일치</span>`;
   }
 }
-  // Total 컬럼 갱신 (환율 변경 시, 무한루프 방지)
-  if(!updateTotals._rendering) {
-    updateTotals._rendering=true;
-    const tbody=document.getElementById('lines-body');
-    if(tbody&&lines.length) renderLines();
-    updateTotals._rendering=false;
-  }
-  const vb = document.getElementById('verify-badge');
-  if(!lines.length){vb.textContent='-';vb.className='';}
-  else if(Math.abs(dr-cr)<0.01){vb.textContent='✔ DR=CR';vb.className='verify-ok';}
-  else{vb.textContent='✕ DR '+fmt(dr)+' / CR '+fmt(cr);vb.className='verify-err';}
-}
 
 // ── BP Modal ──
 function openBpModal() {
