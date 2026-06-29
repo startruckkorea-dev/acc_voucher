@@ -515,7 +515,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
       <div style="display:grid;grid-template-columns:1fr 60px 220px;gap:12px;align-items:end">
         <div>
           <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">UNIT PRICE</div>
-          <input type="number" id="lm-unitprice" step="0.01" placeholder="0.00" oninput="calcLmAmount()" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px;text-align:right;box-sizing:border-box">
+          <input type="text" id="lm-unitprice" placeholder="0" oninput="fmtInput(this);calcLmAmount()" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px;text-align:right;box-sizing:border-box">
         </div>
         <div>
           <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">QTY</div>
@@ -523,7 +523,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         </div>
         <div>
           <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">AMOUNT</div>
-          <input type="number" id="lm-amount" step="0.01" placeholder="0.00" readonly style="width:100%;padding:7px 10px;border:1px solid #edebe9;border-radius:4px;font-size:13px;text-align:right;box-sizing:border-box;background:#faf9f8;font-weight:600">
+          <input type="text" id="lm-amount" placeholder="0" readonly style="width:100%;padding:7px 10px;border:1px solid #edebe9;border-radius:4px;font-size:13px;text-align:right;box-sizing:border-box;background:#faf9f8;font-weight:600">
         </div>
       </div>
 
@@ -1131,7 +1131,7 @@ function renderApproval() {
 
 // ── Account Lines ──
 function addLine() {
-  lines.push({drcr:'',gl:'',glName:'',cctr:'',cctrName:'',pc:'',pcName:'',subpc:'',subpcName:'',lineDesc:'',currency:'EUR',unitPrice:'',qty:1,amount:0});
+  lines.push({drcr:'',gl:'',glName:'',cctr:'',cctrName:'',pc:'',pcName:'',subpc:'',subpcName:'',lineDesc:'',currency:'KRW',unitPrice:'',qty:1,amount:0});
   renderLines();
 }
 function deleteLine(i) { lines.splice(i,1); renderLines(); }
@@ -1297,8 +1297,10 @@ function saveVoucher(status) {
   if(!purpose){alert('Purpose를 입력하세요.');return;}
   if(!lines.length){alert('회계 라인을 1개 이상 추가하세요.');return;}
   const vb=document.getElementById('verify-badge');
-  if(status==='Pending'&&!vb.classList.contains('verify-ok'))
-    if(!confirm('DR/CR 합계가 일치하지 않습니다. 계속하시겠습니까?')) return;
+  if(status==='Pending'&&!vb.classList.contains('verify-ok')){
+    alert('DR/CR 합계가 일치하지 않습니다.\n결재 요청을 진행할 수 없습니다.\n\n라인 항목을 확인하고 DR/CR 합계를 맞춰주세요.');
+    return;
+  }
   const v={id:'VCH-'+Date.now(),type,date:document.getElementById('v-date').value,
     invDate:document.getElementById('v-inv-date').value,
     requester:document.getElementById('v-requester').value,
@@ -1323,14 +1325,21 @@ function openLineModal(i) {
   // DR/CR
   document.getElementById('lm-drcr').value = l.drcr || '';
   // Currency
-  document.getElementById('lm-currency').value = l.currency || 'EUR';
+  document.getElementById('lm-currency').value = l.currency || 'KRW';
   // GL
   document.getElementById('lm-gl').value = l.gl || '';
   document.getElementById('lm-glname').textContent = l.glName || '';
-  // Cost Center
+  // Cost Center — CCTR 미로드 시 재시도
   const ccSel = document.getElementById('lm-cctr');
-  ccSel.innerHTML = '<option value="">-</option>' +
-    COST_CENTERS.map(c=>`<option value="${c.code}" ${l.cctr===c.code?'selected':''}>${c.code} ${c.name}</option>`).join('');
+  const renderCCTR = () => {
+    ccSel.innerHTML = '<option value="">-</option>' +
+      COST_CENTERS.map(c=>`<option value="${c.code}" ${l.cctr===c.code?'selected':''}>${c.code} ${c.name}</option>`).join('');
+  };
+  if(COST_CENTERS.length === 0 && user) {
+    loadCCTRMaster(user.name||user.username||'').then(renderCCTR).catch(()=>renderCCTR());
+  } else {
+    renderCCTR();
+  }
   document.getElementById('lm-cctrname').textContent = l.cctrName || '';
   // Profit Center
   const pcSel = document.getElementById('lm-pc');
@@ -1344,17 +1353,31 @@ function openLineModal(i) {
   document.getElementById('lm-subpcname').textContent = l.subpcName || '';
   // Line Desc / Amount
   document.getElementById('lm-linedesc').value = l.lineDesc || '';
-  document.getElementById('lm-unitprice').value = l.unitPrice || '';
+  const upVal = l.unitPrice ? parseFloat(l.unitPrice).toLocaleString('en', {maximumFractionDigits:2}) : '';
+  document.getElementById('lm-unitprice').value = upVal;
   document.getElementById('lm-qty').value = l.qty || 1;
-  document.getElementById('lm-amount').value = l.amount || '';
+  const amtVal = l.amount ? parseFloat(l.amount).toLocaleString('en', {minimumFractionDigits:2, maximumFractionDigits:2}) : '';
+  document.getElementById('lm-amount').value = amtVal;
 
   document.getElementById('line-modal').classList.add('open');
 }
 
+// 콤마 포맷 입력 헬퍼
+function fmtInput(el) {
+  const raw = el.value.replace(/,/g, '');
+  const num = parseFloat(raw);
+  if(!isNaN(num)) el.value = num.toLocaleString('en', {maximumFractionDigits:2});
+  else if(raw === '' || raw === '-') el.value = raw;
+}
+function parseComma(str) {
+  return parseFloat((str||'').toString().replace(/,/g,'')) || 0;
+}
+
 function calcLmAmount() {
-  const price = parseFloat(document.getElementById('lm-unitprice').value) || 0;
+  const price = parseComma(document.getElementById('lm-unitprice').value);
   const qty   = parseFloat(document.getElementById('lm-qty').value) || 1;
-  document.getElementById('lm-amount').value = (price * qty).toFixed(2);
+  const amt   = price * qty;
+  document.getElementById('lm-amount').value = amt.toLocaleString('en', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
 
 function closeLineModal() {
@@ -1379,9 +1402,9 @@ function saveLineModal() {
   lines[i].subpc    = subCode;
   lines[i].subpcName= getSubPCs().find(s=>s.code===subCode)?.name || '';
   lines[i].lineDesc  = document.getElementById('lm-linedesc').value;
-  lines[i].unitPrice = parseFloat(document.getElementById('lm-unitprice').value) || 0;
+  lines[i].unitPrice = parseComma(document.getElementById('lm-unitprice').value);
   lines[i].qty       = parseFloat(document.getElementById('lm-qty').value) || 1;
-  lines[i].amount    = parseFloat(document.getElementById('lm-amount').value) || 0;
+  lines[i].amount    = parseComma(document.getElementById('lm-amount').value);
   closeLineModal();
   renderLines();
 }
