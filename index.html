@@ -1215,14 +1215,14 @@ function renderApproval() {
   }
 
   const apLine=[];
-  if(needed(rules.TL,drKrw))  apLine.push({role:'TL',  label:'TL (팀장)',                      fixed:false});
-  if(needed(rules.MC,drKrw))  apLine.push({role:'MC',  label:'MC (본부장)',                     fixed:false});
-  if(needed(rules.CEO,drKrw)) apLine.push({role:'CEO', label:'CEO (자동 지정)',                  fixed:true, person:CEO});
-  if(needed(rules.RD,drKrw))  apLine.push({role:'RD',  label:'RD (자동 지정)',                   fixed:true, person:RD});
-  if(needed(rules.Controller||'필요시',drKrw)) apLine.push({role:'CTRL',label:'Controller (자동 지정)', fixed:true, person:CTRL});
-  apLine.push({role:'AMGR',label:'Accounting Mgr. (자동 지정)', fixed:true, person:AMGR});
-  if(needed(rules.CFO,drKrw)) apLine.push({role:'CFO', label:'CFO (자동 지정)',                  fixed:true, person:CFO});
-  if(ACC.email) apLine.push({role:'ACC',label:'Accounting 담당자 (자동 지정)',                    fixed:true, person:ACC});
+  if(needed(rules.TL,drKrw))  apLine.push({role:'TL',  label:'Team Lead (팀장)',       rule:rules.TL,  fixed:false});
+  if(needed(rules.MC,drKrw))  apLine.push({role:'MC',  label:'Department Head (부서장)',rule:rules.MC,  fixed:false});
+  if(needed(rules.CEO,drKrw)) apLine.push({role:'CEO', label:'CEO',                      rule:rules.CEO, fixed:true, person:CEO});
+  if(needed(rules.RD,drKrw))  apLine.push({role:'RD',  label:'RD',                       rule:rules.RD,  fixed:true, person:RD});
+  if(needed(rules.Controller||'필요시',drKrw)) apLine.push({role:'CTRL',label:'Controller', rule:'필요시', fixed:true, person:CTRL});
+  apLine.push({role:'AMGR',label:'Accounting Mgr.', rule:'필수', fixed:true, person:AMGR});
+  if(needed(rules.CFO,drKrw)) apLine.push({role:'CFO', label:'CFO',                      rule:rules.CFO, fixed:true, person:CFO});
+  if(ACC.email) apLine.push({role:'ACC',label:'Accounting 담당자', rule:'필수', fixed:true, person:ACC});
 
   const container = document.getElementById('appr-blocks-container');
   const preview   = document.getElementById('appr-line-preview');
@@ -1233,25 +1233,33 @@ function renderApproval() {
     preview.style.display='none'; return;
   }
 
+  const fmtRule = r => r && r!=='-' ? ` (${r.replace(/,/g,'').replace(/\s/g,'').replace(/([<>]=?)/,'$1 ').trim()})` : '';
+
   preview.style.display='block';
   previewContent.innerHTML = apLine.map((a,i)=>
-    `<span class="line-step"><span class="line-step-badge ${a.fixed?'fixed':''}">${i+1}차</span><span style="font-size:.75rem">${a.label}</span>${i<apLine.length-1?'<span class="line-arrow">→</span>':''}</span>`
+    `<span class="line-step"><span class="line-step-badge ${a.fixed?'fixed':''}">${i+1}차</span><span style="font-size:.75rem">${a.label}${fmtRule(a.rule)}</span>${i<apLine.length-1?'<span class="line-arrow">→</span>':''}</span>`
   ).join('');
 
   const depts=[...new Set((window._employeeData||[]).map(e=>e.dept))].sort();
   const deptOpts=depts.map(d=>`<option value="${d}">${d}</option>`).join('');
   container.innerHTML = apLine.map((a,i)=>{
     const order=i+1;
+    const reasonTag = a.rule && a.rule!=='-'
+      ? `<span style="font-size:11px;color:#0078d4;background:#e8f3ff;border-radius:10px;padding:1px 8px;margin-left:6px">${a.rule}</span>`
+      : '';
+    const fixedTag = a.fixed
+      ? `<span style="font-size:10px;color:#107c10;background:#dff6dd;border-radius:10px;padding:1px 6px;margin-left:4px">자동 지정</span>`
+      : `<span style="font-size:10px;color:#8a6914;background:#fff4ce;border-radius:10px;padding:1px 6px;margin-left:4px">직접 선택</span>`;
     if(a.fixed){
       return `<div class="appr-block appr-fixed">
-        <div class="appr-block-title">${order}차 결재자 <span class="hint">— ${a.label}</span></div>
+        <div class="appr-block-title">${order}차 결재자${fixedTag} <span class="hint">— ${a.label}</span>${reasonTag}</div>
         <div class="appr-info">
           <input type="text"  value="${a.person.name}"  readonly placeholder="이름">
           <input type="email" value="${a.person.email}" readonly placeholder="이메일">
         </div></div>`;
     } else {
       return `<div class="appr-block">
-        <div class="appr-block-title">${order}차 결재자 <span class="req-mark">*</span> <span class="hint">— ${a.label}</span></div>
+        <div class="appr-block-title">${order}차 결재자 <span class="req-mark">*</span>${fixedTag} <span class="hint">— ${a.label}</span>${reasonTag}</div>
         <div class="appr-select-row">
           <select id="ga${order}-dept" onchange="gwDeptChange(${order})"><option value="">부서</option>${deptOpts}</select>
           <select id="ga${order}-team" onchange="gwTeamChange(${order})" disabled><option value="">팀</option></select>
