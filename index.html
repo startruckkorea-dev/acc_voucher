@@ -169,6 +169,10 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 .s-Pending { background: #fff4ce; color: #7d5700; }
 .s-Approved{ background: #e8f5e9; color: #107c10; }
 .s-Rejected{ background: #fde7e9; color: #a4262c; }
+.s-대기 { background: #fff4ce; color: #7d5700; }
+.s-승인완료 { background: #dff6dd; color: #107c10; }
+.s-반려 { background: #fde7e9; color: #a4262c; }
+.s-철회 { background: #f1f5f9; color: #64748b; }
 .list-empty { text-align: center; padding: 48px; color: #a19f9d; font-size: 14px; }
 
 /* ── BP Modal ── */
@@ -287,9 +291,10 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         </select>
         <select id="f-status" onchange="renderList()">
           <option value="">전체 상태</option>
-          <option value="Draft">임시저장</option>
-          <option value="Pending">결재 중</option>
-          <option value="Approved">승인완료</option>
+          <option value="대기">대기</option>
+          <option value="승인완료">승인완료</option>
+          <option value="반려">반려</option>
+          <option value="철회">철회</option>
         </select>
         <input type="text" id="f-kw" placeholder="검색..." oninput="renderList()" style="min-width:160px">
       </div>
@@ -455,7 +460,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 
       <div class="btn-row">
         <button class="btn-secondary" onclick="resetForm()">Reset</button>
-        <button class="btn-primary" onclick="saveVoucher('Pending')">Submit</button>
+        <button class="btn-primary" onclick="saveVoucher('대기')">Submit</button>
       </div>
     </div>
   </div>
@@ -1555,7 +1560,7 @@ async function saveVoucher(status) {
   if(!purpose){alert('Purpose를 입력하세요.');return;}
   if(!lines.length){alert('회계 라인을 1개 이상 추가하세요.');return;}
   const blocks = document.getElementById('dr-cr-blocks');
-  if(status==='Pending' && !blocks.querySelector('.eq-block')){
+  if(status==='대기' && !blocks.querySelector('.eq-block')){
     alert('DR/CR 합계가 일치하지 않습니다.\n결재 요청을 진행할 수 없습니다.\n\n라인 항목을 확인하고 DR/CR 합계를 맞춰주세요.');
     return;
   }
@@ -1600,9 +1605,9 @@ async function saveVoucher(status) {
         LinesJSON: JSON.stringify(lines),
         TotalDR_KRW: drKrw,
         TotalCR_KRW: crKrw,
-        SubmittedDate: status==='Pending'?new Date().toISOString():null,
-        CurrentStep: status==='Pending'?1:0,
-        TotalSteps: status==='Pending'?approvers.length:0
+        SubmittedDate: status==='대기'?new Date().toISOString():null,
+        CurrentStep: status==='대기'?1:0,
+        TotalSteps: status==='대기'?approvers.length:0
       }
     };
     const reqRes = await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items`, 'POST', reqBody);
@@ -1635,8 +1640,8 @@ async function saveVoucher(status) {
       }catch(fe){console.error('Drive error:',fe);}
     }
 
-    // 3. Pending이면 Approvals에 결재자 행 INSERT
-    if(status==='Pending') {
+    // 3. 대기 상태면 Approvals에 결재자 행 INSERT (1번째만 '대기', 나머지는 '대기(잠김)')
+    if(status==='대기') {
       for(let i=0;i<approvers.length;i++){
         const ap=approvers[i];
         await api(`/sites/${siteId}/lists/${LIST_APPROVALS}/items`, 'POST', {
@@ -1648,7 +1653,7 @@ async function saveVoucher(status) {
             ApproverName: ap.name,
             ApproverRole: ap.role,
             ApprovalOrder: i+1,
-            Status: 'Pending'
+            Status: i===0 ? '대기' : '대기(잠김)'
           }
         });
       }
@@ -1660,7 +1665,7 @@ async function saveVoucher(status) {
     console.error('saveVoucher error:', e);
     showAccAlert('오류가 발생했습니다.', e.message, '⚠️');
   } finally {
-    if(btn){btn.disabled=false; btn.textContent=status==='Draft'?'임시저장':'✔ 결재 요청';}
+    if(btn){btn.disabled=false; btn.textContent='Submit';}
   }
 }
 
@@ -1887,8 +1892,8 @@ function renderList(){
     if(fk&&!v.Purpose?.toLowerCase().includes(fk)&&!v.BPName?.toLowerCase().includes(fk)&&!v.Title?.toLowerCase().includes(fk))return false;
     return true;
   });
-  const stMap={Draft:'s-Draft',Pending:'s-Pending',Approved:'s-Approved',Rejected:'s-Rejected'};
-  const stLabel={Draft:'임시저장',Pending:'결재 중',Approved:'승인완료',Rejected:'반려'};
+  const stMap={'대기':'s-대기','승인완료':'s-승인완료','반려':'s-반려','철회':'s-철회'};
+  const stLabel={'대기':'대기','승인완료':'승인완료','반려':'반려','철회':'철회'};
   const body=document.getElementById('list-body');
   if(!list.length){
     body.innerHTML=`<tr><td colspan="10" class="list-empty">${voucherListCache.length?'검색 결과가 없습니다.':'작성된 바우처가 없습니다.'}</td></tr>`;
@@ -1898,7 +1903,7 @@ function renderList(){
   const fmtDate = s => s ? new Date(s).toLocaleDateString('ko-KR',{year:'2-digit',month:'2-digit',day:'2-digit'}) : '-';
   body.innerHTML=list.map((v,i)=>`<tr onclick="openVoucherSP('${v._spId}')">
     <td style="color:#a19f9d;font-size:.78rem">${i+1}</td>
-    <td style="font-size:.78rem;color:#605e5c">${v.RequesterName||'-'}</td>
+    <td style="font-size:.78rem;color:#605e5c">${v.RequesterEmail||'-'}</td>
     <td style="font-family:monospace;font-size:.75rem;color:#0078d4">${v.Title||'-'}</td>
     <td><span class="type-badge t-${v.VoucherType}">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span></td>
     <td style="font-size:.78rem;color:#605e5c">${v.BPName||'-'}</td>
@@ -1915,7 +1920,7 @@ async function openVoucherSP(spId){
   if(!v) return;
   const lines_data = JSON.parse(v.LinesJSON||'[]');
   const fmtK = n=>Math.round(n||0).toLocaleString('ko-KR');
-  const stLabel={Draft:'\uc784\uc2dc\uc800\uc7a5',Pending:'\ub300\uae30',Approved:'\uc2b9\uc778\uc644\ub3c4',Rejected:'\ubc18\ub9e4'};
+  const stLabel={'대기':'대기','승인완료':'승인완료','반려':'반려','철회':'철회'};
 
   const row = (label, value) => `<div class="det-row"><div class="det-lbl">${label}</div><div class="det-val">${value||'-'}</div></div>`;
 
