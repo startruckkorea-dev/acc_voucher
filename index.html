@@ -2078,7 +2078,16 @@ async function openVoucherSP(spId){
 async function loadApprovalHistory(spId){
   const v = voucherListCache.find(x=>x._spId===spId);
   if(!v) return;
-  const stClsMap={'대기':'status-대기','대기(잠김)':'status-대기잠김','승인':'status-승인','승인완료':'status-승인','반려':'status-반려'};
+  const stClsMap={'대기':'status-대기','대기(잠김)':'status-대기잠김','승인':'status-승인','승인완료':'status-승인','반려':'status-반려',
+    Pending:'status-대기',Approved:'status-승인',Rejected:'status-반려'};
+  const stLabelMap={'대기':'대기','대기(잠김)':'대기(잠김)','승인':'승인','승인완료':'승인완료','반려':'반려',
+    Pending:'대기(잠김)',Approved:'승인완료',Rejected:'반려'};
+  const roleLabelMap = {
+    TL:'Line Manager (팀장)', MC:'Department Head (부서장)',
+    CEO:'CEO', RD:'RD', CTRL:'Controlling Head',
+    AMGR:'Accounting Head', CFO:'CFO',
+    ACC_AP:'AP 담당자', ACC_AR:'AR 담당자', ACC_GL:'GL 담당자', ACC:'담당자'
+  };
   const fmtDate = s => s ? new Date(s).toLocaleString('ko-KR',{year:'2-digit',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
   try{
     if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
@@ -2092,16 +2101,21 @@ async function loadApprovalHistory(spId){
       document.getElementById('voucher-appr-history').innerHTML = '<div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력이 없습니다.</div>';
       return;
     }
+    // ACC 역할은 Voucher Type에 따라 AP/AR/GL 담당자로 표시
+    const accLabelByType = {AP:'AP 담당자',AP_IMS:'AP 담당자',AP_CR:'AP 담당자',AR:'AR 담당자',GL:'GL 담당자',FA:'GL 담당자',ADV:'AP 담당자',SET:'AP 담당자'};
     const html = list.map(af=>{
       const cls = stClsMap[af.Status] || 'status-대기잠김';
+      const stText = stLabelMap[af.Status] || af.Status || '대기(잠김)';
+      let roleLabel = roleLabelMap[af.ApproverRole] || af.ApproverRole || '';
+      if(af.ApproverRole==='ACC') roleLabel = accLabelByType[v.VoucherType] || '담당자';
       return `<div class="appr-item">
         <div>
-          <b>${af.ApprovalOrder}차</b> ${af.ApproverRole||''}
+          <b>${af.ApprovalOrder}차</b> ${roleLabel}
           <br><span style="font-size:.72rem;color:#605e5c">${af.ApproverName||''} · ${af.ApproverEmail||''}</span>
           ${af.ApprovalDate?`<br><span style="font-size:.72rem;color:#a19f9d">${fmtDate(af.ApprovalDate)}</span>`:''}
           ${af.Comment?`<br><span style="font-size:.72rem;background:#fff;border:1px solid #edebe9;border-radius:4px;padding:2px 6px;display:inline-block;margin-top:2px">💬 ${af.Comment}</span>`:''}
         </div>
-        <span class="${cls}">${af.Status}</span>
+        <span class="${cls}">${stText}</span>
       </div>`;
     }).join('');
     document.getElementById('voucher-appr-history').innerHTML = html;
