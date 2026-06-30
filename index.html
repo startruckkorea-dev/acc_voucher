@@ -487,6 +487,31 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 
 <!-- ── 관리자 ── -->
 <div id="tab-admin" style="display:none">
+  <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+    <select id="admin-status" onchange="applyAdminFilters()" style="border:1px solid #d2d0ce;border-radius:4px;padding:6px 10px;font-size:.82rem;font-family:inherit">
+      <option value="">전체 상태</option>
+      <option value="대기">대기</option>
+      <option value="승인완료">승인완료</option>
+      <option value="반려">반려</option>
+      <option value="철회">철회</option>
+    </select>
+    <select id="admin-type" onchange="applyAdminFilters()" style="border:1px solid #d2d0ce;border-radius:4px;padding:6px 10px;font-size:.82rem;font-family:inherit">
+      <option value="">전체 유형</option>
+      <option value="AP">AP</option>
+      <option value="AP_IMS">AP (IMS)</option>
+      <option value="AP_CR">AP - Customer Refund</option>
+      <option value="AR">AR</option>
+      <option value="GL">GL</option>
+      <option value="FA">Fixed Asset</option>
+      <option value="ADV">Advance Payment</option>
+      <option value="SET">Settlement</option>
+    </select>
+    <input type="text" id="admin-search" oninput="applyAdminFilters()" placeholder="신청자 / Title / BP명 검색..." style="border:1px solid #d2d0ce;border-radius:4px;padding:6px 10px;font-size:.82rem;font-family:inherit;min-width:200px">
+    <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+      <span style="font-size:.82rem;color:#605e5c;font-weight:500" id="admin-count"></span>
+      <button onclick="exportAdminExcel()" style="padding:6px 14px;background:#107c10;color:#fff;border:none;border-radius:4px;font-size:.82rem;cursor:pointer;white-space:nowrap">📊 Excel 내보내기</button>
+    </div>
+  </div>
   <div class="card" style="padding:0;overflow-x:auto">
     <table class="list-table">
       <thead><tr>
@@ -2124,6 +2149,7 @@ async function processApproval(apprId, action, reqId, comment='') {
   }
 }
 
+let adminListRaw = [];
 async function loadAdminList() {
   _adminPgState.page = 0;
   const body = document.getElementById('admin-body');
@@ -2131,15 +2157,31 @@ async function loadAdminList() {
   if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
   try {
     const data = await apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_REQUESTS}/items?$expand=fields&$top=999`);
-    adminListCache = data.value
+    adminListRaw = data.value
       .map(item=>({_spId:item.id,...item.fields}))
       .sort((a,b)=>new Date(b.SubmittedDate||0)-new Date(a.SubmittedDate||0));
   } catch(e) {
     console.error('loadAdminList error:', e);
-    adminListCache = [];
+    adminListRaw = [];
     body.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:#a19f9d">전표 목록을 불러올 수 없습니다.</td></tr>';
     return;
   }
+  applyAdminFilters();
+}
+
+function applyAdminFilters() {
+  _adminPgState.page = 0;
+  const fs = (document.getElementById('admin-status')||{value:''}).value;
+  const ft = (document.getElementById('admin-type')||{value:''}).value;
+  const fk = ((document.getElementById('admin-search')||{value:''}).value||'').toLowerCase();
+  adminListCache = adminListRaw.filter(v=>{
+    if(fs && v.Status!==fs) return false;
+    if(ft && v.VoucherType!==ft) return false;
+    if(fk && !(v.RequesterEmail||'').toLowerCase().includes(fk) && !(v.Title||'').toLowerCase().includes(fk) && !(v.BPName||'').toLowerCase().includes(fk)) return false;
+    return true;
+  });
+  const countEl = document.getElementById('admin-count');
+  if(countEl) countEl.textContent = '총 '+adminListCache.length+'건';
   renderAdminList();
 }
 
@@ -2152,6 +2194,90 @@ function adminPgGo(p){
   _adminPgState.page = p;
   renderAdminList();
   document.getElementById('admin-body')?.closest('table')?.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+async function exportAdminExcel(){
+  const btn = document.querySelector('button[onclick="exportAdminExcel()"]');
+  const orig = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ 생성 중...'; }
+  try {
+    if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
+    const [reqData, apprData] = await Promise.all([
+      apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_REQUESTS}/items?$expand=fields&$top=999`),
+      apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_APPROVALS}/items?$expand=fields&$top=999`)
+    ]);
+    const fs = (document.getElementById('admin-status')||{value:''}).value;
+    const ft = (document.getElementById('admin-type')||{value:''}).value;
+    const fk = ((document.getElementById('admin-search')||{value:''}).value||'').toLowerCase();
+    let items = reqData.value.sort((a,b)=>b.id-a.id);
+    if(fs) items = items.filter(i=>i.fields.Status===fs);
+    if(ft) items = items.filter(i=>i.fields.VoucherType===ft);
+    if(fk) items = items.filter(i=>((i.fields.RequesterEmail||'')+(i.fields.Title||'')+(i.fields.BPName||'')).toLowerCase().includes(fk));
+    if(!items.length){ showAccAlert('내보낼 데이터가 없습니다.', '', '⚠️'); return; }
+
+    // 결재자 맵 구성 (reqId → 결재자 배열)
+    const apprMap = {};
+    (apprData.value||[]).forEach(a=>{
+      const rid = String(a.fields.RequestID);
+      if(!apprMap[rid]) apprMap[rid]=[];
+      apprMap[rid].push(a.fields);
+    });
+
+    // 최대 결재 단계 수 계산
+    let maxStep = 0;
+    items.forEach(i=>{ const n=(apprMap[String(i.id)]||[]).length; if(n>maxStep) maxStep=n; });
+
+    const fmtX = s => { if(!s) return ''; const d=new Date(s); const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+
+    const headers = ['번호','신청자','Title','유형','BP명','Purpose','DR(KRW)','CR(KRW)','상태','신청일'];
+    for(let s=1;s<=maxStep;s++){
+      headers.push(s+'차 역할', s+'차 결재자', s+'차 이메일', s+'차 상태', s+'차 처리일', s+'차 Comment');
+    }
+
+    const rows = [headers];
+    items.forEach(item=>{
+      const f = item.fields;
+      const aprs = (apprMap[String(item.id)]||[]).sort((a,b)=>(a.ApprovalOrder||0)-(b.ApprovalOrder||0));
+      const row = [
+        item.id,
+        f.RequesterEmail||'',
+        f.Title||'',
+        f.VoucherType||'',
+        f.BPName||'',
+        f.Purpose||'',
+        f.TotalDR_KRW||0,
+        f.TotalCR_KRW||0,
+        f.Status||'',
+        fmtX(f.SubmittedDate),
+      ];
+      for(let s=0;s<maxStep;s++){
+        const a = aprs[s];
+        if(a){
+          const cmt = (a.Comment||'').replace(/<[^>]*>/g,'').trim();
+          row.push(a.ApproverRole||'', a.ApproverName||'', a.ApproverEmail||'', a.Status||'', a.ApprovalDate?fmtX(a.ApprovalDate):'', cmt);
+        } else {
+          row.push('','','','','','');
+        }
+      }
+      rows.push(row);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const colW = [6,28,24,12,24,28,14,14,10,18];
+    for(let s=0;s<maxStep;s++) colW.push(16,16,28,10,18,30);
+    ws['!cols'] = colW.map(w=>({wch:w}));
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'ACC_Voucher');
+    const now = new Date(new Date().getTime()+9*3600*1000);
+    const ds = now.getUTCFullYear()+String(now.getUTCMonth()+1).padStart(2,'0')+String(now.getUTCDate()).padStart(2,'0')+'_'+String(now.getUTCHours()).padStart(2,'0')+String(now.getUTCMinutes()).padStart(2,'0');
+    XLSX.writeFile(wb, 'ACC_Voucher_Admin_'+ds+'.xlsx');
+  } catch(e) {
+    console.error('exportAdminExcel error:', e);
+    showAccAlert('Excel 생성 실패', e.message, '⚠️');
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = orig; }
+  }
 }
 
 function renderAdminList(){
