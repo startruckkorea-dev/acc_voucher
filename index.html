@@ -1307,10 +1307,10 @@ function renderApproval() {
   const CTRL = cfgVal(cfg,'ACC-Voucher_CONTROLLING',{name:'', email:''});
   const AMGR = cfgVal(cfg,'ACC-Voucher_ACCOUNTING', {name:'', email:''});
   const CFO  = cfgVal(cfg,'ACC-Voucher_CFO',  {name:'', email:''});
-  const ACC_MAP={AP:'ACC-Voucher_CONTACT_AP',AP_IMS:'ACC-Voucher_CONTACT_AP',AP_CR:'ACC-Voucher_CONTACT_AP',
-    AR:'ACC-Voucher_CONTACT_AR',GL:'ACC-Voucher_CONTACT_GL',FA:'ACC-Voucher_CONTACT_GL',
-    ADV:'ACC-Voucher_CONTACT_AP',SET:'ACC-Voucher_CONTACT_AP'};
-  const ACC = cfgVal(cfg, ACC_MAP[type]||'ACC-Voucher_CONTACT_GL',{name:'-',email:''});
+  const ACC_MAP={AP:'ACC-Voucher_AP',AP_IMS:'ACC-Voucher_AP',AP_CR:'ACC-Voucher_AP',
+    AR:'ACC-Voucher_AR',GL:'ACC-Voucher_GL',FA:'ACC-Voucher_GL',
+    ADV:'ACC-Voucher_AP',SET:'ACC-Voucher_AP'};
+  const ACC = cfgVal(cfg, ACC_MAP[type]||'ACC-Voucher_GL',{name:'-',email:''});
 
   let drKrw=0;
   lines.forEach(l=>{
@@ -1767,10 +1767,10 @@ function buildApprovers() {
   const CTRL = cfgVal(cfg,'ACC-Voucher_CONTROLLING',{name:'', email:''});
   const AMGR = cfgVal(cfg,'ACC-Voucher_ACCOUNTING', {name:'', email:''});
   const CFO  = cfgVal(cfg,'ACC-Voucher_CFO',  {name:'', email:''});
-  const ACC_MAP={AP:'ACC-Voucher_CONTACT_AP',AP_IMS:'ACC-Voucher_CONTACT_AP',AP_CR:'ACC-Voucher_CONTACT_AP',
-    AR:'ACC-Voucher_CONTACT_AR',GL:'ACC-Voucher_CONTACT_GL',FA:'ACC-Voucher_CONTACT_GL',
-    ADV:'ACC-Voucher_CONTACT_AP',SET:'ACC-Voucher_CONTACT_AP'};
-  const ACC = cfgVal(cfg, ACC_MAP[type]||'ACC-Voucher_CONTACT_GL', {name:'-',email:''});
+  const ACC_MAP={AP:'ACC-Voucher_AP',AP_IMS:'ACC-Voucher_AP',AP_CR:'ACC-Voucher_AP',
+    AR:'ACC-Voucher_AR',GL:'ACC-Voucher_GL',FA:'ACC-Voucher_GL',
+    ADV:'ACC-Voucher_AP',SET:'ACC-Voucher_AP'};
+  const ACC = cfgVal(cfg, ACC_MAP[type]||'ACC-Voucher_GL', {name:'-',email:''});
   let drKrw=0;
   lines.forEach(l=>{
     if(l.drcr!=='DR') return;
