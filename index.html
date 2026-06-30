@@ -2128,6 +2128,7 @@ async function processApproval(apprId, action, reqId, comment='') {
       }
     }
     showAccAlert(action+' 처리되었습니다.', '', action==='반려'?'❌':'✅');
+    closeDetailModal();
     loadApprovalQueue();
   } catch(e) {
     console.error('processApproval error:', e);
@@ -2366,6 +2367,7 @@ async function openVoucherSP(spId){
     <div id="voucher-appr-history" style="background:#f9f9f9;border-radius:4px;border:1px solid #edebe9">
       <div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력을 불러오는 중...</div>
     </div>
+    <div id="voucher-appr-action-btns" style="margin-top:14px;text-align:right"></div>
   `;
 
   document.getElementById('voucher-detail-modal').classList.add('open');
@@ -2427,7 +2429,7 @@ async function loadApprovalHistory(spId){
     const res = await fetch(url, {headers:{Authorization:'Bearer '+t, Prefer:'HonorNonIndexedQueriesWarningMayFailRandomly'}});
     if(!res.ok) throw new Error('결재 이력 조회 실패');
     const data = await res.json();
-    const list = data.value.map(i=>i.fields).sort((a,b)=>(a.ApprovalOrder||0)-(b.ApprovalOrder||0));
+    const list = data.value.map(i=>({...i.fields, _apprId:i.id})).sort((a,b)=>(a.ApprovalOrder||0)-(b.ApprovalOrder||0));
     if(!list.length){
       document.getElementById('voucher-appr-history').innerHTML = '<div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력이 없습니다.</div>';
       return;
@@ -2450,6 +2452,17 @@ async function loadApprovalHistory(spId){
       </div>`;
     }).join('');
     document.getElementById('voucher-appr-history').innerHTML = html;
+
+    // 내 결재 대기 건이면 GW와 동일하게 결재 이력 아래에 승인/반려 버튼 표시
+    const myEmail = (user?.username||'').toLowerCase();
+    const myPending = list.find(af=>(af.ApproverEmail||'').toLowerCase()===myEmail && af.Status==='대기');
+    const btnWrap = document.getElementById('voucher-appr-action-btns');
+    if(btnWrap){
+      btnWrap.innerHTML = myPending
+        ? `<button class="btn-approve" style="padding:8px 22px;font-size:.8rem;background:#107c10;color:#fff;border:none;border-radius:4px;cursor:pointer;margin-right:8px" onclick="showApprConfirm(${myPending._apprId},'승인',${v._spId})">✅ 승인</button>
+           <button class="btn-reject" style="padding:8px 22px;font-size:.8rem;background:#a4262c;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="showApprConfirm(${myPending._apprId},'반려',${v._spId})">❌ 반려</button>`
+        : '';
+    }
   }catch(e){
     console.error('loadApprovalHistory error:', e);
     document.getElementById('voucher-appr-history').innerHTML = '<div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력을 불러올 수 없습니다.</div>';
