@@ -1264,6 +1264,7 @@ function switchTab(tab) {
   const appEl = document.getElementById('app');
   if(appEl) appEl.style.maxWidth = tab==='new' ? '960px' : '1280px';
   if(tab==='list') loadMyList();
+  if(tab==='appr') loadApprovalQueue();
   if(tab==='admin') loadAdminList();
 }
 
@@ -1415,7 +1416,7 @@ function renderLines() {
       if(l.currency==='KRW') totalTxt = fmt(amt);
       else {
         const rate = getExchangeRate(l.currency) || 0;
-        totalTxt = rate ? 'KRW '+Math.round(amt*rate).toLocaleString('ko-KR') : '-';
+        totalTxt = rate ? Math.round(amt*rate).toLocaleString('ko-KR') : '-';
       }
     } else totalTxt = '<span style="color:#a19f9d">0.00</span>';
 
@@ -1954,6 +1955,151 @@ async function loadMyList() {
 }
 
 let adminListCache = [];
+// ── 결재함 ──
+async function loadApprovalQueue() {
+  const tbody = document.getElementById('appr-body');
+  tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:40px;color:#a19f9d">불러오는 중...</td></tr>';
+  if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
+  try {
+    const t = await token();
+    const myEmail = (user?.username||'').toLowerCase();
+
+    // Approvals 전체 + Requests 전체를 병렬로 가져와서 매칭
+    const [apprRes, reqRes] = await Promise.all([
+      fetch(`${GRAPH}/sites/${siteId}/lists/${LIST_APPROVALS}/items?$expand=fields&$top=999`,
+        {headers:{Authorization:'Bearer '+t, Prefer:'HonorNonIndexedQueriesWarningMayFailRandomly'}}),
+      fetch(`${GRAPH}/sites/${siteId}/lists/${LIST_REQUESTS}/items?$expand=fields&$top=999`,
+        {headers:{Authorization:'Bearer '+t, Prefer:'HonorNonIndexedQueriesWarningMayFailRandomly'}})
+    ]);
+    if(!apprRes.ok || !reqRes.ok) throw new Error('결재 목록 조회 실패');
+    const apprData = await apprRes.json();
+    const reqData  = await reqRes.json();
+
+    const reqMap = {};
+    reqData.value.forEach(r=>{ reqMap[r.id] = {...r.fields, _spId: r.id}; });
+
+    // 내 이메일이 결재자이고 Status가 '대기'인 항목만
+    const myPending = apprData.value.filter(i=>{
+      const ae = (i.fields.ApproverEmail||'').toLowerCase();
+      return ae === myEmail && i.fields.Status === '대기';
+    });
+
+    approvalQueueCache = myPending.map(item=>({
+      _apprId: item.id,
+      ...item.fields,
+      _voucher: reqMap[String(item.fields.RequestID)] || {}
+    })).sort((a,b)=>Number(b.RequestID)-Number(a.RequestID));
+
+    renderApprovalQueue();
+    const badge = document.getElementById('appr-badge');
+    if(badge){ badge.textContent = approvalQueueCache.length; badge.style.display = approvalQueueCache.length ? 'inline' : 'none'; }
+  } catch(e) {
+    console.error('loadApprovalQueue error:', e);
+    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:40px;color:#a4262c">${e.message}</td></tr>`;
+  }
+}
+
+let approvalQueueCache = [];
+function renderApprovalQueue() {
+  const tbody = document.getElementById('appr-body');
+  if(!approvalQueueCache.length){
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:40px;color:#a19f9d">결재 대기 중인 전표가 없습니다.</td></tr>';
+    return;
+  }
+  const stMap={'대기':'badge-대기','대기(잠김)':'badge-대기잠김','승인완료':'badge-승인완료','반려':'badge-반려','철회':'badge-철회'};
+  const stLabel={'대기':'대기','대기(잠김)':'대기(잠김)','승인완료':'승인완료','반려':'반려','철회':'철회'};
+  const fmtK=n=>Math.round(n||0).toLocaleString('ko-KR');
+  const fmtDate = s => {
+    if(!s) return '-';
+    const d = new Date(s);
+    const p = n=>String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
+  tbody.innerHTML = approvalQueueCache.map((item,i)=>{
+    const v = item._voucher;
+    return `<tr onclick="openVoucherSP('${v._spId}')" style="cursor:pointer">
+      <td style="color:#a19f9d;font-size:.78rem">${i+1}</td>
+      <td style="font-size:.78rem;color:#605e5c">${v.RequesterEmail||'-'}</td>
+      <td style="font-size:.75rem;color:#0078d4">${v.Title||'-'}</td>
+      <td><span class="type-badge t-${v.VoucherType}">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span></td>
+      <td style="font-size:.78rem;color:#605e5c">${v.BPName||'-'}</td>
+      <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem">${v.Purpose||'-'}</td>
+      <td style="text-align:right;font-weight:700;color:#0078d4;font-size:.78rem">${fmtK(v.TotalDR_KRW)}</td>
+      <td style="text-align:right;font-weight:700;color:#c0392b;font-size:.78rem">${fmtK(v.TotalCR_KRW)}</td>
+      <td><span class="${stMap[v.Status]||'badge-대기'}">${stLabel[v.Status]||v.Status}</span></td>
+      <td style="font-size:.78rem;color:#605e5c">${fmtDate(v.SubmittedDate)}</td>
+      <td onclick="event.stopPropagation()" style="text-align:center;white-space:nowrap">
+        <button class="btn-approve" style="padding:4px 10px;font-size:.72rem;background:#107c10;color:#fff;border:none;border-radius:4px;cursor:pointer;margin-right:4px" onclick="showApprConfirm(${item._apprId},'승인',${item.RequestID})">승인</button>
+        <button class="btn-reject" style="padding:4px 10px;font-size:.72rem;background:#a4262c;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="showApprConfirm(${item._apprId},'반려',${item.RequestID})">반려</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+let _pendingAppr = null;
+function showApprConfirm(apprId, action, reqId) {
+  _pendingAppr = {apprId, action, reqId};
+  const isReject = action === '반려';
+  document.getElementById('appr-confirm-title').textContent = isReject ? '❌ 반려 확인' : '✅ 승인 확인';
+  document.getElementById('appr-confirm-msg').textContent = isReject ? '반려 사유를 입력해주세요. (필수)' : '이 전표를 승인하시겠습니까?';
+  document.getElementById('appr-confirm-comment').value = '';
+  document.getElementById('appr-confirm-comment').placeholder = isReject ? '반려 사유 입력 (필수)' : '의견 입력 (선택사항)';
+  const okBtn = document.getElementById('appr-confirm-ok');
+  okBtn.textContent = isReject ? '반려' : '승인';
+  okBtn.style.background = isReject ? '#a4262c' : '#107c10';
+  document.getElementById('appr-confirm-modal').style.display = 'flex';
+}
+function closeApprConfirm() {
+  document.getElementById('appr-confirm-modal').style.display = 'none';
+}
+async function confirmApprAction() {
+  if(!_pendingAppr) return;
+  const {apprId, action, reqId} = _pendingAppr;
+  const comment = document.getElementById('appr-confirm-comment').value.trim();
+  if(action === '반려' && !comment) { alert('반려 사유를 입력해주세요.'); return; }
+  closeApprConfirm();
+  await processApproval(apprId, action, reqId, comment);
+}
+async function processApproval(apprId, action, reqId, comment='') {
+  try {
+    const t = await token();
+    const curRes = await fetch(`${GRAPH}/sites/${siteId}/lists/${LIST_APPROVALS}/items/${apprId}?$expand=fields`,
+      {headers:{Authorization:'Bearer '+t}});
+    const cur = await curRes.json();
+    if(cur.fields.Status !== '대기') {
+      showAccAlert('이미 처리된 결재 항목입니다.', '다른 창에서 처리되었거나 이미 완료된 항목입니다.', '⚠️');
+      loadApprovalQueue();
+      return;
+    }
+    await api(`/sites/${siteId}/lists/${LIST_APPROVALS}/items/${apprId}/fields`, 'PATCH', {
+      Status: action==='승인' ? '승인' : '반려',
+      Comment: comment,
+      ApprovalDate: new Date().toISOString()
+    });
+    if(action === '반려') {
+      await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${reqId}/fields`, 'PATCH', {Status:'반려'});
+    } else {
+      // 다음 잠긴 결재자를 '대기'로 풀어줌, 없으면 전체 승인완료
+      const allApprRes = await fetch(`${GRAPH}/sites/${siteId}/lists/${LIST_APPROVALS}/items?$expand=fields&$top=999`,
+        {headers:{Authorization:'Bearer '+t, Prefer:'HonorNonIndexedQueriesWarningMayFailRandomly'}});
+      const allAppr = await allApprRes.json();
+      const next = allAppr.value
+        .filter(i=>Number(i.fields.RequestID)===Number(reqId) && (i.fields.Status||'').trim()==='대기(잠김)')
+        .sort((a,b)=>a.fields.ApprovalOrder-b.fields.ApprovalOrder);
+      if(next.length) {
+        await api(`/sites/${siteId}/lists/${LIST_APPROVALS}/items/${next[0].id}/fields`, 'PATCH', {Status:'대기'});
+      } else {
+        await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${reqId}/fields`, 'PATCH', {Status:'승인완료'});
+      }
+    }
+    showAccAlert(action+' 처리되었습니다.', '', action==='반려'?'❌':'✅');
+    loadApprovalQueue();
+  } catch(e) {
+    console.error('processApproval error:', e);
+    showAccAlert('오류가 발생했습니다.', e.message, '⚠️');
+  }
+}
+
 async function loadAdminList() {
   _adminPgState.page = 0;
   const body = document.getElementById('admin-body');
@@ -2315,6 +2461,19 @@ window.addEventListener('load',async()=>{
     <button class="modal-close" onclick="closeDetailModal()">×</button>
     <div class="modal-title">전표 상세 내용</div>
     <div id="voucher-detail-content"></div>
+  </div>
+</div>
+
+<!-- 결재 승인/반려 확인 모달 -->
+<div id="appr-confirm-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1500;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:10px;padding:24px 28px;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+    <div id="appr-confirm-title" style="font-size:1rem;font-weight:700;color:#323130;margin-bottom:10px"></div>
+    <div id="appr-confirm-msg" style="font-size:.85rem;color:#605e5c;margin-bottom:12px"></div>
+    <textarea id="appr-confirm-comment" style="width:100%;min-height:70px;padding:8px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:.85rem;font-family:inherit;box-sizing:border-box;resize:vertical"></textarea>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+      <button class="btn-secondary" onclick="closeApprConfirm()">취소</button>
+      <button id="appr-confirm-ok" onclick="confirmApprAction()" style="background:#107c10;color:#fff;border:none;border-radius:4px;padding:8px 24px;font-size:.85rem;cursor:pointer;font-family:inherit">승인</button>
+    </div>
   </div>
 </div>
 
