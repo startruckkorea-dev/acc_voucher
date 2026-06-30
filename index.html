@@ -306,7 +306,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         <input type="text" id="f-kw" placeholder="검색..." oninput="renderList()" style="min-width:160px">
       </div>
       <table class="voucher-table">
-        <thead><tr><th style="width:40px">번호</th><th>신청자</th><th>Title</th><th>유형</th><th>BP명</th><th>Purpose</th><th style="text-align:right">DR(KRW Total)</th><th style="text-align:right">CR(KRW Total)</th><th>상태</th><th>신청일</th></tr></thead>
+        <thead><tr><th style="width:40px">번호</th><th>신청자</th><th>Title</th><th>유형</th><th>BP명</th><th>Purpose</th><th style="text-align:right">DR(KRW Total)</th><th style="text-align:right">CR(KRW Total)</th><th>상태</th><th>신청일</th><th>처리</th></tr></thead>
         <tbody id="list-body"></tbody>
       </table>
     </div>
@@ -807,6 +807,13 @@ async function apiAll(path) {
     url = d['@odata.nextLink'] || null;
   }
   return {value: items};
+}
+
+// 로그인 계정의 email(mail)과 username(UPN)이 다를 수 있어 둘 다 비교 (GW 패턴 동일)
+function isMe(email) {
+  if(!email) return false;
+  const e = email.toLowerCase();
+  return e === (user?.username||'').toLowerCase() || e === (user?.email||'').toLowerCase();
 }
 
 async function boot(account) {
@@ -1976,9 +1983,8 @@ let adminListCache = [];
 async function checkApprovalBadge(){
   if(!siteId) return;
   try{
-    const myEmail = (user?.username||'').toLowerCase();
     const data = await apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_APPROVALS}/items?$expand=fields&$top=999`);
-    const mine = data.value.filter(i=>(i.fields.ApproverEmail||'').toLowerCase()===myEmail && i.fields.Status==='대기');
+    const mine = data.value.filter(i=>isMe(i.fields.ApproverEmail) && i.fields.Status==='대기');
     const badge = document.getElementById('appr-badge');
     if(badge){
       if(mine.length){ badge.textContent = mine.length; badge.style.display = 'inline'; }
@@ -1993,8 +1999,6 @@ async function loadApprovalQueue() {
   tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:40px;color:#a19f9d">불러오는 중...</td></tr>';
   if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
   try {
-    const myEmail = (user?.username||'').toLowerCase();
-
     // Approvals 전체 + Requests 전체를 병렬로 가져와서 매칭 (nextLink 자동순회)
     const [apprData, reqData] = await Promise.all([
       apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_APPROVALS}/items?$expand=fields&$top=999`),
@@ -2004,11 +2008,8 @@ async function loadApprovalQueue() {
     const reqMap = {};
     reqData.value.forEach(r=>{ reqMap[r.id] = {...r.fields, _spId: r.id}; });
 
-    // 내 이메일이 결재자이고 Status가 '대기'인 항목만
-    const myPending = apprData.value.filter(i=>{
-      const ae = (i.fields.ApproverEmail||'').toLowerCase();
-      return ae === myEmail && i.fields.Status === '대기';
-    });
+    // 내 이메일(email/username 둘 다)이 결재자이고 Status가 '대기'인 항목만
+    const myPending = apprData.value.filter(i=>isMe(i.fields.ApproverEmail) && i.fields.Status === '대기');
 
     approvalQueueCache = myPending.map(item=>({
       _apprId: item.id,
@@ -2226,7 +2227,7 @@ function renderList(){
     Pending:'대기',Draft:'임시저장',Approved:'승인완료',Rejected:'반려'};
   const body=document.getElementById('list-body');
   if(!list.length){
-    body.innerHTML=`<tr><td colspan="10" class="list-empty">${voucherListCache.length?'검색 결과가 없습니다.':'작성된 바우처가 없습니다.'}</td></tr>`;
+    body.innerHTML=`<tr><td colspan="11" class="list-empty">${voucherListCache.length?'검색 결과가 없습니다.':'작성된 바우처가 없습니다.'}</td></tr>`;
     return;
   }
   const fmtK=n=>Math.round(n||0).toLocaleString('ko-KR');
@@ -2247,7 +2248,39 @@ function renderList(){
     <td style="text-align:right;font-weight:700;color:#c0392b;font-size:.78rem">${fmtK(v.TotalCR_KRW)}</td>
     <td><span class="${stMap[v.Status]||'badge-대기'}">${stLabel[v.Status]||v.Status}</span></td>
     <td style="font-size:.78rem;color:#605e5c">${fmtDate(v.SubmittedDate)}</td>
+    <td onclick="event.stopPropagation()" style="text-align:center">${v.Status==='대기'?`<button onclick="confirmWithdraw('${v._spId}')" style="padding:4px 10px;font-size:.72rem;background:#fff;color:#a4262c;border:1px solid #a4262c;border-radius:4px;cursor:pointer">철회</button>`:''}</td>
   </tr>`).join('');
+}
+
+// ── Withdraw (철회) — GW와 동일 패턴: APR 전체 먼저 잠금 → REQ 철회 처리 (race condition 방지) ──
+function confirmWithdraw(spId) {
+  if(!confirm('정말 이 전표를 철회하시겠습니까?\n철회 후에는 되돌릴 수 없습니다.')) return;
+  withdrawRequest(spId);
+}
+async function withdrawRequest(spId) {
+  try {
+    if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
+    // 1차 결재자가 아직 미처리(대기)인 경우에만 철회 가능
+    const apprData = await apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_APPROVALS}/items?$expand=fields&$filter=fields/RequestID eq ${parseInt(spId)}&$top=50`);
+    const items = apprData.value.sort((a,b)=>(a.fields.ApprovalOrder||0)-(b.fields.ApprovalOrder||0));
+    const first = items[0];
+    if(first && first.fields.Status !== '대기') {
+      showAccAlert('철회할 수 없습니다.', '이미 1차 결재가 진행되어 철회가 불가능합니다.', '⚠️');
+      loadMyList();
+      return;
+    }
+    // Step 1. Approvals 전체 → '철회(잠김)' (결재자 차단 먼저)
+    for(const it of items) {
+      await api(`/sites/${siteId}/lists/${LIST_APPROVALS}/items/${it.id}/fields`, 'PATCH', {Status:'철회(잠김)'});
+    }
+    // Step 2. Requests → '철회'
+    await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${spId}/fields`, 'PATCH', {Status:'철회'});
+    showAccAlert('전표가 철회되었습니다.', '', '✅');
+    loadMyList();
+  } catch(e) {
+    console.error('withdrawRequest error:', e);
+    showAccAlert('철회 처리 중 오류가 발생했습니다.', e.message, '⚠️');
+  }
 }
 
 async function openVoucherSP(spId){
@@ -2401,9 +2434,9 @@ async function loadApprovalHistory(spId){
     || adminListCache.find(x=>x._spId===spId)
     || (approvalQueueCache.find(x=>x._voucher?._spId===spId)?._voucher);
   if(!v) return;
-  const stClsMap={'대기':'status-대기','대기(잠김)':'status-대기잠김','승인':'status-승인','승인완료':'status-승인','반려':'status-반려',
+  const stClsMap={'대기':'status-대기','대기(잠김)':'status-대기잠김','승인':'status-승인','승인완료':'status-승인','반려':'status-반려','철회(잠김)':'status-대기잠김','철회':'status-반려',
     Pending:'status-대기',Approved:'status-승인',Rejected:'status-반려'};
-  const stLabelMap={'대기':'대기','대기(잠김)':'대기(잠김)','승인':'승인','승인완료':'승인완료','반려':'반려',
+  const stLabelMap={'대기':'대기','대기(잠김)':'대기(잠김)','승인':'승인','승인완료':'승인완료','반려':'반려','철회(잠김)':'철회(잠김)','철회':'철회',
     Pending:'대기(잠김)',Approved:'승인완료',Rejected:'반려'};
   const roleLabelMap = {
     TL:'Line Manager', MC:'Department Head',
@@ -2444,8 +2477,7 @@ async function loadApprovalHistory(spId){
     document.getElementById('voucher-appr-history').innerHTML = html;
 
     // 내 결재 대기 건이면 GW와 동일하게 결재 이력 아래에 승인/반려 버튼 표시
-    const myEmail = (user?.username||'').toLowerCase();
-    const myPending = list.find(af=>(af.ApproverEmail||'').toLowerCase()===myEmail && af.Status==='대기');
+    const myPending = list.find(af=>isMe(af.ApproverEmail) && af.Status==='대기');
     const btnWrap = document.getElementById('voucher-appr-action-btns');
     if(btnWrap){
       btnWrap.innerHTML = myPending
