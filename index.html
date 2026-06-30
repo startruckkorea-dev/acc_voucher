@@ -165,14 +165,12 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 .t-FA { background: #fce4ec; color: #880e4f; }
 .t-ADV { background: #e0f7fa; color: #006064; }
 .t-SET { background: #e0f7fa; color: #006064; }
-.s-Draft   { background: #f3f2f1; color: #605e5c; }
-.s-Pending { background: #fff4ce; color: #7d5700; }
-.s-Approved{ background: #e8f5e9; color: #107c10; }
-.s-Rejected{ background: #fde7e9; color: #a4262c; }
-.s-대기 { background: #fff4ce; color: #7d5700; }
-.s-승인완료 { background: #dff6dd; color: #107c10; }
-.s-반려 { background: #fde7e9; color: #a4262c; }
-.s-철회 { background: #f1f5f9; color: #64748b; }
+/* Badge (GW 동일) */
+.badge-대기{background:#fff4ce;color:#7d5700;border-radius:10px;padding:2px 8px;font-size:.68rem;font-weight:600}
+.badge-대기잠김{background:#f1f5f9;color:#64748b;border-radius:10px;padding:2px 8px;font-size:.68rem;font-weight:600}
+.badge-승인완료{background:#dff6dd;color:#107c10;border-radius:10px;padding:2px 8px;font-size:.68rem;font-weight:600}
+.badge-반려{background:#fde7e9;color:#a4262c;border-radius:10px;padding:2px 8px;font-size:.68rem;font-weight:600}
+.badge-철회{background:#f1f5f9;color:#64748b;border-radius:10px;padding:2px 8px;font-size:.68rem;font-weight:600}
 .list-empty { text-align: center; padding: 48px; color: #a19f9d; font-size: 14px; }
 
 /* ── BP Modal ── */
@@ -292,6 +290,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         <select id="f-status" onchange="renderList()">
           <option value="">전체 상태</option>
           <option value="대기">대기</option>
+          <option value="대기(잠김)">대기(잠김)</option>
           <option value="승인완료">승인완료</option>
           <option value="반려">반려</option>
           <option value="철회">철회</option>
@@ -299,7 +298,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         <input type="text" id="f-kw" placeholder="검색..." oninput="renderList()" style="min-width:160px">
       </div>
       <table class="voucher-table">
-        <thead><tr><th style="width:40px">번호</th><th>신청자</th><th>Title</th><th>유형</th><th>BP명</th><th>Purpose</th><th style="text-align:right">DR(KRW Total)</th><th style="text-align:right">CR(KRW Total)</th><th>Status</th><th>신청일</th></tr></thead>
+        <thead><tr><th style="width:40px">번호</th><th>신청자</th><th>Title</th><th>유형</th><th>BP명</th><th>Purpose</th><th style="text-align:right">DR(KRW Total)</th><th style="text-align:right">CR(KRW Total)</th><th>상태</th><th>신청일</th></tr></thead>
         <tbody id="list-body"></tbody>
       </table>
     </div>
@@ -1892,8 +1891,10 @@ function renderList(){
     if(fk&&!v.Purpose?.toLowerCase().includes(fk)&&!v.BPName?.toLowerCase().includes(fk)&&!v.Title?.toLowerCase().includes(fk))return false;
     return true;
   });
-  const stMap={'대기':'s-대기','승인완료':'s-승인완료','반려':'s-반려','철회':'s-철회'};
-  const stLabel={'대기':'대기','승인완료':'승인완료','반려':'반려','철회':'철회'};
+  const stMap={'대기':'badge-대기','대기(잠김)':'badge-대기잠김','승인완료':'badge-승인완료','반려':'badge-반려','철회':'badge-철회',
+    Pending:'badge-대기',Draft:'badge-대기잠김',Approved:'badge-승인완료',Rejected:'badge-반려'};
+  const stLabel={'대기':'대기','대기(잠김)':'대기(잠김)','승인완료':'승인완료','반려':'반려','철회':'철회',
+    Pending:'대기',Draft:'임시저장',Approved:'승인완료',Rejected:'반려'};
   const body=document.getElementById('list-body');
   if(!list.length){
     body.innerHTML=`<tr><td colspan="10" class="list-empty">${voucherListCache.length?'검색 결과가 없습니다.':'작성된 바우처가 없습니다.'}</td></tr>`;
@@ -1910,7 +1911,7 @@ function renderList(){
     <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem">${v.Purpose||'-'}</td>
     <td style="text-align:right;font-weight:700;color:#0078d4;font-size:.78rem">${fmtK(v.TotalDR_KRW)}</td>
     <td style="text-align:right;font-weight:700;color:#c0392b;font-size:.78rem">${fmtK(v.TotalCR_KRW)}</td>
-    <td><span class="type-badge ${stMap[v.Status]||''}">${stLabel[v.Status]||v.Status}</span></td>
+    <td><span class="${stMap[v.Status]||'badge-대기'}">${stLabel[v.Status]||v.Status}</span></td>
     <td style="font-size:.78rem;color:#605e5c">${fmtDate(v.SubmittedDate)}</td>
   </tr>`).join('');
 }
@@ -1920,7 +1921,10 @@ async function openVoucherSP(spId){
   if(!v) return;
   const lines_data = JSON.parse(v.LinesJSON||'[]');
   const fmtK = n=>Math.round(n||0).toLocaleString('ko-KR');
-  const stLabel={'대기':'대기','승인완료':'승인완료','반려':'반려','철회':'철회'};
+  const stMap={'대기':'badge-대기','대기(잠김)':'badge-대기잠김','승인완료':'badge-승인완료','반려':'badge-반려','철회':'badge-철회',
+    Pending:'badge-대기',Draft:'badge-대기잠김',Approved:'badge-승인완료',Rejected:'badge-반려'};
+  const stLabel={'대기':'대기','대기(잠김)':'대기(잠김)','승인완료':'승인완료','반려':'반려','철회':'철회',
+    Pending:'대기',Draft:'임시저장',Approved:'승인완료',Rejected:'반려'};
 
   const row = (label, value) => `<div class="det-row"><div class="det-lbl">${label}</div><div class="det-val">${value||'-'}</div></div>`;
 
@@ -1963,7 +1967,7 @@ async function openVoucherSP(spId){
     <div class="det-sec">\uae30\ubc18 \uc815\ubcf4</div>
     ${row('Voucher ID', `<span style="font-weight:700">${v.Title||'-'}</span>`)}
     ${row('Voucher Type', `<span class="type-badge t-${v.VoucherType}">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span>`)}
-    ${row('\uc0c1\ud0dc', `<span class="type-badge s-${v.Status}">${stLabel[v.Status]||v.Status||'-'}</span>`)}
+    ${row('상태', `<span class="${stMap[v.Status]||'badge-대기'}">${stLabel[v.Status]||v.Status||'-'}</span>`)}
     ${row('\uc2e0\uc6b2\uc790', (v.RequesterName||'')+(v.RequesterEmail?` (${v.RequesterEmail})`:''))}
     ${row('Cost Center', v.RequesterCCTR)}
     ${row('\uc2e0\uc6b2\uc77c\uc2dc', submittedDate)}
