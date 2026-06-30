@@ -26,7 +26,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #f3f2f1; min-height: 100
 
 /* ── App ── */
 #app { display: none; max-width: 1280px; margin: 0 auto; padding: 24px 20px 48px; }
-/* #tab-new는 다른 탭과 동일하게 전체 폭 사용 (GW 동일) */
+/* #app max-width는 switchTab()에서 동적으로 제어 (GW 동일: 폼=960px, 목록=1280px) */
 #app-header { display: none; }
 .app-header{background:#fff;border-radius:8px;padding:18px 24px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-start;box-shadow:0 1px 4px rgba(0,0,0,.08)}
 .app-title{font-size:1.1rem;font-weight:700;color:#323130}
@@ -772,6 +772,7 @@ async function boot(account) {
   user = account;
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='block';
+  document.getElementById('app').style.maxWidth='960px';
   document.getElementById('app-header').style.display='flex';
   document.getElementById('user-name').textContent=(account.name||account.username)+' ('+(account.username)+')';
   document.getElementById('v-requester').value = account.name||account.username;
@@ -1203,6 +1204,9 @@ function switchTab(tab) {
     const b = document.getElementById('tab-'+t+'-btn');
     if(b) b.classList.toggle('active', t===tab);
   });
+  // 바우처 작성은 좁은 너비, 목록/결재함/관리자는 넓은 레이아웃 (GW 동일)
+  const appEl = document.getElementById('app');
+  if(appEl) appEl.style.maxWidth = tab==='new' ? '960px' : '1280px';
   if(tab==='list') loadMyList();
 }
 
