@@ -1275,23 +1275,12 @@ function renderApproval() {
     preview.style.display='none'; return;
   }
 
-  const fmtRule = r => {
-    if(!r||r==='-') return '';
-    // 콤마 추가 + 한국어 표현
-    let s = r.replace(/([<>]=?)\s*([\d]+)/g, (m,op,num) => {
-      const n = parseInt(num).toLocaleString('ko-KR');
-      const label = op==='<'?'미만':op==='<='?'이하':op==='>'?'초과':'이상';
-      return `${label} ${n}`;
-    });
-    return ` (${s})`;
-  };
-
   preview.style.display='block';
   previewContent.innerHTML =
-    `<div style="font-weight:600;color:#0078d4;margin-bottom:6px">📋 결재 라인 (Voucher Type &amp; 금액 기준 자동 구성)</div>`+
+    `<div style="font-weight:600;color:#0078d4;margin-bottom:6px">📋 결재 라인 (Voucher Type & 금액 기준 자동 구성)</div>`+
     `<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">`+
     apLine.map((a,i)=>
-      `<span class="line-step"><span class="line-step-badge ${a.fixed?'fixed':''}">${i+1}차</span><span style="font-size:.75rem">${a.label}${fmtRule(a.rule)}</span>${i<apLine.length-1?'<span class="line-arrow">→</span>':''}</span>`
+      `<span class="line-step"><span class="line-step-badge ${a.fixed?'fixed':''}">${i+1}차</span><span style="font-size:.75rem">${a.label}</span>${i<apLine.length-1?'<span class="line-arrow">→</span>':''}</span>`
     ).join('')+
     `</div>`;
 
@@ -1299,22 +1288,19 @@ function renderApproval() {
   const deptOpts=depts.map(d=>`<option value="${d}">${d}</option>`).join('');
   container.innerHTML = apLine.map((a,i)=>{
     const order=i+1;
-    const reasonTag = a.rule && a.rule!=='-'
-      ? `<span style="font-size:11px;color:#0078d4;background:#e8f3ff;border-radius:10px;padding:1px 8px;margin-left:6px">${a.rule}</span>`
-      : '';
     const fixedTag = a.fixed
       ? `<span style="font-size:10px;color:#107c10;background:#dff6dd;border-radius:10px;padding:1px 6px;margin-left:4px">자동 지정</span>`
       : `<span style="font-size:10px;color:#8a6914;background:#fff4ce;border-radius:10px;padding:1px 6px;margin-left:4px">직접 선택</span>`;
     if(a.fixed){
       return `<div class="appr-block appr-fixed">
-        <div class="appr-block-title">${order}차 결재자${fixedTag} <span class="hint">— ${a.label}</span>${reasonTag}</div>
+        <div class="appr-block-title">${order}차 결재자${fixedTag} <span class="hint">— ${a.label}</span></div>
         <div class="appr-info">
           <input type="text"  value="${a.person.name}"  readonly placeholder="이름">
           <input type="email" value="${a.person.email}" readonly placeholder="이메일">
         </div></div>`;
     } else {
       return `<div class="appr-block">
-        <div class="appr-block-title">${order}차 결재자 <span class="req-mark">*</span>${fixedTag} <span class="hint">— ${a.label}</span>${reasonTag}</div>
+        <div class="appr-block-title">${order}차 결재자 <span class="req-mark">*</span>${fixedTag} <span class="hint">— ${a.label}</span></div>
         <div class="appr-select-row">
           <select id="ga${order}-dept" onchange="gwDeptChange(${order})"><option value="">부서</option>${deptOpts}</select>
           <select id="ga${order}-team" onchange="gwTeamChange(${order})" disabled><option value="">팀</option></select>
