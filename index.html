@@ -1410,13 +1410,13 @@ function renderLines() {
   const fmt = n=>(n||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
   tbody.innerHTML = lines.map((l,i)=>{
     const amt = parseFloat(l.amount)||0;
-    const sign = l.drcr==='CR'?-1:1;
-    const rate = parseFloat(document.getElementById('v-exrate')?.value)||0;
     let totalTxt = '';
     if(amt){
-      if(l.currency==='KRW') totalTxt = fmt(sign*amt);
-      else if(rate) totalTxt = 'KRW '+Math.round(sign*amt*rate).toLocaleString();
-      else totalTxt = '-';
+      if(l.currency==='KRW') totalTxt = fmt(amt);
+      else {
+        const rate = getExchangeRate(l.currency) || 0;
+        totalTxt = rate ? 'KRW '+Math.round(amt*rate).toLocaleString('ko-KR') : '-';
+      }
     } else totalTxt = '<span style="color:#a19f9d">0.00</span>';
 
     const drcrLabel = l.drcr==='DR'?'<span style="color:#0078d4;font-weight:600">DR</span>':l.drcr==='CR'?'<span style="color:#d83b01;font-weight:600">CR</span>':'<span style="color:#a19f9d">-</span>';
