@@ -1261,8 +1261,8 @@ function renderApproval() {
   if(needed(rules.MC,drKrw))  apLine.push({role:'MC',  label:'Department Head (부서장)',rule:rules.MC,  fixed:false});
   if(needed(rules.CEO,drKrw)) apLine.push({role:'CEO', label:'CEO',                      rule:rules.CEO, fixed:true, person:CEO});
   if(needed(rules.RD,drKrw))  apLine.push({role:'RD',  label:'RD',                       rule:rules.RD,  fixed:true, person:RD});
-  if(needed(rules.Controller||'필요시',drKrw)) apLine.push({role:'CTRL',label:'Controller', rule:'필요시', fixed:true, person:CTRL});
-  apLine.push({role:'AMGR',label:'Accounting Mgr.', rule:'필수', fixed:true, person:AMGR});
+  if(needed(rules.Controller||'필요시',drKrw)) apLine.push({role:'CTRL',label:'Controlling Head', rule:'필요시', fixed:true, person:CTRL});
+  apLine.push({role:'AMGR',label:'Accounting Head', rule:'필수', fixed:true, person:AMGR});
   if(needed(rules.CFO,drKrw)) apLine.push({role:'CFO', label:'CFO',                      rule:rules.CFO, fixed:true, person:CFO});
   if(ACC.email) apLine.push({role:'ACC',label:'Accounting 담당자', rule:'필수', fixed:true, person:ACC});
 
@@ -2089,7 +2089,7 @@ async function loadApprovalHistory(spId){
   const stLabelMap={'대기':'대기','대기(잠김)':'대기(잠김)','승인':'승인','승인완료':'승인완료','반려':'반려',
     Pending:'대기(잠김)',Approved:'승인완료',Rejected:'반려'};
   const roleLabelMap = {
-    TL:'Line Manager (팀장)', MC:'Department Head (부서장)',
+    TL:'Line Manager', MC:'Department Head',
     CEO:'CEO', RD:'RD', CTRL:'Controlling Head',
     AMGR:'Accounting Head', CFO:'CFO',
     ACC_AP:'AP 담당자', ACC_AR:'AR 담당자', ACC_GL:'GL 담당자', ACC:'담당자'
