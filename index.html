@@ -2246,7 +2246,7 @@ function renderList(){
     return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
   };
   body.innerHTML=list.map((v,i)=>`<tr onclick="openVoucherSP('${v._spId}')">
-    <td style="color:#a19f9d;font-size:.78rem">${i+1}</td>
+    <td style="color:#a19f9d;font-size:.78rem">${list.length-i}</td>
     <td style="font-size:.78rem;color:#605e5c">${v.RequesterEmail||'-'}</td>
     <td style="font-size:.75rem;color:#0078d4">${v.Title||'-'}</td>
     <td><span class="type-badge t-${v.VoucherType}">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span></td>
