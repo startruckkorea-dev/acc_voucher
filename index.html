@@ -532,7 +532,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         </div>
         <div>
           <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">CURRENCY</div>
-          <select id="lm-currency" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px">
+          <select id="lm-currency" onchange="calcLmAmount()" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px">
             <option>EUR</option><option>KRW</option><option>USD</option><option>JPY</option><option>CNY</option><option>SGD</option>
           </select>
         </div>
@@ -588,6 +588,10 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         <div>
           <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">AMOUNT</div>
           <input type="text" id="lm-amount" placeholder="0" readonly style="width:100%;padding:7px 10px;border:1px solid #edebe9;border-radius:4px;font-size:13px;text-align:right;box-sizing:border-box;background:#faf9f8;font-weight:600">
+          <div id="lm-amount-krw-wrap" style="display:none;margin-top:6px">
+            <div style="font-size:10px;font-weight:600;color:#0078d4;margin-bottom:3px">Amount (KRW)</div>
+            <input type="text" id="lm-amount-krw" readonly style="width:100%;padding:6px 10px;border:1px solid #c7e0f4;border-radius:4px;font-size:12px;text-align:right;box-sizing:border-box;background:#f0f6ff;font-weight:600;color:#0078d4">
+          </div>
         </div>
       </div>
 
@@ -1783,6 +1787,7 @@ function openLineModal(i) {
   document.getElementById('lm-qty').value = l.qty || 1;
   const amtVal = l.amount ? parseFloat(l.amount).toLocaleString('en', {minimumFractionDigits:2, maximumFractionDigits:2}) : '';
   document.getElementById('lm-amount').value = amtVal;
+  calcLmAmount(); // KRW 환산 표시 갱신
 
   document.getElementById('line-modal').classList.add('open');
 }
@@ -1803,6 +1808,18 @@ function calcLmAmount() {
   const qty   = parseFloat(document.getElementById('lm-qty').value) || 1;
   const amt   = price * qty;
   document.getElementById('lm-amount').value = amt.toLocaleString('en', {minimumFractionDigits:2, maximumFractionDigits:2});
+
+  // 통화가 KRW가 아니면 환산 KRW 금액도 표시
+  const currency = document.getElementById('lm-currency').value;
+  const krwWrap = document.getElementById('lm-amount-krw-wrap');
+  if(currency && currency !== 'KRW') {
+    const rate = getExchangeRate(currency) || 0;
+    const krwAmt = Math.round(amt * rate);
+    document.getElementById('lm-amount-krw').value = krwAmt.toLocaleString('ko-KR');
+    krwWrap.style.display = 'block';
+  } else {
+    krwWrap.style.display = 'none';
+  }
 }
 
 function closeLineModal() {
@@ -1994,7 +2011,6 @@ async function openVoucherSP(spId){
     ${row('신청자', v.RequesterEmail||'-')}
     ${row('Cost Center', v.RequesterCCTR)}
     ${row('신청일시', submittedDate)}
-    ${row('총 결재단계', v.TotalSteps?`${v.TotalSteps}단계 (현재 ${v.CurrentStep||0}단계 진행)`:'-')}
 
     <div class="det-sec">BP 정보</div>
     ${row('BP Code', v.BPCode)}
