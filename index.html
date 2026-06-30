@@ -2057,7 +2057,7 @@ function renderApprovalQueue() {
   tbody.innerHTML = approvalQueueCache.map((item,i)=>{
     const v = item._voucher;
     if(!v._spId) console.warn('[ApprQueue] _voucher 매칭 실패 - RequestID:', item.RequestID);
-    return `<tr onclick="openVoucherSP(${JSON.stringify(v._spId)})" style="cursor:pointer">
+    return `<tr onclick="openVoucherSP('${v._spId}')" style="cursor:pointer">
       <td style="color:#a19f9d;font-size:.78rem">${i+1}</td>
       <td style="font-size:.78rem;color:#605e5c">${v.RequesterEmail||'-'}</td>
       <td style="font-size:.75rem;color:#0078d4">${v.Title||'-'}</td>
