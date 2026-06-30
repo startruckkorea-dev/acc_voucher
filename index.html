@@ -306,7 +306,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         <input type="text" id="f-kw" placeholder="검색..." oninput="renderList()" style="min-width:160px">
       </div>
       <table class="voucher-table">
-        <thead><tr><th style="width:40px">번호</th><th>신청자</th><th>Title</th><th>유형</th><th>BP명</th><th>Purpose</th><th style="text-align:right">DR(KRW Total)</th><th style="text-align:right">CR(KRW Total)</th><th>상태</th><th>신청일</th><th>처리</th></tr></thead>
+        <thead><tr><th style="width:40px">번호</th><th>신청자</th><th>Title</th><th>유형</th><th>BP명</th><th>Purpose</th><th style="text-align:right">DR(KRW Total)</th><th style="text-align:right">CR(KRW Total)</th><th>상태</th><th>신청일</th><th style="width:90px;text-align:center">Withdraw</th></tr></thead>
         <tbody id="list-body"></tbody>
       </table>
     </div>
@@ -2248,7 +2248,7 @@ function renderList(){
     <td style="text-align:right;font-weight:700;color:#c0392b;font-size:.78rem">${fmtK(v.TotalCR_KRW)}</td>
     <td><span class="${stMap[v.Status]||'badge-대기'}">${stLabel[v.Status]||v.Status}</span></td>
     <td style="font-size:.78rem;color:#605e5c">${fmtDate(v.SubmittedDate)}</td>
-    <td onclick="event.stopPropagation()" style="text-align:center">${v.Status==='대기'?`<button onclick="confirmWithdraw('${v._spId}')" style="padding:4px 10px;font-size:.72rem;background:#fff;color:#a4262c;border:1px solid #a4262c;border-radius:4px;cursor:pointer">철회</button>`:''}</td>
+    <td onclick="event.stopPropagation()" style="text-align:center">${v.Status==='대기'?`<button onclick="confirmWithdraw('${v._spId}')" style="background:#ef4444;color:#fff;border:none;border-radius:4px;padding:3px 12px;font-size:.75rem;cursor:pointer;font-family:inherit;white-space:nowrap">Withdraw</button>`:''}</td>
   </tr>`).join('');
 }
 
