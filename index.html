@@ -1904,7 +1904,7 @@ function renderList(){
   body.innerHTML=list.map((v,i)=>`<tr onclick="openVoucherSP('${v._spId}')">
     <td style="color:#a19f9d;font-size:.78rem">${i+1}</td>
     <td style="font-size:.78rem;color:#605e5c">${v.RequesterEmail||'-'}</td>
-    <td style="font-family:monospace;font-size:.75rem;color:#0078d4">${v.Title||'-'}</td>
+    <td style="font-size:.75rem;color:#0078d4">${v.Title||'-'}</td>
     <td><span class="type-badge t-${v.VoucherType}">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span></td>
     <td style="font-size:.78rem;color:#605e5c">${v.BPName||'-'}</td>
     <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem">${v.Purpose||'-'}</td>
@@ -1942,19 +1942,26 @@ async function openVoucherSP(spId){
       <td style="padding:6px 7px;text-align:right;font-weight:600;font-size:.74rem">${(parseFloat(l.amount)||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
     </tr>`).join('');
 
-  // \ucca8\ubcc0\ud30c\uc77c \ubaa9\ub85d
-  let attHtml = '<span style="color:#a19f9d">\ucca8\ubcc0\ud30c\uc77c \uc5c6\uc744</span>';
+  // 첨부파일 목록 (클릭 시 다운로드)
+  let attHtml = '<span style="color:#a19f9d">첨부파일 없음</span>';
   if(v.AttachmentRef) {
     const items = v.AttachmentRef.split(';').filter(Boolean);
     attHtml = items.map(it=>{
-      const [name] = it.split('||ENC||');
-      return `<div style="display:flex;align-items:center;gap:6px;padding:4px 0"><span>\ud83d\udcce</span><span>${name}</span></div>`;
+      const [name, safeKey] = it.split('||ENC||');
+      let driveId='', itemId='';
+      try{
+        const decoded = decodeURIComponent(escape(atob(safeKey)));
+        const sepIdx = decoded.indexOf('###');
+        driveId = decoded.substring(0, sepIdx);
+        itemId = decoded.substring(sepIdx+3);
+      }catch(e){}
+      return `<div style="padding:4px 0;font-size:.8rem"><a href="#" class="file-dl-link" data-drive="${encodeURIComponent(driveId)}" data-id="${encodeURIComponent(itemId)}" data-name="${encodeURIComponent(name)}" style="color:#0078d4;cursor:pointer;text-decoration:none">📎 ${name}</a></div>`;
     }).join('');
   }
 
   document.getElementById('voucher-detail-content').innerHTML = `
     <div class="det-sec">\uae30\ubc18 \uc815\ubcf4</div>
-    ${row('Voucher ID', `<span style="font-family:monospace;font-weight:700">${v.Title||'-'}</span>`)}
+    ${row('Voucher ID', `<span style="font-weight:700">${v.Title||'-'}</span>`)}
     ${row('Voucher Type', `<span class="type-badge t-${v.VoucherType}">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span>`)}
     ${row('\uc0c1\ud0dc', `<span class="type-badge s-${v.Status}">${stLabel[v.Status]||v.Status||'-'}</span>`)}
     ${row('\uc2e0\uc6b2\uc790', (v.RequesterName||'')+(v.RequesterEmail?` (${v.RequesterEmail})`:''))}
@@ -2005,6 +2012,36 @@ async function openVoucherSP(spId){
   `;
 
   document.getElementById('voucher-detail-modal').classList.add('open');
+
+  // 첨부파일 다운로드 이벤트 (GW 동일 방식)
+  document.querySelectorAll('.file-dl-link').forEach(a=>{
+    a.addEventListener('click', async e=>{
+      e.preventDefault();
+      try{
+        const t = await token();
+        const driveId = decodeURIComponent(a.dataset.drive);
+        const itemId  = decodeURIComponent(a.dataset.id);
+        const fname   = decodeURIComponent(a.dataset.name);
+        const meta = await fetch(
+          GRAPH+'/drives/'+driveId+'/items/'+itemId+'?select=id,name,%40microsoft.graph.downloadUrl,webUrl',
+          {headers:{Authorization:'Bearer '+t}}
+        );
+        const mj = await meta.json();
+        const dlUrl = mj['@microsoft.graph.downloadUrl'];
+        if(dlUrl){
+          const anchor=document.createElement('a');
+          anchor.href=dlUrl; anchor.download=fname; anchor.style.display='none';
+          document.body.appendChild(anchor); anchor.click(); document.body.removeChild(anchor);
+        } else if(mj.webUrl){
+          window.open(mj.webUrl, '_blank');
+        } else {
+          showAccAlert('다운로드 URL을 가져올 수 없습니다.', 'SharePoint에서 직접 확인해주세요.', '⚠️');
+        }
+      }catch(err){
+        showAccAlert('다운로드 오류', err.message, '⚠️');
+      }
+    });
+  });
 }
 function closeDetailModal(){
   document.getElementById('voucher-detail-modal').classList.remove('open');
