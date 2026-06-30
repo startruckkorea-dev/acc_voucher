@@ -141,7 +141,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 .det-row:last-child{border-bottom:none}
 .det-lbl{color:#605e5c;width:160px;flex-shrink:0}
 .det-val{color:#323130;font-weight:500;flex:1}
-.appr-item{display:flex;justify-content:space-between;align-items:center;padding:7px 10px;border-bottom:1px solid #edebe9;font-size:.8rem}
+.appr-item{display:flex;justify-content:space-between;align-items:flex-start;padding:9px 10px;border-bottom:1px solid #edebe9;font-size:.8rem;gap:10px}
 .appr-item:last-child{border-bottom:none}
 .status-대기{color:#7d5700;font-weight:600}
 .status-대기잠김{color:#a19f9d;font-weight:600}
@@ -2114,7 +2114,7 @@ async function loadApprovalHistory(spId){
       if(af.ApproverRole==='ACC') roleLabel = accLabelByType[v.VoucherType] || '담당자';
       return `<div class="appr-item">
         <div>
-          <b>${af.ApprovalOrder}차</b> ${roleLabel}
+          <b>${af.ApprovalOrder}차 결재자(${roleLabel})</b>
           <br><span style="font-size:.72rem;color:#605e5c">${af.ApproverName||''} · ${af.ApproverEmail||''}</span>
           ${af.ApprovalDate?`<br><span style="font-size:.72rem;color:#a19f9d">${fmtDate(af.ApprovalDate)}</span>`:''}
           ${af.Comment?`<br><span style="font-size:.72rem;background:#fff;border:1px solid #edebe9;border-radius:4px;padding:2px 6px;display:inline-block;margin-top:2px">💬 ${af.Comment}</span>`:''}
