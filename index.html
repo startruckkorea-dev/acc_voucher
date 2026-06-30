@@ -1157,7 +1157,10 @@ async function loadBPMaster() {
           {headers:{Authorization:'Bearer '+t}}
         );
         if(!sr.ok) continue;
-        const srData = await sr.json();
+        const txt = await sr.text();
+        if(!txt) continue;
+        let srData;
+        try{ srData = JSON.parse(txt); }catch(_){ continue; }
         const found = (srData.value||[]).find(i=>(i.name||'').includes('DTK'));
         if(found) {
           fileItemId = found.id;
@@ -1184,9 +1187,15 @@ async function loadBPMaster() {
           try {
             const sr = await fetch(GRAPH+'/drives/'+drv.id+"/root/search(q='Master%20data%20List%202014')",{headers:{Authorization:'Bearer '+t}});
             if(sr.ok) {
-              const srData = await sr.json();
-              const found4 = (srData.value||[]).find(i=>(i.name||'').includes('DTK'));
-              if(found4) { fileItemId=found4.id; fileDriveId=drv.id; console.log('[BP] STK-DB search 발견:', found4.name); break; }
+              const txt2 = await sr.text();
+              if(txt2){
+                let srData;
+                try{ srData = JSON.parse(txt2); }catch(_){ srData = null; }
+                if(srData){
+                  const found4 = (srData.value||[]).find(i=>(i.name||'').includes('DTK'));
+                  if(found4) { fileItemId=found4.id; fileDriveId=drv.id; console.log('[BP] STK-DB search 발견:', found4.name); break; }
+                }
+              }
             }
           } catch(_){}
         }
