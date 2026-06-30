@@ -2275,7 +2275,9 @@ async function openVoucherSP(spId){
     || adminListCache.find(x=>x._spId===spId)
     || (approvalQueueCache.find(x=>x._voucher?._spId===spId)?._voucher);
   if(!v) return;
-  const lines_data = JSON.parse(v.LinesJSON||'[]');
+  let lines_data = [];
+  try { lines_data = JSON.parse(v.LinesJSON||'[]'); }
+  catch(e) { console.error('[openVoucherSP] LinesJSON 파싱 실패 (데이터가 잘렸을 수 있음):', e.message, '| 원본 길이:', (v.LinesJSON||'').length); }
   const fmtK = n=>Math.round(n||0).toLocaleString('ko-KR');
   const stMap={'대기':'badge-대기','대기(잠김)':'badge-대기잠김','승인완료':'badge-승인완료','반려':'badge-반려','철회':'badge-철회',
     Pending:'badge-대기',Draft:'badge-대기잠김',Approved:'badge-승인완료',Rejected:'badge-반려'};
