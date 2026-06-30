@@ -139,6 +139,12 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 .det-row:last-child{border-bottom:none}
 .det-lbl{color:#605e5c;width:160px;flex-shrink:0}
 .det-val{color:#323130;font-weight:500;flex:1}
+.appr-item{display:flex;justify-content:space-between;align-items:center;padding:7px 10px;border-bottom:1px solid #edebe9;font-size:.8rem}
+.appr-item:last-child{border-bottom:none}
+.status-대기{color:#7d5700;font-weight:600}
+.status-대기잠김{color:#a19f9d;font-weight:600}
+.status-승인{color:#107c10;font-weight:600}
+.status-반려{color:#a4262c;font-weight:600}
 .btn-secondary{background:#fff;border:1px solid #d2d0ce;border-radius:4px;padding:8px 24px;font-size:.85rem;cursor:pointer;font-family:inherit}
 .btn-secondary:hover{background:#f3f2f1}
 .btn-add { background: #f0f6ff; border: 1px solid #c7e0f4; color: #0078d4; font-size: 12px; padding: 6px 12px; }
@@ -1574,11 +1580,11 @@ async function saveVoucher(status) {
     if(l.drcr==='CR') crKrw+=krw;
   });
 
-  // Voucher ID 생성: AV-YYYYMMDD-XXX
+  // Voucher ID 날짜 부분 (KST 기준) - 실제 ID는 POST 후 itemId로 생성
   const today=new Date();
   const kst=new Date(today.getTime()+9*3600000);
-  const dateStr=kst.toISOString().slice(0,10).replace(/-/g,'');
-  const voucherId='ACC-Voucher-'+dateStr+'-'+String(Date.now()).slice(-4);
+  const dateStr=kst.toISOString().slice(0,10); // YYYY-MM-DD
+  let voucherId='ACC-Voucher-'+dateStr+'_ID-TEMP';
 
   // 결재 순서 구성
   const approvers = buildApprovers();
@@ -1611,6 +1617,10 @@ async function saveVoucher(status) {
     };
     const reqRes = await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items`, 'POST', reqBody);
     const requestId = reqRes.id;
+
+    // Title을 GW 방식(ACC-Voucher-YYYY-MM-DD_ID-{itemId})으로 재설정
+    voucherId = 'ACC-Voucher-'+dateStr+'_ID-'+requestId;
+    await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${requestId}/fields`, 'PATCH', {Title: voucherId});
 
     // 2. 첨부파일 업로드 → AttachedFiles/ACC-Voucher_AttachedFiles/{voucherId}/
     if(accFiles.length){
@@ -1963,17 +1973,19 @@ async function openVoucherSP(spId){
     }).join('');
   }
 
+  // 결재 이력 (Approvals 조회)
+  let apprHtml = '<div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력을 불러오는 중...</div>';
   document.getElementById('voucher-detail-content').innerHTML = `
-    <div class="det-sec">\uae30\ubc18 \uc815\ubcf4</div>
+    <div class="det-sec">기반 정보</div>
     ${row('Voucher ID', `<span style="font-weight:700">${v.Title||'-'}</span>`)}
     ${row('Voucher Type', `<span class="type-badge t-${v.VoucherType}">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span>`)}
     ${row('상태', `<span class="${stMap[v.Status]||'badge-대기'}">${stLabel[v.Status]||v.Status||'-'}</span>`)}
-    ${row('\uc2e0\uc6b2\uc790', (v.RequesterName||'')+(v.RequesterEmail?` (${v.RequesterEmail})`:''))}
+    ${row('신청자', v.RequesterEmail||'-')}
     ${row('Cost Center', v.RequesterCCTR)}
-    ${row('\uc2e0\uc6b2\uc77c\uc2dc', submittedDate)}
-    ${row('\ucd9d \uacb0\uc7ac\ub2e8\uacc4', v.TotalSteps?`${v.TotalSteps}\ub2e8\uacc4 (\ud604\uc7ac ${v.CurrentStep||0}\ub2e8\uacc4 \uc9c4\ud589)`:'-')}
+    ${row('신청일시', submittedDate)}
+    ${row('총 결재단계', v.TotalSteps?`${v.TotalSteps}단계 (현재 ${v.CurrentStep||0}단계 진행)`:'-')}
 
-    <div class="det-sec">BP \uc815\ubcf4</div>
+    <div class="det-sec">BP 정보</div>
     ${row('BP Code', v.BPCode)}
     ${row('BP Name', v.BPName)}
     ${row('BP Category', v.BPCategory)}
@@ -1981,10 +1993,10 @@ async function openVoucherSP(spId){
     <div class="det-sec">Purpose / Description</div>
     ${row('Purpose', `<span style="white-space:pre-wrap">${v.Purpose||'-'}</span>`)}
 
-    <div class="det-sec">\ucca8\ubcc0\ud30c\uc77c</div>
+    <div class="det-sec">첨부파일</div>
     <div style="padding:4px 0;font-size:.78rem">${attHtml}</div>
 
-    <div class="det-sec">\ud68c\uacc4 \uc815\ubcf4 (Account Information)</div>
+    <div class="det-sec">회계 정보 (Account Information)</div>
     <div style="overflow-x:auto;margin-top:4px">
       <table style="width:100%;border-collapse:collapse;font-size:.74rem;min-width:760px">
         <thead>
@@ -1992,7 +2004,7 @@ async function openVoucherSP(spId){
             <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">No</th>
             <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">DR/CR</th>
             <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">GL</th>
-            <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">\uacc4\uc815\uba85</th>
+            <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">계정명</th>
             <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">Cost Center</th>
             <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">Profit Center</th>
             <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">Sub_PC</th>
@@ -2003,7 +2015,7 @@ async function openVoucherSP(spId){
             <th style="padding:6px 7px;text-align:right;color:#605e5c;font-weight:600;font-size:.68rem">Amount</th>
           </tr>
         </thead>
-        <tbody>${lineRows||'<tr><td colspan="12" style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">\ub77c\uc778 \uc5c6\uc744</td></tr>'}</tbody>
+        <tbody>${lineRows||'<tr><td colspan="12" style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">라인 없음</td></tr>'}</tbody>
       </table>
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px;padding:9px 8px;background:#f3f2f1;border-radius:4px;margin-top:6px">
@@ -2013,9 +2025,17 @@ async function openVoucherSP(spId){
       <span style="font-size:.75rem;color:#605e5c">CR Total(KRW)</span>
       <span style="font-weight:700;font-size:.85rem;color:#c0392b">${fmtK(v.TotalCR_KRW)}</span>
     </div>
+
+    <div class="det-sec">결재 이력</div>
+    <div id="voucher-appr-history" style="background:#f9f9f9;border-radius:4px;border:1px solid #edebe9">
+      <div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력을 불러오는 중...</div>
+    </div>
   `;
 
   document.getElementById('voucher-detail-modal').classList.add('open');
+
+  // 결재 이력 비동기 로드
+  loadApprovalHistory(v._spId);
 
   // 첨부파일 다운로드 이벤트 (GW 동일 방식)
   document.querySelectorAll('.file-dl-link').forEach(a=>{
@@ -2046,6 +2066,42 @@ async function openVoucherSP(spId){
       }
     });
   });
+}
+
+async function loadApprovalHistory(spId){
+  const v = voucherListCache.find(x=>x._spId===spId);
+  if(!v) return;
+  const stClsMap={'대기':'status-대기','대기(잠김)':'status-대기잠김','승인':'status-승인','승인완료':'status-승인','반려':'status-반려'};
+  const fmtDate = s => s ? new Date(s).toLocaleString('ko-KR',{year:'2-digit',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+  try{
+    if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
+    const t = await token();
+    const url = `${GRAPH}/sites/${siteId}/lists/${LIST_APPROVALS}/items?$expand=fields&$filter=fields/RequestID eq ${parseInt(spId)}&$top=50`;
+    const res = await fetch(url, {headers:{Authorization:'Bearer '+t, Prefer:'HonorNonIndexedQueriesWarningMayFailRandomly'}});
+    if(!res.ok) throw new Error('결재 이력 조회 실패');
+    const data = await res.json();
+    const list = data.value.map(i=>i.fields).sort((a,b)=>(a.ApprovalOrder||0)-(b.ApprovalOrder||0));
+    if(!list.length){
+      document.getElementById('voucher-appr-history').innerHTML = '<div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력이 없습니다.</div>';
+      return;
+    }
+    const html = list.map(af=>{
+      const cls = stClsMap[af.Status] || 'status-대기잠김';
+      return `<div class="appr-item">
+        <div>
+          <b>${af.ApprovalOrder}차</b> ${af.ApproverRole||''}
+          <br><span style="font-size:.72rem;color:#605e5c">${af.ApproverName||''} · ${af.ApproverEmail||''}</span>
+          ${af.ApprovalDate?`<br><span style="font-size:.72rem;color:#a19f9d">${fmtDate(af.ApprovalDate)}</span>`:''}
+          ${af.Comment?`<br><span style="font-size:.72rem;background:#fff;border:1px solid #edebe9;border-radius:4px;padding:2px 6px;display:inline-block;margin-top:2px">💬 ${af.Comment}</span>`:''}
+        </div>
+        <span class="${cls}">${af.Status}</span>
+      </div>`;
+    }).join('');
+    document.getElementById('voucher-appr-history').innerHTML = html;
+  }catch(e){
+    console.error('loadApprovalHistory error:', e);
+    document.getElementById('voucher-appr-history').innerHTML = '<div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력을 불러올 수 없습니다.</div>';
+  }
 }
 function closeDetailModal(){
   document.getElementById('voucher-detail-modal').classList.remove('open');
