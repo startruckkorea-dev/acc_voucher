@@ -25,7 +25,8 @@ body { font-family: 'Segoe UI', sans-serif; background: #f3f2f1; min-height: 100
 .login-page-footer{position:fixed;bottom:0;left:0;right:0;padding:10px 24px;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:rgba(255,255,255,.55);background:rgba(0,0,0,.18)}
 
 /* ── App ── */
-#app { display: none; max-width: 960px; margin: 0 auto; padding: 24px 16px 48px; }
+#app { display: none; max-width: 1280px; margin: 0 auto; padding: 24px 20px 48px; }
+#tab-new { max-width: 920px; }
 #app-header { display: none; }
 .app-header{background:#fff;border-radius:8px;padding:18px 24px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-start;box-shadow:0 1px 4px rgba(0,0,0,.08)}
 .app-title{font-size:1.1rem;font-weight:700;color:#323130}
@@ -126,6 +127,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 .file-item { display: flex; justify-content: space-between; align-items: center; background: #f3f2f1; border-radius: 4px; padding: 5px 10px; font-size: 12px; }
 .file-item button { background: none; border: none; color: #a4262c; cursor: pointer; font-size: 14px; }
 .btn { padding: 8px 18px; border-radius: 4px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; transition: all .15s; }
+.btn-row{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
 .btn-primary{background:#0078d4;color:#fff;border:none;border-radius:4px;padding:8px 24px;font-size:.85rem;cursor:pointer;font-family:inherit}
 .btn-primary:hover{background:#106ebe}
 /* Modal (GW 동일 스타일) */
@@ -1911,7 +1913,12 @@ function renderList(){
     return;
   }
   const fmtK=n=>Math.round(n||0).toLocaleString('ko-KR');
-  const fmtDate = s => s ? new Date(s).toLocaleDateString('ko-KR',{year:'2-digit',month:'2-digit',day:'2-digit'}) : '-';
+  const fmtDate = s => {
+    if(!s) return '-';
+    const d = new Date(s);
+    const p = n=>String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
   body.innerHTML=list.map((v,i)=>`<tr onclick="openVoucherSP('${v._spId}')">
     <td style="color:#a19f9d;font-size:.78rem">${i+1}</td>
     <td style="font-size:.78rem;color:#605e5c">${v.RequesterEmail||'-'}</td>
