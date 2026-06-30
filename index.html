@@ -822,6 +822,11 @@ async function boot(account) {
     _configLoaded = true;
     renderApproval(); // config 로드 후 재렌더
   }).catch(()=>{ _configLoaded = true; });
+
+  // 결재 대기 배지 미리 로드 (GW 동일: 진입 시 1회 + 60초마다 갱신)
+  if(!siteId){ api('/sites/'+SITE_PATH_DB).then(s=>{ siteId=s.id; checkApprovalBadge(); }).catch(()=>{}); }
+  else checkApprovalBadge();
+  setInterval(()=>{ try{ checkApprovalBadge(); }catch(e){} }, 60000);
 }
 
 function getCCTR(nameOrEmail) {
@@ -1955,6 +1960,25 @@ async function loadMyList() {
 }
 
 let adminListCache = [];
+// 결재 대기 건수만 가볍게 체크 (탭 클릭 전 미리 배지 표시, GW 동일)
+async function checkApprovalBadge(){
+  if(!siteId) return;
+  try{
+    const t = await token();
+    const myEmail = (user?.username||'').toLowerCase();
+    const res = await fetch(`${GRAPH}/sites/${siteId}/lists/${LIST_APPROVALS}/items?$expand=fields&$top=999`,
+      {headers:{Authorization:'Bearer '+t, Prefer:'HonorNonIndexedQueriesWarningMayFailRandomly'}});
+    if(!res.ok) return;
+    const data = await res.json();
+    const mine = data.value.filter(i=>(i.fields.ApproverEmail||'').toLowerCase()===myEmail && i.fields.Status==='대기');
+    const badge = document.getElementById('appr-badge');
+    if(badge){
+      if(mine.length){ badge.textContent = mine.length; badge.style.display = 'inline'; }
+      else badge.style.display = 'none';
+    }
+  }catch(e){ console.warn('[Badge] 결재 배지 갱신 실패:', e.message); }
+}
+
 // ── 결재함 ──
 async function loadApprovalQueue() {
   const tbody = document.getElementById('appr-body');
