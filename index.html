@@ -2399,7 +2399,9 @@ async function openVoucherSP(spId){
 }
 
 async function loadApprovalHistory(spId){
-  const v = voucherListCache.find(x=>x._spId===spId);
+  const v = voucherListCache.find(x=>x._spId===spId)
+    || adminListCache.find(x=>x._spId===spId)
+    || (approvalQueueCache.find(x=>x._voucher?._spId===spId)?._voucher);
   if(!v) return;
   const stClsMap={'대기':'status-대기','대기(잠김)':'status-대기잠김','승인':'status-승인','승인완료':'status-승인','반려':'status-반려',
     Pending:'status-대기',Approved:'status-승인',Rejected:'status-반려'};
