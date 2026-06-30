@@ -785,6 +785,7 @@ async function boot(account) {
   renderLines();
   switchTab('new');
   loadCCTRMaster(account.name).catch(e=>console.warn('CCTR 로드 실패:', e.message));
+  loadEmployees().catch(e=>console.warn('Employee 로드 실패:', e.message));
   loadBPMaster().catch(e=>console.warn('BP 마스터 로드 실패:', e.message));
   loadAccMasters().catch(e=>console.warn('회계 마스터 로드 실패:', e.message));
   // system_config 로드 → 헤더 문의 이메일 + 결재라인 재렌더
@@ -817,6 +818,25 @@ function getCCTR(nameOrEmail) {
 }
 
 // ── 회계 마스터 로드 (STK-DB: acc_voucher_GL_CCTR_COPA + COA + 환율) ──
+async function loadEmployees(){
+  try{
+    if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
+    const drivesData=await api('/sites/'+siteId+'/drives');
+    const docDrive=drivesData.value.find(d=>['문서','Documents','Shared Documents'].includes(d.name))||drivesData.value[0];
+    const t=await token();
+    const res=await fetch(GRAPH+'/drives/'+docDrive.id+'/root:/employee_search.xlsx:/content',{headers:{Authorization:'Bearer '+t}});
+    if(!res.ok)throw new Error('직원 데이터 로드 실패: '+res.status);
+    const buf=await res.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array'});
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+    window._employeeData = rows
+      .map(r=>({dept:r['Department']||'', team:r['Team']||'', name:r['EngName']||'', email:(r['EMail']||r['email']||'')}))
+      .filter(r=>r.email && r.name);
+    console.log('[Employee] Loaded:', window._employeeData.length, 'entries from employee_search.xlsx');
+    renderApproval(); // 드롭다운 다시 그림
+  }catch(e){ console.warn('[Employee] 로드 실패:', e.message); }
+}
+
 async function loadAccMasters() {
   try {
     const t = await token();
@@ -1059,18 +1079,8 @@ async function loadCCTRMaster(userName) {
         const teamCol    = empHeader.findIndex(h=>(h||'').toString().includes('팀'));
         console.log('[CCTR] 컬럼 인덱스 - CCTR:'+cctrCol2+' ENG:'+nameEngCol+' KO:'+nameKoCol);
 
-        // _employeeData 구성 (부서/팀 드롭다운용)
-        const empData=[];
-        for(let i=empHeaderIdx+1;i<empRows.length;i++){
-          const r = empRows[i]||[];
-          const eng=(r[nameEngCol]||'').toString().trim();
-          const ko=(r[nameKoCol]||'').toString().trim();
-          const dept=(deptCol>=0?(r[deptCol]||''):'').toString().trim();
-          const team=(teamCol>=0?(r[teamCol]||''):'').toString().trim();
-          if(eng) empData.push({name:eng, nameKo:ko, dept:dept||'기타', team:team||'기타', email:''});
-        }
-        window._employeeData = empData;
-        console.log('[CCTR] _employeeData:', empData.length, 'entries');
+        // 참고: TL/MC 드롭다운용 _employeeData는 employee_search.xlsx(loadEmployees)에서 별도 로드함
+        // (이 Employee 시트는 이메일이 없어 부서/팀 드롭다운 용도로 사용 불가)
 
         for(let i=empHeaderIdx+1;i<empRows.length;i++){
           const r = empRows[i];
