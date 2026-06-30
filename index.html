@@ -255,9 +255,9 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
       <div class="app-title">Accounting Voucher</div>
       <div class="app-sub">STK 회계 전표 시스템</div>
       <div style="font-size:11px;color:#605e5c;margin-top:4px">
-        <div id="acc-contact-ap">BU Admin(AP 관련) 문의 Email: hyunju.gong@hyosung.com</div>
-        <div id="acc-contact-ar">BU Admin(AR 관련) 문의 Email: jihyun.ma@hyosung.com</div>
-        <div id="acc-contact-gl">BU Admin(GL 관련) 문의 Email: sora.kim@hyosung.com</div>
+        <div id="acc-contact-ap">BU Admin(AP 관련) 문의 Email: 불러오는 중...</div>
+        <div id="acc-contact-ar">BU Admin(AR 관련) 문의 Email: 불러오는 중...</div>
+        <div id="acc-contact-gl">BU Admin(GL 관련) 문의 Email: 불러오는 중...</div>
       </div>
     </div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
@@ -762,9 +762,6 @@ const APPROVAL_RULES = {
   ADV:   {TL:'< 1,000,000',MC:'< 20,000,000',CEO:'>= 20,000,000',RD:'>= 20,000,000',CFO:'>= 1,000,000'},
   SET:   {TL:'필수',MC:'필수',CEO:'-',RD:'-',CFO:'필수'},
 };
-const ACC_HANDLER = {
-  AP:'공현주',AP_IMS:'김소라',AP_CR:'마지현',AR:'마지현',GL:'김소라',FA:'김소라',ADV:'공현주',SET:'공현주'
-};
 
 // ── MSAL ──
 async function signIn() {
@@ -849,21 +846,6 @@ async function boot(account) {
   if(!siteId){ api('/sites/'+SITE_PATH_DB).then(s=>{ siteId=s.id; checkApprovalBadge(); }).catch(()=>{}); }
   else checkApprovalBadge();
   setInterval(()=>{ try{ checkApprovalBadge(); }catch(e){} }, 60000);
-}
-
-function getCCTR(nameOrEmail) {
-  // 이메일 기반 매핑 (account.username)
-  const emailMap = {
-    'jimmy.lee@hyosung.com':    '47900745 IT Application',
-    'jimmy.lee@startruckkorea.com': '47900745 IT Application',
-    'gina.shin@hyosung.com':    '47900776 Accounting',
-    'hyunju.gong@hyosung.com':  '47900776 Accounting',
-    'jihyun.ma@hyosung.com':    '47900776 Accounting',
-    'sora.kim@hyosung.com':     '47900776 Accounting',
-    'martin.schindele@hyosung.com': '47900706 CFO Office',
-  };
-  const key = (nameOrEmail||'').toLowerCase();
-  return emailMap[key] || '47900776 Accounting';
 }
 
 // ── 회계 마스터 로드 (STK-DB: acc_voucher_GL_CCTR_COPA + COA + 환율) ──
@@ -1316,11 +1298,11 @@ function renderApproval() {
   const rules = APPROVAL_RULES[type]||{};
   const cfg = _sysConfig||{};
 
-  const CEO  = cfgVal(cfg,'ACC-Voucher_CEO',  {name:'Keuntae Dong',   email:'keuntae.dong@hyosung.com'});
-  const RD   = cfgVal(cfg,'ACC-Voucher_RD',   {name:'Keuntae Dong',   email:'keuntae.dong@hyosung.com'});
-  const CTRL = cfgVal(cfg,'ACC-Voucher_CONTROLLING',{name:'Jungho Yoo',email:'jungho.yoo@hyosung.com'});
-  const AMGR = cfgVal(cfg,'ACC-Voucher_ACCOUNTING', {name:'Gina Shin', email:'gina.shin@hyosung.com'});
-  const CFO  = cfgVal(cfg,'ACC-Voucher_CFO',  {name:'Martin Schindele',email:'martin.s.schindele@hyosung.com'});
+  const CEO  = cfgVal(cfg,'ACC-Voucher_CEO',  {name:'', email:''});
+  const RD   = cfgVal(cfg,'ACC-Voucher_RD',   {name:'', email:''});
+  const CTRL = cfgVal(cfg,'ACC-Voucher_CONTROLLING',{name:'', email:''});
+  const AMGR = cfgVal(cfg,'ACC-Voucher_ACCOUNTING', {name:'', email:''});
+  const CFO  = cfgVal(cfg,'ACC-Voucher_CFO',  {name:'', email:''});
   const ACC_MAP={AP:'ACC-Voucher_CONTACT_AP',AP_IMS:'ACC-Voucher_CONTACT_AP',AP_CR:'ACC-Voucher_CONTACT_AP',
     AR:'ACC-Voucher_CONTACT_AR',GL:'ACC-Voucher_CONTACT_GL',FA:'ACC-Voucher_CONTACT_GL',
     ADV:'ACC-Voucher_CONTACT_AP',SET:'ACC-Voucher_CONTACT_AP'};
@@ -1674,6 +1656,14 @@ async function saveVoucher(status) {
 
   // 결재 순서 구성
   const approvers = buildApprovers();
+  if(status==='대기'){
+    const missing = approvers.filter(a=>!a.email);
+    if(missing.length){
+      alert('다음 결재자 정보를 불러오지 못해 제출할 수 없습니다: '+missing.map(a=>a.role).join(', ')+
+        '\n\nTL/MC는 결재라인에서 직접 선택해주세요.\nCEO/RD/Controlling/Accounting/CFO는 system_config_final.xlsx 설정을 확인하거나 관리자에게 문의해주세요.');
+      return;
+    }
+  }
   const btn = document.querySelector(`button[onclick*="saveVoucher('${status}')"]`);
 
   try {
@@ -1768,11 +1758,11 @@ function buildApprovers() {
   const type = document.getElementById('v-type').value;
   const rules = APPROVAL_RULES[type]||{};
   const cfg = _sysConfig||{};
-  const CEO  = cfgVal(cfg,'ACC-Voucher_CEO',  {name:'Keuntae Dong',   email:'keuntae.dong@hyosung.com'});
-  const RD   = cfgVal(cfg,'ACC-Voucher_RD',   {name:'Keuntae Dong',   email:'keuntae.dong@hyosung.com'});
-  const CTRL = cfgVal(cfg,'ACC-Voucher_CONTROLLING',{name:'Jungho Yoo',email:'jungho.yoo@hyosung.com'});
-  const AMGR = cfgVal(cfg,'ACC-Voucher_ACCOUNTING', {name:'Gina Shin', email:'gina.shin@hyosung.com'});
-  const CFO  = cfgVal(cfg,'ACC-Voucher_CFO',  {name:'Martin Schindele',email:'martin.s.schindele@hyosung.com'});
+  const CEO  = cfgVal(cfg,'ACC-Voucher_CEO',  {name:'', email:''});
+  const RD   = cfgVal(cfg,'ACC-Voucher_RD',   {name:'', email:''});
+  const CTRL = cfgVal(cfg,'ACC-Voucher_CONTROLLING',{name:'', email:''});
+  const AMGR = cfgVal(cfg,'ACC-Voucher_ACCOUNTING', {name:'', email:''});
+  const CFO  = cfgVal(cfg,'ACC-Voucher_CFO',  {name:'', email:''});
   const ACC_MAP={AP:'ACC-Voucher_CONTACT_AP',AP_IMS:'ACC-Voucher_CONTACT_AP',AP_CR:'ACC-Voucher_CONTACT_AP',
     AR:'ACC-Voucher_CONTACT_AR',GL:'ACC-Voucher_CONTACT_GL',FA:'ACC-Voucher_CONTACT_GL',
     ADV:'ACC-Voucher_CONTACT_AP',SET:'ACC-Voucher_CONTACT_AP'};
@@ -1808,7 +1798,7 @@ function buildApprovers() {
   apLine.forEach((a,i)=>{
     const order=i+1;
     if(a.fixed){
-      if(a.person.email) result.push({role:a.role,name:a.person.name,email:a.person.email,order});
+      result.push({role:a.role,name:a.person.name||'',email:a.person.email||'',order});
     } else {
       const nm=(document.getElementById('ga'+order+'-name')||{}).value||'';
       const em=(document.getElementById('ga'+order+'-email')||{}).value||'';
