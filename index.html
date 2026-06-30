@@ -2296,7 +2296,7 @@ async function openVoucherSP(spId){
 
   const row = (label, value) => `<div class="det-row"><div class="det-lbl">${label}</div><div class="det-val">${value||'-'}</div></div>`;
 
-  const submittedDate = v.SubmittedDate ? new Date(v.SubmittedDate).toLocaleString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '-';
+  const submittedDate = v.SubmittedDate ? new Date(v.SubmittedDate).toLocaleString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}) : '-';
 
   const lineRows = lines_data.map((l,i)=>`
     <tr style="border-bottom:1px solid #f3f2f1">
@@ -2441,7 +2441,7 @@ async function loadApprovalHistory(spId){
     AMGR:'Accounting Head', CFO:'CFO',
     ACC_AP:'AP 담당자', ACC_AR:'AR 담당자', ACC_GL:'GL 담당자', ACC:'담당자'
   };
-  const fmtDate = s => s ? new Date(s).toLocaleString('ko-KR',{year:'2-digit',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+  const fmtDate = s => s ? new Date(s).toLocaleString('ko-KR',{year:'2-digit',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}) : '';
   try{
     if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
     const t = await token();
