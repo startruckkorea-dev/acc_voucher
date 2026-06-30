@@ -891,20 +891,19 @@ async function loadAccMasters() {
       return XLSX.read(buf, {type:'array', cellDates:false});
     }
 
-    // ── GL_CCTR_COPA 통합 파일 파싱
-    // 헤더: row0=(None,GL Account,...,Cost Center,Name,...,Profit,Description,...,Select:COPA)
-    // row1: (None,New GL,GL Account,Description,설명,...,CCTR Code,Name,...,PC Code,PC Name,...)
-    // data from row2
+    // ── GL_CCTR_COPA 통합 파일 파싱 (2026-06-30 신규 구조 기준)
+    // row0(index0)=상단 헤더, row1=빈행, row2=컬럼헤더, row3~=실데이터
+    // GL: A/B/C열(index0/1/2) · CCTR: H/I열(index6/7, 미사용) · PC: K/L열(index9/10) · Sub_PC: N/O열(index12/13, 신규 위치)
     try {
       const wb = await fetchXlsx(TEAM_FILE_NAME); // acc_voucher_GL_CCTR_COPA.xlsx
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
 
       const newGL=[], newCC=[], newPC=[], newSubPC=[];
 
-      // 헤더: row3 (index 3) = New GL Account, GL Account, Description
-      // data: row4~ (index 4~)
-      for(let i=4;i<rows.length;i++){
+      // 실데이터는 index 3부터 시작 (index0=상단헤더, 1=빈행, 2=컬럼헤더)
+      for(let i=3;i<rows.length;i++){
         const r=rows[i];
+        if(!r) continue;
         // col1=New GL Code(숫자), col2=Old GL Code(숫자), col3=Description(EN)
         const glNew=(r[0]!=null?r[0]:'').toString().trim();
         const glOld=(r[1]!=null?r[1]:'').toString().trim();
@@ -916,27 +915,25 @@ async function loadAccMasters() {
           if(!newGL.find(g=>g.code===glOld))
             newGL.push({code:glOld, altCode:'', name:glName});
         }
-        // CCTR: XLSX.js 기준 H열=index6(Code), I열=index7(Name)
+        // CCTR: H열=index6(Code), I열=index7(Name) — 읽기만 하고 실제로는 미사용 (acc_cctr_list.xlsx 사용)
         const ccCode=(r[6]!=null?r[6]:'').toString().trim();
         const ccName=(r[7]!=null?r[7]:'').toString().trim();
         if(ccCode && /^\d{8}$/.test(ccCode) && ccCode.startsWith('47')) {
           if(!newCC.find(c=>c.code===ccCode)) newCC.push({code:ccCode, name:ccName});
         }
-        // PC: K열(index9), L열(index10) - XLSX.js 빈A열 스킵
-        // 엑셀 row5~18(index4~17) = PC, row28~34(index27~33) = Sub_PC
+        // PC: K열(index9), L열(index10) — 숫자 코드만, DUMMY 마커에서 중단
         const pcCode=(r[9]!=null?r[9]:'').toString().trim();
         const pcName=(r[10]||'').toString().trim();
-        if(pcCode && pcName && pcName!=='WSL DUMMY' && pcCode!=='DUMMY' && pcCode!=='Distribution Rule') {
-          if(i>=4 && i<=17) {
-            // PC 영역: 숫자 코드만
-            if(/^\d+$/.test(pcCode) && !newPC.find(p=>p.code===pcCode))
-              newPC.push({code:pcCode, name:pcName});
-          } else if(i>=27 && i<=33) {
-            // Sub_PC 영역
-            if(!newSubPC.find(s=>s.code===pcCode))
-              newSubPC.push({code:pcCode, name:pcName});
-          }
-        };
+        if(pcCode && pcName && pcCode!=='DUMMY' && pcName!=='WSL DUMMY' && /^\d+$/.test(pcCode)) {
+          if(!newPC.find(p=>p.code===pcCode)) newPC.push({code:pcCode, name:pcName});
+        }
+        // Sub_PC: N열(index12), O열(index13) — 2026-06-30부터 PC와 별도 컬럼으로 분리됨
+        // "Distribution Rule" 헤더 텍스트와 "NA" 마커는 제외, 숫자 코드만 사용
+        const subCode=(r[12]!=null?r[12]:'').toString().trim();
+        const subName=(r[13]||'').toString().trim();
+        if(subCode && subName && subCode!=='Distribution Rule' && subCode!=='NA' && /^\d+$/.test(subCode)) {
+          if(!newSubPC.find(s=>s.code===subCode)) newSubPC.push({code:subCode, name:subName});
+        }
       }
 
       if(newGL.length){ GL_LIST.length=0; newGL.forEach(g=>GL_LIST.push(g)); }
