@@ -1263,6 +1263,7 @@ function switchTab(tab) {
   const appEl = document.getElementById('app');
   if(appEl) appEl.style.maxWidth = tab==='new' ? '960px' : '1280px';
   if(tab==='list') loadMyList();
+  if(tab==='admin') loadAdminList();
 }
 
 // ── Form ──
@@ -1951,6 +1952,62 @@ async function loadMyList() {
   renderList();
 }
 
+let adminListCache = [];
+async function loadAdminList() {
+  const body = document.getElementById('admin-body');
+  body.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:#a19f9d">불러오는 중...</td></tr>';
+  if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
+  const url = `${GRAPH}/sites/${siteId}/lists/${LIST_REQUESTS}/items?$expand=fields&$top=999`;
+  try {
+    const t = await token();
+    const res = await fetch(url, {
+      headers: { Authorization: 'Bearer '+t, Prefer: 'HonorNonIndexedQueriesWarningMayFailRandomly' }
+    });
+    if(!res.ok){const err=await res.json();throw new Error(err.error?.message||res.status);}
+    const data = await res.json();
+    adminListCache = data.value
+      .map(item=>({_spId:item.id,...item.fields}))
+      .sort((a,b)=>new Date(b.SubmittedDate||0)-new Date(a.SubmittedDate||0));
+  } catch(e) {
+    console.error('loadAdminList error:', e);
+    adminListCache = [];
+    body.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:#a19f9d">전표 목록을 불러올 수 없습니다.</td></tr>';
+    return;
+  }
+  renderAdminList();
+}
+
+function renderAdminList(){
+  const body = document.getElementById('admin-body');
+  if(!adminListCache.length){
+    body.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:#a19f9d">작성된 바우처가 없습니다.</td></tr>';
+    return;
+  }
+  const stMap={'대기':'badge-대기','대기(잠김)':'badge-대기잠김','승인완료':'badge-승인완료','반려':'badge-반려','철회':'badge-철회',
+    Pending:'badge-대기',Draft:'badge-대기잠김',Approved:'badge-승인완료',Rejected:'badge-반려'};
+  const stLabel={'대기':'대기','대기(잠김)':'대기(잠김)','승인완료':'승인완료','반려':'반려','철회':'철회',
+    Pending:'대기',Draft:'임시저장',Approved:'승인완료',Rejected:'반려'};
+  const fmtK=n=>Math.round(n||0).toLocaleString('ko-KR');
+  const fmtDate = s => {
+    if(!s) return '-';
+    const d = new Date(s);
+    const p = n=>String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
+  body.innerHTML = adminListCache.map((v,i)=>`<tr onclick="openVoucherSP('${v._spId}')">
+    <td style="color:#a19f9d;font-size:.78rem">${i+1}</td>
+    <td style="font-size:.78rem;color:#605e5c">${v.RequesterEmail||'-'}</td>
+    <td style="font-size:.75rem;color:#0078d4">${v.Title||'-'}</td>
+    <td><span class="type-badge t-${v.VoucherType}">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span></td>
+    <td style="font-size:.78rem;color:#605e5c">${v.BPName||'-'}</td>
+    <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem">${v.Purpose||'-'}</td>
+    <td style="text-align:right;font-weight:700;color:#0078d4;font-size:.78rem">${fmtK(v.TotalDR_KRW)}</td>
+    <td style="text-align:right;font-weight:700;color:#c0392b;font-size:.78rem">${fmtK(v.TotalCR_KRW)}</td>
+    <td><span class="${stMap[v.Status]||'badge-대기'}">${stLabel[v.Status]||v.Status}</span></td>
+    <td style="font-size:.78rem;color:#605e5c">${fmtDate(v.SubmittedDate)}</td>
+  </tr>`).join('');
+}
+
 function renderList(){
   const ft=document.getElementById('f-type')?.value||'';
   const fs=document.getElementById('f-status')?.value||'';
@@ -1992,7 +2049,7 @@ function renderList(){
 }
 
 async function openVoucherSP(spId){
-  const v = voucherListCache.find(x=>x._spId===spId);
+  const v = voucherListCache.find(x=>x._spId===spId) || adminListCache.find(x=>x._spId===spId);
   if(!v) return;
   const lines_data = JSON.parse(v.LinesJSON||'[]');
   const fmtK = n=>Math.round(n||0).toLocaleString('ko-KR');
