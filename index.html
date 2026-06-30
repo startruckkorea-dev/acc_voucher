@@ -644,6 +644,12 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 <!-- ── 결재함 ── -->
 
 <script>
+window.addEventListener('error', function(e){
+  console.error('[전역 에러 캐치]', e.message, '| 파일:', e.filename, '| 위치:', e.lineno+':'+e.colno, '| 스택:', e.error?.stack);
+});
+window.addEventListener('unhandledrejection', function(e){
+  console.error('[처리되지 않은 Promise 거부]', e.reason);
+});
 // ── Constants ──
 const CLIENT_ID = '432976c2-b43a-492e-8213-ece505fa1f51';
 const TENANT_ID = '19cab1f5-21f4-44df-8ac6-96d6ca595203';
