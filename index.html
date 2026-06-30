@@ -294,7 +294,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         <input type="text" id="f-kw" placeholder="검색..." oninput="renderList()" style="min-width:160px">
       </div>
       <table class="voucher-table">
-        <thead><tr><th>Voucher ID</th><th>제출일</th><th>유형</th><th>BP명</th><th>Purpose</th><th style="text-align:right">DR (KRW)</th><th style="text-align:right">CR (KRW)</th><th>상태</th></tr></thead>
+        <thead><tr><th style="width:40px">번호</th><th>신청자</th><th>Title</th><th>유형</th><th>BP명</th><th>Purpose</th><th style="text-align:right">DR(KRW Total)</th><th style="text-align:right">CR(KRW Total)</th><th>Status</th><th>신청일</th></tr></thead>
         <tbody id="list-body"></tbody>
       </table>
     </div>
@@ -464,10 +464,10 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
   <div class="card" style="padding:0;overflow-x:auto">
     <table class="list-table">
       <thead><tr>
-        <th>전표번호</th><th>제출일</th><th>유형</th><th>요청자</th><th>BP명</th><th>Purpose</th><th>금액</th><th>상태</th><th>처리</th>
+        <th style="width:40px">번호</th><th>신청자</th><th>Title</th><th>유형</th><th>BP명</th><th>Purpose</th><th style="text-align:right">DR(KRW Total)</th><th style="text-align:right">CR(KRW Total)</th><th>Status</th><th>신청일</th><th>처리</th>
       </tr></thead>
       <tbody id="appr-body">
-        <tr><td colspan="9" style="text-align:center;padding:40px;color:#a19f9d">결재 대기 중인 전표가 없습니다.</td></tr>
+        <tr><td colspan="11" style="text-align:center;padding:40px;color:#a19f9d">결재 대기 중인 전표가 없습니다.</td></tr>
       </tbody>
     </table>
   </div>
@@ -478,10 +478,10 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
   <div class="card" style="padding:0;overflow-x:auto">
     <table class="list-table">
       <thead><tr>
-        <th>전표번호</th><th>제출일</th><th>유형</th><th>요청자</th><th>BP명</th><th>Purpose</th><th>금액</th><th>상태</th>
+        <th style="width:40px">번호</th><th>신청자</th><th>Title</th><th>유형</th><th>BP명</th><th>Purpose</th><th style="text-align:right">DR(KRW Total)</th><th style="text-align:right">CR(KRW Total)</th><th>Status</th><th>신청일</th>
       </tr></thead>
       <tbody id="admin-body">
-        <tr><td colspan="8" style="text-align:center;padding:40px;color:#a19f9d">전체 전표 목록이 여기에 표시됩니다.</td></tr>
+        <tr><td colspan="10" style="text-align:center;padding:40px;color:#a19f9d">전체 전표 목록이 여기에 표시됩니다.</td></tr>
       </tbody>
     </table>
   </div>
@@ -1891,20 +1891,22 @@ function renderList(){
   const stLabel={Draft:'임시저장',Pending:'결재 중',Approved:'승인완료',Rejected:'반려'};
   const body=document.getElementById('list-body');
   if(!list.length){
-    body.innerHTML=`<tr><td colspan="7" class="list-empty">${voucherListCache.length?'검색 결과가 없습니다.':'작성된 바우처가 없습니다.'}</td></tr>`;
+    body.innerHTML=`<tr><td colspan="10" class="list-empty">${voucherListCache.length?'검색 결과가 없습니다.':'작성된 바우처가 없습니다.'}</td></tr>`;
     return;
   }
   const fmtK=n=>Math.round(n||0).toLocaleString('ko-KR');
   const fmtDate = s => s ? new Date(s).toLocaleDateString('ko-KR',{year:'2-digit',month:'2-digit',day:'2-digit'}) : '-';
-  body.innerHTML=list.map(v=>`<tr onclick="openVoucherSP('${v._spId}')">
-    <td style="font-family:monospace;font-size:11px;color:#0078d4">${v.Title||'-'}</td>
-    <td style="font-size:12px;color:#605e5c">${fmtDate(v.SubmittedDate)}</td>
+  body.innerHTML=list.map((v,i)=>`<tr onclick="openVoucherSP('${v._spId}')">
+    <td style="color:#a19f9d;font-size:.78rem">${i+1}</td>
+    <td style="font-size:.78rem;color:#605e5c">${v.RequesterName||'-'}</td>
+    <td style="font-family:monospace;font-size:.75rem;color:#0078d4">${v.Title||'-'}</td>
     <td><span class="type-badge t-${v.VoucherType}">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span></td>
-    <td style="font-size:12px;color:#605e5c">${v.BPName||'-'}</td>
-    <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.Purpose||'-'}</td>
-    <td style="text-align:right;font-weight:700;color:#0078d4">${fmtK(v.TotalDR_KRW)}</td>
-    <td style="text-align:right;font-weight:700;color:#c0392b">${fmtK(v.TotalCR_KRW)}</td>
+    <td style="font-size:.78rem;color:#605e5c">${v.BPName||'-'}</td>
+    <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem">${v.Purpose||'-'}</td>
+    <td style="text-align:right;font-weight:700;color:#0078d4;font-size:.78rem">${fmtK(v.TotalDR_KRW)}</td>
+    <td style="text-align:right;font-weight:700;color:#c0392b;font-size:.78rem">${fmtK(v.TotalCR_KRW)}</td>
     <td><span class="type-badge ${stMap[v.Status]||''}">${stLabel[v.Status]||v.Status}</span></td>
+    <td style="font-size:.78rem;color:#605e5c">${fmtDate(v.SubmittedDate)}</td>
   </tr>`).join('');
 }
 
@@ -1914,7 +1916,6 @@ async function openVoucherSP(spId){
   const lines_data = JSON.parse(v.LinesJSON||'[]');
   const fmtK = n=>Math.round(n||0).toLocaleString('ko-KR');
   const stLabel={Draft:'\uc784\uc2dc\uc800\uc7a5',Pending:'\ub300\uae30',Approved:'\uc2b9\uc778\uc644\ub3c4',Rejected:'\ubc18\ub9e4'};
-  const stCls={Draft:'\uc784\uc2dc\uc800\uc7a5',Pending:'\ub300\uae30',Approved:'\uc2b9\uc778\uc644\ub3c4',Rejected:'\ubc18\ub9e4'};
 
   const row = (label, value) => `<div class="det-row"><div class="det-lbl">${label}</div><div class="det-val">${value||'-'}</div></div>`;
 
@@ -1922,14 +1923,29 @@ async function openVoucherSP(spId){
 
   const lineRows = lines_data.map((l,i)=>`
     <tr style="border-bottom:1px solid #f3f2f1">
-      <td style="padding:7px 8px;color:#605e5c;font-size:.78rem">${i+1}</td>
-      <td style="padding:7px 8px;font-weight:600;font-size:.78rem;color:${l.drcr==='DR'?'#0078d4':'#c0392b'}">${l.drcr||'-'}</td>
-      <td style="padding:7px 8px;font-size:.78rem">${l.gl||'-'}</td>
-      <td style="padding:7px 8px;font-size:.78rem">${l.glName||'-'}</td>
-      <td style="padding:7px 8px;font-size:.78rem">${l.cctrName||l.cctr||'-'}</td>
-      <td style="padding:7px 8px;font-size:.78rem">${l.currency||'-'}</td>
-      <td style="padding:7px 8px;text-align:right;font-weight:600;font-size:.78rem">${(parseFloat(l.amount)||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      <td style="padding:6px 7px;color:#605e5c;font-size:.74rem">${i+1}</td>
+      <td style="padding:6px 7px;font-weight:600;font-size:.74rem;color:${l.drcr==='DR'?'#0078d4':'#c0392b'}">${l.drcr||'-'}</td>
+      <td style="padding:6px 7px;font-size:.74rem">${l.gl||'-'}</td>
+      <td style="padding:6px 7px;font-size:.74rem">${l.glName||'-'}</td>
+      <td style="padding:6px 7px;font-size:.74rem">${l.cctrName||l.cctr||'-'}</td>
+      <td style="padding:6px 7px;font-size:.74rem">${l.pcName||l.pc||'-'}</td>
+      <td style="padding:6px 7px;font-size:.74rem">${l.subpcName||l.subpc||'-'}</td>
+      <td style="padding:6px 7px;font-size:.74rem;max-width:120px;overflow:hidden;text-overflow:ellipsis">${l.lineDesc||'-'}</td>
+      <td style="padding:6px 7px;font-size:.74rem">${l.currency||'-'}</td>
+      <td style="padding:6px 7px;text-align:right;font-size:.74rem">${l.unitPrice?parseFloat(l.unitPrice).toLocaleString('en',{maximumFractionDigits:2}):'-'}</td>
+      <td style="padding:6px 7px;text-align:right;font-size:.74rem">${l.qty||'-'}</td>
+      <td style="padding:6px 7px;text-align:right;font-weight:600;font-size:.74rem">${(parseFloat(l.amount)||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
     </tr>`).join('');
+
+  // \ucca8\ubcc0\ud30c\uc77c \ubaa9\ub85d
+  let attHtml = '<span style="color:#a19f9d">\ucca8\ubcc0\ud30c\uc77c \uc5c6\uc744</span>';
+  if(v.AttachmentRef) {
+    const items = v.AttachmentRef.split(';').filter(Boolean);
+    attHtml = items.map(it=>{
+      const [name] = it.split('||ENC||');
+      return `<div style="display:flex;align-items:center;gap:6px;padding:4px 0"><span>\ud83d\udcce</span><span>${name}</span></div>`;
+    }).join('');
+  }
 
   document.getElementById('voucher-detail-content').innerHTML = `
     <div class="det-sec">\uae30\ubc18 \uc815\ubcf4</div>
@@ -1939,6 +1955,7 @@ async function openVoucherSP(spId){
     ${row('\uc2e0\uc6b2\uc790', (v.RequesterName||'')+(v.RequesterEmail?` (${v.RequesterEmail})`:''))}
     ${row('Cost Center', v.RequesterCCTR)}
     ${row('\uc2e0\uc6b2\uc77c\uc2dc', submittedDate)}
+    ${row('\ucd9d \uacb0\uc7ac\ub2e8\uacc4', v.TotalSteps?`${v.TotalSteps}\ub2e8\uacc4 (\ud604\uc7ac ${v.CurrentStep||0}\ub2e8\uacc4 \uc9c4\ud589)`:'-')}
 
     <div class="det-sec">BP \uc815\ubcf4</div>
     ${row('BP Code', v.BPCode)}
@@ -1948,21 +1965,29 @@ async function openVoucherSP(spId){
     <div class="det-sec">Purpose / Description</div>
     ${row('Purpose', `<span style="white-space:pre-wrap">${v.Purpose||'-'}</span>`)}
 
+    <div class="det-sec">\ucca8\ubcc0\ud30c\uc77c</div>
+    <div style="padding:4px 0;font-size:.78rem">${attHtml}</div>
+
     <div class="det-sec">\ud68c\uacc4 \uc815\ubcf4 (Account Information)</div>
     <div style="overflow-x:auto;margin-top:4px">
-      <table style="width:100%;border-collapse:collapse;font-size:.78rem">
+      <table style="width:100%;border-collapse:collapse;font-size:.74rem;min-width:760px">
         <thead>
           <tr style="background:#f3f2f1">
-            <th style="padding:7px 8px;text-align:left;color:#605e5c;font-weight:600;font-size:.72rem">No</th>
-            <th style="padding:7px 8px;text-align:left;color:#605e5c;font-weight:600;font-size:.72rem">DR/CR</th>
-            <th style="padding:7px 8px;text-align:left;color:#605e5c;font-weight:600;font-size:.72rem">GL</th>
-            <th style="padding:7px 8px;text-align:left;color:#605e5c;font-weight:600;font-size:.72rem">\uacc4\uc815\uba85</th>
-            <th style="padding:7px 8px;text-align:left;color:#605e5c;font-weight:600;font-size:.72rem">Cost Center</th>
-            <th style="padding:7px 8px;text-align:left;color:#605e5c;font-weight:600;font-size:.72rem">CCY</th>
-            <th style="padding:7px 8px;text-align:right;color:#605e5c;font-weight:600;font-size:.72rem">Amount</th>
+            <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">No</th>
+            <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">DR/CR</th>
+            <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">GL</th>
+            <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">\uacc4\uc815\uba85</th>
+            <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">Cost Center</th>
+            <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">Profit Center</th>
+            <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">Sub_PC</th>
+            <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">Line Desc</th>
+            <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">CCY</th>
+            <th style="padding:6px 7px;text-align:right;color:#605e5c;font-weight:600;font-size:.68rem">Unit Price</th>
+            <th style="padding:6px 7px;text-align:right;color:#605e5c;font-weight:600;font-size:.68rem">Qty</th>
+            <th style="padding:6px 7px;text-align:right;color:#605e5c;font-weight:600;font-size:.68rem">Amount</th>
           </tr>
         </thead>
-        <tbody>${lineRows||'<tr><td colspan="7" style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">\ub77c\uc778 \uc5c6\uc744</td></tr>'}</tbody>
+        <tbody>${lineRows||'<tr><td colspan="12" style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">\ub77c\uc778 \uc5c6\uc744</td></tr>'}</tbody>
       </table>
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px;padding:9px 8px;background:#f3f2f1;border-radius:4px;margin-top:6px">
@@ -1976,7 +2001,6 @@ async function openVoucherSP(spId){
 
   document.getElementById('voucher-detail-modal').classList.add('open');
 }
-
 function closeDetailModal(){
   document.getElementById('voucher-detail-modal').classList.remove('open');
 }
