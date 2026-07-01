@@ -1053,7 +1053,7 @@ function applyTodayExchangeRate() {
     if(hasToday){
       banner.innerHTML = `<div style="background:#f0f6ff;border:1px solid #c7e0f4;border-radius:4px;padding:8px 14px;margin-top:10px"><div style="margin-bottom:2px"><span style="color:#0078d4;font-weight:600;font-size:12px">${today} 기준 참고 환율</span><span style="font-size:11px;color:#a19f9d;margin-left:8px">오늘 날짜 환율로 자동 기입</span></div><div style="font-size:11px;color:#a19f9d;margin-bottom:4px">· 수정 필요 시 BU Admin 확인 &nbsp;·&nbsp; 이전 날짜 환율이 뜨는 경우 <b>Ctrl+Shift+R</b> 로 새로고침</div><div style="font-size:12px;color:#323130">${parts}</div></div>`;
     } else {
-      banner.innerHTML = `<div style="background:#fff4e5;border:1px solid #f7c948;border-radius:4px;padding:8px 14px;margin-top:10px"><div style="margin-bottom:4px"><span style="color:#835c00;font-weight:600;font-size:12px">⚠️ ${today} 기준 환율 미입력 — ${fallbackDate} 기준 환율을 자동 적용합니다.</span><span style="font-size:11px;color:#a19f9d;margin-left:8px">BU Admin에게 오늘 환율 입력을 요청하세요.</span></div><div style="font-size:12px;color:#323130">${parts}</div></div>`;
+      banner.innerHTML = `<div style="background:#f0f6ff;border:1px solid #c7e0f4;border-radius:4px;padding:8px 14px;margin-top:10px"><div style="margin-bottom:2px"><span style="color:#0078d4;font-weight:600;font-size:12px">${fallbackDate} 기준 참고 환율</span><span style="font-size:11px;color:#a19f9d;margin-left:8px">오늘 날짜 환율로 자동 기입</span></div><div style="font-size:11px;color:#a19f9d;margin-bottom:4px">· 수정 필요 시 BU Admin 확인 &nbsp;·&nbsp; 이전 날짜 환율이 뜨는 경우 <b>Ctrl+Shift+R</b> 로 새로고침</div><div style="font-size:12px;color:#323130">${parts}</div></div>`;
     }
   }
 }
