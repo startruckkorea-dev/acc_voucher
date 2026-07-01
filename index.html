@@ -989,8 +989,9 @@ async function loadAccMasters() {
         } else dateStr=(r[0]||'').toString().slice(0,10);
 
         currencies.forEach((curr,ci)=>{
-          const rate=parseFloat(r[ci+1])||0;
-          if(rate) window._exchangeRates.push({date:dateStr,currency:curr,rate});
+          const raw = r[ci+1];
+          const rate = (raw !== null && raw !== undefined && String(raw).trim() !== '') ? parseFloat(raw)||0 : null;
+          if(rate !== null) window._exchangeRates.push({date:dateStr,currency:curr,rate});
         });
       }
       console.log('[Exchange] Loaded:', window._exchangeRates.length);
@@ -1012,12 +1013,14 @@ function applyTodayExchangeRate() {
   let displayRates = rates.filter(r=>r.date===today);
   let hasToday = displayRates.length > 0;
 
-  // 오늘 데이터 없으면 가장 최근 날짜로 fallback
+  // 오늘 날짜는 있지만 rate가 전부 0인 경우 → 직전 날짜 환율로 자동 기입
+  const hasTodayValidRate = displayRates.some(r=>r.rate > 0);
   let fallbackDate = null;
-  if(!hasToday) {
-    const allDates = [...new Set(rates.map(r=>r.date))].sort();
+  if(!hasTodayValidRate) {
+    const allDates = [...new Set(rates.map(r=>r.date).filter(d=>d<today))].sort();
     fallbackDate = allDates[allDates.length-1] || null;
     if(fallbackDate) displayRates = rates.filter(r=>r.date===fallbackDate);
+    else if(!hasToday) displayRates = [];
   }
 
   const banner = document.getElementById('exchange-banner');
@@ -1047,14 +1050,11 @@ function applyTodayExchangeRate() {
   if(banner){
     const parts = ['EUR','USD','SGD','JPY','CNY'].map(cur=>{
       const r=displayRates.find(x=>x.currency===cur);
-      return r?`<span><b>${cur}</b> ${Number(r.rate).toLocaleString()}</span>`:'';
+      return r&&r.rate>0?`<span><b>${cur}</b> ${Number(r.rate).toLocaleString()}</span>`:'';
     }).filter(Boolean).join('<span style="color:#d2d0ce;margin:0 4px">|</span>');
+    const labelDate = (hasToday && !hasTodayValidRate && fallbackDate) ? fallbackDate : (hasToday ? today : (fallbackDate||today));
     banner.style.display='block';
-    if(hasToday){
-      banner.innerHTML = `<div style="background:#f0f6ff;border:1px solid #c7e0f4;border-radius:4px;padding:8px 14px;margin-top:10px"><div style="margin-bottom:2px"><span style="color:#0078d4;font-weight:600;font-size:12px">${today} 기준 참고 환율</span><span style="font-size:11px;color:#a19f9d;margin-left:8px">오늘 날짜 환율로 자동 기입</span></div><div style="font-size:11px;color:#a19f9d;margin-bottom:4px">· 수정 필요 시 BU Admin 확인 &nbsp;·&nbsp; 이전 날짜 환율이 뜨는 경우 <b>Ctrl+Shift+R</b> 로 새로고침</div><div style="font-size:12px;color:#323130">${parts}</div></div>`;
-    } else {
-      banner.innerHTML = `<div style="background:#f0f6ff;border:1px solid #c7e0f4;border-radius:4px;padding:8px 14px;margin-top:10px"><div style="margin-bottom:2px"><span style="color:#0078d4;font-weight:600;font-size:12px">${fallbackDate} 기준 참고 환율</span><span style="font-size:11px;color:#a19f9d;margin-left:8px">오늘 날짜 환율로 자동 기입</span></div><div style="font-size:11px;color:#a19f9d;margin-bottom:4px">· 수정 필요 시 BU Admin 확인 &nbsp;·&nbsp; 이전 날짜 환율이 뜨는 경우 <b>Ctrl+Shift+R</b> 로 새로고침</div><div style="font-size:12px;color:#323130">${parts}</div></div>`;
-    }
+    banner.innerHTML = `<div style="background:#f0f6ff;border:1px solid #c7e0f4;border-radius:4px;padding:8px 14px;margin-top:10px"><div style="margin-bottom:2px"><span style="color:#0078d4;font-weight:600;font-size:12px">${labelDate} 기준 참고 환율</span><span style="font-size:11px;color:#a19f9d;margin-left:8px">오늘 날짜 환율로 자동 기입</span></div><div style="font-size:11px;color:#a19f9d;margin-bottom:4px">· 수정 필요 시 BU Admin 확인 &nbsp;·&nbsp; 이전 날짜 환율이 뜨는 경우 <b>Ctrl+Shift+R</b> 로 새로고침</div><div style="font-size:12px;color:#323130">${parts}</div></div>`;
   }
 }
 
