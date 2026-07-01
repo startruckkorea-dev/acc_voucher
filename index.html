@@ -389,6 +389,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 
       <div class="section-title">2. BP 정보</div>
       <div id="bp-notice" style="font-size:12px;color:#605e5c;margin-bottom:10px">GL 유형은 BP 코드 선택이 불필요합니다. 나머지 유형은 필수입니다.</div>
+      <div id="bp-section-wrapper" style="transition:all .2s">
       <div class="form-row four">
         <div class="form-group">
           <label>Vendor/Customer No. <span class="req" id="bp-req-mark">*</span></label>
@@ -405,6 +406,8 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
           <label>BP Category <span class="auto-tag">자동</span></label>
           <input type="text" id="v-bp-cat" readonly placeholder="S=Vendor / C=Customer">
         </div>
+      </div>
+      <div id="bp-cat-warning" style="display:none;margin-top:6px;background:#fff4ce;border:1px solid #f7c948;border-radius:4px;padding:8px 12px;font-size:.78rem;color:#7d5700;font-weight:600"></div>
       </div>
 
       <div class="section-title">3. Purpose / Description</div>
@@ -1586,15 +1589,34 @@ function selectBP(code) {
   document.getElementById('v-bp-cat').value = bpCatVal;
   closeBpModal();
 
-  // BP 선택 직후 Voucher Type과 BP Category 불일치 경고
+  // BP Category 불일치 경고 표시
   const type = document.getElementById('v-type').value;
-  const bpCat = bpCatVal.charAt(0); // 'S' or 'C'
+  const bpCat = bpCatVal.charAt(0);
   const apTypes = ['AP','AP_IMS','ADV','SET'];
   const arTypes = ['AR','AP_CR'];
+  const wrapper = document.getElementById('bp-section-wrapper');
+  const warningEl = document.getElementById('bp-cat-warning');
+
+  let warningMsg = '';
   if(type && apTypes.includes(type) && bpCat !== 'S') {
-    alert(`⚠️ BP Category 확인 필요\n\nVoucher Type [${type}]은 일반적으로 S(Vendor)가 선택되어야 합니다.\n선택한 BP: ${bp.name} → C(Customer)\n\n계속하려면 확인 후 진행해주세요.`);
+    warningMsg = `⚠️ Voucher Type [${type}]은 일반적으로 S(Vendor)가 선택되어야 합니다. 현재 BP Category: C(Customer) — 의도한 경우 그대로 진행하세요.`;
   } else if(type && arTypes.includes(type) && bpCat !== 'C') {
-    alert(`⚠️ BP Category 확인 필요\n\nVoucher Type [${type}]은 일반적으로 C(Customer)가 선택되어야 합니다.\n선택한 BP: ${bp.name} → S(Vendor)\n\n계속하려면 확인 후 진행해주세요.`);
+    warningMsg = `⚠️ Voucher Type [${type}]은 일반적으로 C(Customer)가 선택되어야 합니다. 현재 BP Category: S(Vendor) — 의도한 경우 그대로 진행하세요.`;
+  }
+
+  if(warningMsg) {
+    wrapper.style.border = '2px solid #f7c948';
+    wrapper.style.borderRadius = '6px';
+    wrapper.style.padding = '10px';
+    wrapper.style.background = '#fffdf0';
+    warningEl.textContent = warningMsg;
+    warningEl.style.display = 'block';
+  } else {
+    wrapper.style.border = '';
+    wrapper.style.borderRadius = '';
+    wrapper.style.padding = '';
+    wrapper.style.background = '';
+    warningEl.style.display = 'none';
   }
 }
 
