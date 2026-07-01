@@ -640,7 +640,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
     </div>
     <div class="modal-body">
       <div class="search-bar">
-        <input type="text" id="bp-search-input" placeholder="BP 코드, 이름, 사업자등록번호 검색..." oninput="searchBP(this.value)">
+        <input type="text" id="bp-search-input" placeholder="BP코드, 이름, 사업자등록번호, Bank Info., Account No. 검색..." oninput="searchBP(this.value)" style="font-size:.78rem">
         <button class="btn btn-primary" style="padding:7px 14px;font-size:12px" onclick="searchBP(document.getElementById('bp-search-input').value)">검색</button>
       </div>
       <div id="bp-search-results"><div style="text-align:center;padding:24px;color:#a19f9d">검색어를 입력하세요</div></div>
@@ -1556,7 +1556,7 @@ function searchBP(q) {
     if(!kw){renderBpResults(bpData.slice(0,10));return;}
     const res=[];
     for(const b of bpData){
-      if(b.code.toLowerCase().includes(kw)||b.name.toLowerCase().includes(kw)||(b.nameKo&&b.nameKo.includes(q))||(b.bizNo&&b.bizNo.includes(kw))){
+      if(b.code.toLowerCase().includes(kw)||b.name.toLowerCase().includes(kw)||(b.nameKo&&b.nameKo.includes(q))||(b.bizNo&&b.bizNo.includes(kw))||(b.bank&&b.bank.toLowerCase().includes(kw))||(b.accountNo&&b.accountNo.includes(kw))){
         res.push(b); if(res.length>=50) break;
       }
     }
