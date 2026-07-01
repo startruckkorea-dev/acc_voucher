@@ -1243,10 +1243,12 @@ async function loadBPMaster() {
       const name1 = (r[2]||'').toString().trim();
       const name2 = (r[3]||'').toString().trim();
       const bizNo = (r[4]||'').toString().trim();
+      const bank    = (r[10]||'').toString().trim();
+      const accountNo = (r[11]||'').toString().trim();
       if(!code||!name1) continue;
       if(isNaN(code.charAt(0))===false && code.includes('.')) continue; // 헤더행 스킵
       if(code.toLowerCase()==='bp code'||code.toLowerCase()==='code') continue;
-      bpData.push({code,type:item,name:name1,nameKo:name2,bizNo});
+      bpData.push({code,type:item,name:name1,nameKo:name2,bizNo,bank,accountNo});
     }
     console.log('[BP Master] Loaded:', bpData.length, 'entries');
     // 모달이 열려있으면 자동 업데이트
@@ -1571,6 +1573,7 @@ function renderBpResults(list) {
     <div class="rn">${b.name}</div>
     ${b.nameKo?`<div class="rs">${b.nameKo}</div>`:''}
     <div class="rs">사업자등록번호: ${b.bizNo||'Master data 미기재'}</div>
+    <div class="rs">Bank Info.: ${b.bank||'Master data 미기재'} &nbsp;|&nbsp; Account No.: ${b.accountNo||'Master data 미기재'}</div>
   </div>`).join('');
 }
 function selectBP(code) {
