@@ -340,6 +340,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         <div class="form-group">
           <label>Invoice Date <span class="req">*</span></label>
           <input type="date" id="v-inv-date">
+          <div style="font-size:10px;color:#605e5c;margin-top:3px">* 세금계산서 및 invoice가 있는 경우 해당 날짜로 선택해주세요.</div>
         </div>
         <div class="form-group">
           <label>Exchange Rate <span style="font-size:10px;color:#605e5c;font-weight:400">— EUR 기준 자동 입력</span>
@@ -430,9 +431,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
               <th style="min-width:120px">Sub_PC</th>
               <th style="min-width:110px">Line Desc</th>
               <th style="width:70px">CCY</th>
-              <th style="width:90px;text-align:right">Unit Price</th>
-              <th style="width:50px;text-align:right">Qty</th>
-              <th style="width:110px;text-align:right">Amount</th>
+              <th style="width:140px;text-align:right">Amount</th>
               <th style="width:130px;text-align:right">Total(KRW)</th>
               <th style="width:32px"></th>
             </tr>
@@ -602,18 +601,10 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">LINE DESCRIPTION</div>
         <input type="text" id="lm-linedesc" placeholder="설명을 입력하세요" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px;box-sizing:border-box">
       </div>
-      <div style="display:grid;grid-template-columns:1fr 60px 220px;gap:12px;align-items:end">
+      <div style="display:grid;grid-template-columns:1fr;gap:12px;align-items:end">
         <div>
-          <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">UNIT PRICE</div>
-          <input type="text" id="lm-unitprice" placeholder="0" oninput="fmtInput(this);calcLmAmount()" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px;text-align:right;box-sizing:border-box">
-        </div>
-        <div>
-          <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">QTY</div>
-          <input type="number" id="lm-qty" step="1" value="1" min="1" oninput="calcLmAmount()" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px;text-align:right;box-sizing:border-box">
-        </div>
-        <div>
-          <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">AMOUNT</div>
-          <input type="text" id="lm-amount" placeholder="0" readonly style="width:100%;padding:7px 10px;border:1px solid #edebe9;border-radius:4px;font-size:13px;text-align:right;box-sizing:border-box;background:#faf9f8;font-weight:600">
+          <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">AMOUNT <span style="color:#a4262c">*</span></div>
+          <input type="text" id="lm-amount" placeholder="0" oninput="fmtInput(this);calcLmAmount()" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px;text-align:right;box-sizing:border-box;font-weight:600">
           <div id="lm-amount-krw-wrap" style="display:none;margin-top:6px">
             <div style="font-size:10px;font-weight:600;color:#0078d4;margin-bottom:3px">Amount (KRW)</div>
             <input type="text" id="lm-amount-krw" readonly style="width:100%;padding:6px 10px;border:1px solid #c7e0f4;border-radius:4px;font-size:12px;text-align:right;box-sizing:border-box;background:#f0f6ff;font-weight:600;color:#0078d4">
@@ -778,13 +769,15 @@ const GL_LIST = [
 let COST_CENTERS = []
 let PROFIT_CENTERS = [];
 const APPROVAL_RULES = {
-  AP:    {TL:'< 1,000,000',MC:'< 20,000,000',CEO:'>= 20,000,000',RD:'>= 20,000,000',CFO:'>= 1,000,000'},
-  AP_IMS:{TL:'<= 1,000,000',MC:'<= 20,000,000',CEO:'> 50,000,000',RD:'> 50,000,000',CFO:'<= 50,000,000'},
-  AP_CR: {TL:'<= 10,000,000',MC:'<= 10,000,000',CEO:'> 10,000,000',RD:'> 10,000,000',CFO:'<= 10,000,000'},
-  AR:    {TL:'< 20,000,000',MC:'< 20,000,000',CEO:'-',RD:'-',CFO:'>= 20,000,000'},
+  // 규칙 해석: 해당 금액 "이상"이면 그 결재자까지 모두 포함 (누적 구조)
+  // AP_IMS 예: 50,000,001원 → TL + MC + CEO + RD 전부 필요
+  AP:    {TL:'필수',MC:'>= 1,000,000',CEO:'>= 20,000,000',RD:'>= 20,000,000',CFO:'필수'},
+  AP_IMS:{TL:'필수',MC:'>= 1,000,000',CEO:'> 50,000,000',RD:'> 50,000,000',CFO:'필수'},
+  AP_CR: {TL:'필수',MC:'필수',CEO:'> 10,000,000',RD:'> 10,000,000',CFO:'필수'},
+  AR:    {TL:'필수',MC:'필수',CEO:'-',RD:'-',CFO:'>= 20,000,000'},
   GL:    {TL:'필수',MC:'필수',CEO:'필요시',RD:'필요시',CFO:'필수'},
   FA:    {TL:'필수',MC:'필수',CEO:'필요시',RD:'필요시',CFO:'필수'},
-  ADV:   {TL:'< 1,000,000',MC:'< 20,000,000',CEO:'>= 20,000,000',RD:'>= 20,000,000',CFO:'>= 1,000,000'},
+  ADV:   {TL:'필수',MC:'>= 1,000,000',CEO:'>= 20,000,000',RD:'>= 20,000,000',CFO:'필수'},
   SET:   {TL:'필수',MC:'필수',CEO:'-',RD:'-',CFO:'필수'},
 };
 
@@ -1485,8 +1478,7 @@ function renderLines() {
       <td style="font-size:11px">${l.subpcName ? l.subpc+' '+l.subpcName : subTxt}</td>
       <td style="font-size:11px;color:#605e5c">${l.lineDesc||'-'}</td>
       <td style="font-size:11px">${l.currency||'EUR'}</td>
-      <td style="text-align:right;font-size:12px;color:#605e5c">${l.unitPrice?(parseFloat(l.unitPrice)||0).toLocaleString('en',{minimumFractionDigits:2}):'<span style="color:#a19f9d">-</span>'}</td>
-      <td style="text-align:right;font-size:12px;color:#605e5c">${l.qty||1}</td>
+
       <td style="text-align:right;font-weight:600">${amt?fmt(amt):'<span style="color:#a19f9d">0.00</span>'}</td>
       <td style="text-align:right;font-weight:600;color:#323130">${totalTxt}</td>
       <td><button class="btn-del" onclick="event.stopPropagation();deleteLine(${i})">✕</button></td>
@@ -1669,6 +1661,21 @@ async function saveVoucher(status) {
   if(status==='대기' && !blocks.querySelector('.eq-block')){
     alert('DR/CR 합계가 일치하지 않습니다.\n결재 요청을 진행할 수 없습니다.\n\n라인 항목을 확인하고 DR/CR 합계를 맞춰주세요.');
     return;
+  }
+
+  // No.5: AP는 S(Vendor), AR/AP_CR은 C(Customer)여야 함 - 아닌 경우 경고
+  if(status==='대기') {
+    const bpCat = (document.getElementById('v-bp-cat').value||'').charAt(0); // 'S' or 'C'
+    const apTypes = ['AP','AP_IMS','ADV','SET'];
+    const arTypes = ['AR','AP_CR'];
+    if(apTypes.includes(type) && bpCat && bpCat !== 'S') {
+      const go = confirm(`⚠️ BP Category 확인 필요\n\nVoucher Type [${type}]은 일반적으로 S(Vendor)가 선택되어야 합니다.\n현재 선택된 BP Category: ${bpCat}(Customer)\n\n계속 진행하시겠습니까?`);
+      if(!go) return;
+    }
+    if(arTypes.includes(type) && bpCat && bpCat !== 'C') {
+      const go = confirm(`⚠️ BP Category 확인 필요\n\nVoucher Type [${type}]은 일반적으로 C(Customer)가 선택되어야 합니다.\n현재 선택된 BP Category: ${bpCat}(Vendor)\n\n계속 진행하시겠습니까?`);
+      if(!go) return;
+    }
   }
 
   // KRW 환산 합계 계산
@@ -1881,9 +1888,6 @@ function openLineModal(i) {
   document.getElementById('lm-subpcname').textContent = l.subpcName || '';
   // Line Desc / Amount
   document.getElementById('lm-linedesc').value = l.lineDesc || '';
-  const upVal = l.unitPrice ? parseFloat(l.unitPrice).toLocaleString('en', {maximumFractionDigits:2}) : '';
-  document.getElementById('lm-unitprice').value = upVal;
-  document.getElementById('lm-qty').value = l.qty || 1;
   const amtVal = l.amount ? parseFloat(l.amount).toLocaleString('en', {minimumFractionDigits:2, maximumFractionDigits:2}) : '';
   document.getElementById('lm-amount').value = amtVal;
   calcLmAmount(); // KRW 환산 표시 갱신
@@ -1903,12 +1907,8 @@ function parseComma(str) {
 }
 
 function calcLmAmount() {
-  const price = parseComma(document.getElementById('lm-unitprice').value);
-  const qty   = parseFloat(document.getElementById('lm-qty').value) || 1;
-  const amt   = price * qty;
-  document.getElementById('lm-amount').value = amt.toLocaleString('en', {minimumFractionDigits:2, maximumFractionDigits:2});
-
-  // 통화가 KRW가 아니면 환산 KRW 금액도 표시
+  // Amount 직접 입력 방식 — KRW 환산 표시만 갱신
+  const amt = parseComma(document.getElementById('lm-amount').value) || 0;
   const currency = document.getElementById('lm-currency').value;
   const krwWrap = document.getElementById('lm-amount-krw-wrap');
   if(currency && currency !== 'KRW') {
@@ -1943,8 +1943,8 @@ function saveLineModal() {
   lines[i].subpc    = subCode;
   lines[i].subpcName= getSubPCs().find(s=>s.code===subCode)?.name || '';
   lines[i].lineDesc  = document.getElementById('lm-linedesc').value;
-  lines[i].unitPrice = parseComma(document.getElementById('lm-unitprice').value);
-  lines[i].qty       = parseFloat(document.getElementById('lm-qty').value) || 1;
+  lines[i].unitPrice = '';
+  lines[i].qty       = 1;
   lines[i].amount    = parseComma(document.getElementById('lm-amount').value);
   closeLineModal();
   renderLines();
@@ -2439,8 +2439,7 @@ async function openVoucherSP(spId){
       <td style="padding:6px 7px;font-size:.74rem">${l.subpcName||l.subpc||'-'}</td>
       <td style="padding:6px 7px;font-size:.74rem;max-width:120px;overflow:hidden;text-overflow:ellipsis">${l.lineDesc||'-'}</td>
       <td style="padding:6px 7px;font-size:.74rem">${l.currency||'-'}</td>
-      <td style="padding:6px 7px;text-align:right;font-size:.74rem">${l.unitPrice?parseFloat(l.unitPrice).toLocaleString('en',{maximumFractionDigits:2}):'-'}</td>
-      <td style="padding:6px 7px;text-align:right;font-size:.74rem">${l.qty||'-'}</td>
+
       <td style="padding:6px 7px;text-align:right;font-weight:600;font-size:.74rem">${(parseFloat(l.amount)||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
     </tr>`).join('');
 
@@ -2497,12 +2496,10 @@ async function openVoucherSP(spId){
             <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">Sub_PC</th>
             <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">Line Desc</th>
             <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">CCY</th>
-            <th style="padding:6px 7px;text-align:right;color:#605e5c;font-weight:600;font-size:.68rem">Unit Price</th>
-            <th style="padding:6px 7px;text-align:right;color:#605e5c;font-weight:600;font-size:.68rem">Qty</th>
             <th style="padding:6px 7px;text-align:right;color:#605e5c;font-weight:600;font-size:.68rem">Amount</th>
           </tr>
         </thead>
-        <tbody>${lineRows||'<tr><td colspan="12" style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">라인 없음</td></tr>'}</tbody>
+        <tbody>${lineRows||'<tr><td colspan="10" style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">라인 없음</td></tr>'}</tbody>
       </table>
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px;padding:9px 8px;background:#f3f2f1;border-radius:4px;margin-top:6px">
