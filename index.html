@@ -318,7 +318,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
       <div class="card-title">회계 전표 작성 <span id="voucher-id-badge" style="font-size:11px;font-weight:400;color:#a19f9d"></span></div>
 
       <div class="section-title">1. 바우처 정보 (Voucher Information)</div>
-      <div class="form-row four" style="align-items:end">
+      <div class="form-row">
         <div class="form-group">
           <label>Voucher Type <span class="req">*</span></label>
           <select id="v-type" onchange="onTypeChange()">
@@ -337,15 +337,16 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
           <label>Submission Date <span class="req">*</span> <span class="auto-tag">자동</span></label>
           <input type="date" id="v-date" readonly>
         </div>
+      </div>
+      <div class="form-row">
         <div class="form-group">
           <label>Invoice Date <span class="req">*</span></label>
           <input type="date" id="v-inv-date">
           <div style="font-size:10px;color:#605e5c;margin-top:3px">* 세금계산서 및 invoice가 있는 경우 해당 날짜로 선택해주세요.</div>
         </div>
         <div class="form-group">
-          <label>Exchange Rate <span style="font-size:10px;color:#605e5c;font-weight:400">— EUR 기준 자동 입력</span>
-          <div style="font-size:10px;color:#a19f9d;font-weight:400;margin-top:1px">· Manual 변경 시 BU Admin 확인 후 입력</div>
-        </label>
+          <label>Exchange Rate <span style="font-size:10px;color:#605e5c;font-weight:400">— EUR 기준 자동 입력</span></label>
+          <div style="font-size:10px;color:#a19f9d;margin-bottom:5px">· Manual 변경 시 BU Admin 확인 후 입력</div>
           <div style="display:flex;align-items:center;gap:8px">
             <input type="number" id="v-exrate" placeholder="EUR 환율" step="0.01" oninput="updateTotals()" style="flex:1">
             <button type="button" onclick="toggleExtraRates()" style="white-space:nowrap;padding:6px 10px;border:1px solid #d2d0ce;border-radius:4px;background:#fff;font-size:12px;cursor:pointer;color:#0078d4">
