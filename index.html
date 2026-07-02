@@ -2681,6 +2681,8 @@ async function openVoucherSP(spId){
   window._currentVoucherDetail = v;
   const pdfBtn = document.getElementById('btn-export-pdf');
   if(pdfBtn) pdfBtn.style.display = 'flex';
+  const pdfDetailBtn = document.getElementById('btn-export-detail-pdf');
+  if(pdfDetailBtn) pdfDetailBtn.style.display = 'flex';
   let lines_data = [];
   try { lines_data = JSON.parse(v.LinesJSON||'[]'); }
   catch(e) { console.error('[openVoucherSP] LinesJSON 파싱 실패 (데이터가 잘렸을 수 있음):', e.message, '| 원본 길이:', (v.LinesJSON||'').length); }
@@ -3011,6 +3013,8 @@ function closeDetailModal(){
   document.getElementById('voucher-detail-modal').classList.remove('open');
   const pdfBtn = document.getElementById('btn-export-pdf');
   if(pdfBtn) pdfBtn.style.display = 'none';
+  const pdfDetailBtn = document.getElementById('btn-export-detail-pdf');
+  if(pdfDetailBtn) pdfDetailBtn.style.display = 'none';
   window._currentVoucherDetail = null;
 }
 
@@ -3018,7 +3022,8 @@ function closeDetailModal(){
 function buildOfficialVoucherHTML(v, lines_data, apprList) {
   const fmtK = n => Math.round(n||0).toLocaleString('ko-KR');
   const fmt2 = n => (parseFloat(n)||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
-  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const stripHtml = s => String(s==null?'':s).replace(/<[^>]*>/g,'').replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>').trim();
+  const esc = s => stripHtml(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const submittedDate = v.SubmittedDate ? (()=>{const d=new Date(v.SubmittedDate);const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;})() : '-';
   const invoiceDate = v.InvoiceDate ? v.InvoiceDate.slice(0,10) : '-';
   const exRateDisplay = v.ExchangeRate ? v.ExchangeRate.split(',').map(s=>{const parts=s.split(':');const c=parts[0];const rv=parseFloat(parts[1]);return rv>0?(c+' '+rv.toLocaleString('ko-KR',{maximumFractionDigits:4})):null;}).filter(Boolean).join('  &nbsp;|&nbsp;  ') : '-';
@@ -3121,13 +3126,53 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
   '</div>';
 }
 
-// ── No.13/No.14: PDF 출력 (공식 양식 레이아웃 재현, GW exportModalPdf 동일 패턴) ──
+// ── 공통: 캔버스를 여러 페이지 PDF로 변환 후 다운로드 (GW exportModalPdf 동일 패턴) ──
+async function canvasToPdfAndDownload(cvs, headerText, fname) {
+  const { PDFDocument } = PDFLib;
+  const mainDoc = await PDFDocument.create();
+  const A4W=595,A4H=842,marginPt=34,hdrH=22;
+  const printW_pt=A4W-marginPt*2;
+  const printableH_pt=A4H-marginPt*2-hdrH;
+  const pxPerPt=cvs.width/A4W;
+  const sliceH_px=Math.round(printableH_pt*pxPerPt);
+  const numPages=Math.ceil(cvs.height/sliceH_px);
+  const now=new Date(new Date().getTime()+9*3600*1000);
+  const ds=now.getUTCFullYear()+'-'+String(now.getUTCMonth()+1).padStart(2,'0')+'-'+String(now.getUTCDate()).padStart(2,'0');
+  async function dataUrlToUint8(u){const r=await fetch(u);const ab=await r.arrayBuffer();return new Uint8Array(ab);}
+  const hc=document.createElement('canvas');hc.width=1190;hc.height=28;
+  const hx=hc.getContext('2d');const g=hx.createLinearGradient(0,0,hc.width,0);
+  g.addColorStop(0,'#0f2744');g.addColorStop(1,'#0a4a8a');hx.fillStyle=g;hx.fillRect(0,0,hc.width,hc.height);
+  hx.fillStyle='#fff';hx.font='500 13px "Malgun Gothic",sans-serif';hx.textBaseline='middle';
+  hx.fillText(headerText,14,13);
+  hx.textAlign='right';hx.font='400 12px "Malgun Gothic",sans-serif';hx.fillStyle='rgba(255,255,255,.6)';
+  hx.fillText('출력일: '+ds,hc.width-14,13);
+  const hdrBytes=await dataUrlToUint8(hc.toDataURL('image/png'));
+  for(let i=0;i<numPages;i++){
+    const page=mainDoc.addPage([A4W,A4H]);
+    const hdrImg=await mainDoc.embedPng(hdrBytes);
+    page.drawImage(hdrImg,{x:0,y:A4H-hdrH,width:A4W,height:hdrH});
+    const srcY=i*sliceH_px;
+    const sliceActual_px=Math.min(sliceH_px,cvs.height-srcY);
+    const sliceActual_pt=sliceActual_px/pxPerPt;
+    const sc=document.createElement('canvas');sc.width=cvs.width;sc.height=sliceActual_px;
+    sc.getContext('2d').drawImage(cvs,0,srcY,cvs.width,sliceActual_px,0,0,cvs.width,sliceActual_px);
+    const sd=sc.toDataURL('image/jpeg',0.92);
+    const sb=await dataUrlToUint8(sd);
+    const si=await mainDoc.embedJpg(sb);
+    page.drawImage(si,{x:marginPt,y:A4H-hdrH-marginPt-sliceActual_pt,width:printW_pt,height:sliceActual_pt});
+  }
+  const finalBytes=await mainDoc.save();
+  const finalBlob=new Blob([finalBytes],{type:'application/pdf'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(finalBlob);a.download=fname;
+  document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);
+}
+
+// ── No.13/No.14: 공식 전표 양식 PDF 출력 (양식 레이아웃 재현) ──
 async function exportVoucherPdf() {
   const btn = document.getElementById('btn-export-pdf');
   const orig = btn.innerHTML; btn.innerHTML = '⏳ 생성 중...'; btn.disabled = true;
   let printHost = null;
   try {
-    const { PDFDocument } = PDFLib;
     const v = window._currentVoucherDetail;
     if(!v) throw new Error('전표 정보를 찾을 수 없습니다.');
     let lines_data = [];
@@ -3143,45 +3188,30 @@ async function exportVoucherPdf() {
     const cvs = await html2canvas(contentEl, {scale:2,useCORS:true,allowTaint:true,backgroundColor:'#fff',scrollY:0,windowWidth:800});
     document.body.removeChild(printHost); printHost = null;
 
-    const mainDoc = await PDFDocument.create();
-    const A4W=595,A4H=842,marginPt=34,hdrH=22;
-    const printW_pt=A4W-marginPt*2;
-    const printableH_pt=A4H-marginPt*2-hdrH;
-    const pxPerPt=cvs.width/A4W;
-    const sliceH_px=Math.round(printableH_pt*pxPerPt);
-    const numPages=Math.ceil(cvs.height/sliceH_px);
     const now=new Date(new Date().getTime()+9*3600*1000);
     const ds=now.getUTCFullYear()+'-'+String(now.getUTCMonth()+1).padStart(2,'0')+'-'+String(now.getUTCDate()).padStart(2,'0');
-    async function dataUrlToUint8(u){const r=await fetch(u);const ab=await r.arrayBuffer();return new Uint8Array(ab);}
-    const hc=document.createElement('canvas');hc.width=1190;hc.height=28;
-    const hx=hc.getContext('2d');const g=hx.createLinearGradient(0,0,hc.width,0);
-    g.addColorStop(0,'#0f2744');g.addColorStop(1,'#0a4a8a');hx.fillStyle=g;hx.fillRect(0,0,hc.width,hc.height);
-    hx.fillStyle='#fff';hx.font='500 13px "Malgun Gothic",sans-serif';hx.textBaseline='middle';
-    hx.fillText('STK Accounting Voucher · 공식 전표 양식',14,13);
-    hx.textAlign='right';hx.font='400 12px "Malgun Gothic",sans-serif';hx.fillStyle='rgba(255,255,255,.6)';
-    hx.fillText('출력일: '+ds,hc.width-14,13);
-    const hdrBytes=await dataUrlToUint8(hc.toDataURL('image/png'));
-    for(let i=0;i<numPages;i++){
-      const page=mainDoc.addPage([A4W,A4H]);
-      const hdrImg=await mainDoc.embedPng(hdrBytes);
-      page.drawImage(hdrImg,{x:0,y:A4H-hdrH,width:A4W,height:hdrH});
-      const srcY=i*sliceH_px;
-      const sliceActual_px=Math.min(sliceH_px,cvs.height-srcY);
-      const sliceActual_pt=sliceActual_px/pxPerPt;
-      const sc=document.createElement('canvas');sc.width=cvs.width;sc.height=sliceActual_px;
-      sc.getContext('2d').drawImage(cvs,0,srcY,cvs.width,sliceActual_px,0,0,cvs.width,sliceActual_px);
-      const sd=sc.toDataURL('image/jpeg',0.92);
-      const sb=await dataUrlToUint8(sd);
-      const si=await mainDoc.embedJpg(sb);
-      page.drawImage(si,{x:marginPt,y:A4H-hdrH-marginPt-sliceActual_pt,width:printW_pt,height:sliceActual_pt});
-    }
-    const finalBytes=await mainDoc.save();
-    const finalBlob=new Blob([finalBytes],{type:'application/pdf'});
-    const fname='ACC-Voucher_'+(v.Title||'detail')+'_'+ds+'.pdf';
-    const a=document.createElement('a');a.href=URL.createObjectURL(finalBlob);a.download=fname;
-    document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);
+    await canvasToPdfAndDownload(cvs, 'STK Accounting Voucher · 공식 전표 양식', 'ACC-Voucher_'+(v.Title||'detail')+'_공식양식_'+ds+'.pdf');
   } catch(e){alert('PDF 생성 오류: '+e.message);console.error(e);}
   finally{if(printHost&&printHost.parentNode)printHost.parentNode.removeChild(printHost);btn.innerHTML=orig;btn.disabled=false;}
+}
+
+// ── 전표 상세 내용(화면 그대로) PDF 출력 ──
+async function exportVoucherDetailPdf() {
+  const btn = document.getElementById('btn-export-detail-pdf');
+  const orig = btn.innerHTML; btn.innerHTML = '⏳ 생성 중...'; btn.disabled = true;
+  try {
+    const v = window._currentVoucherDetail;
+    if(!v) throw new Error('전표 정보를 찾을 수 없습니다.');
+    const contentEl = document.getElementById('voucher-detail-content');
+    const btnWrap = document.getElementById('voucher-appr-action-btns');
+    if(btnWrap) btnWrap.style.display='none';
+    const cvs = await html2canvas(contentEl, {scale:2,useCORS:true,allowTaint:true,backgroundColor:'#fff',scrollY:0,windowWidth:780});
+    if(btnWrap) btnWrap.style.display='';
+    const now=new Date(new Date().getTime()+9*3600*1000);
+    const ds=now.getUTCFullYear()+'-'+String(now.getUTCMonth()+1).padStart(2,'0')+'-'+String(now.getUTCDate()).padStart(2,'0');
+    await canvasToPdfAndDownload(cvs, 'STK Accounting Voucher · 전표 상세 화면', 'ACC-Voucher_'+(v.Title||'detail')+'_상세화면_'+ds+'.pdf');
+  } catch(e){alert('PDF 생성 오류: '+e.message);console.error(e);}
+  finally{btn.innerHTML=orig;btn.disabled=false;}
 }
 
 // ── Init ──
@@ -3221,10 +3251,16 @@ window.addEventListener('load',async()=>{
     <button class="modal-close" onclick="closeDetailModal()">×</button>
     <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between">
       <span>전표 상세 내용</span>
-      <button id="btn-export-pdf" onclick="exportVoucherPdf()" title="상세 내용 PDF 출력" style="display:none;background:#0078d4;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:.75rem;font-weight:600;cursor:pointer;font-family:inherit;align-items:center;gap:5px;transition:all .15s" onmouseover="this.style.background='#005a9e'" onmouseout="this.style.background='#0078d4'">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:middle;margin-right:4px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-        PDF 출력
-      </button>
+      <div style="display:flex;gap:6px">
+        <button id="btn-export-detail-pdf" onclick="exportVoucherDetailPdf()" title="화면에 보이는 상세 내용 그대로 PDF 출력" style="display:none;background:#fff;color:#0078d4;border:1px solid #0078d4;border-radius:8px;padding:6px 14px;font-size:.75rem;font-weight:600;cursor:pointer;font-family:inherit;align-items:center;gap:5px;transition:all .15s" onmouseover="this.style.background='#f0f6ff'" onmouseout="this.style.background='#fff'">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:middle;margin-right:4px"><rect x="3" y="4" width="18" height="13" rx="1.5"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          상세화면 PDF
+        </button>
+        <button id="btn-export-pdf" onclick="exportVoucherPdf()" title="공식 전표 양식(F&amp;C_Accounting_Template)으로 PDF 출력" style="display:none;background:#0078d4;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:.75rem;font-weight:600;cursor:pointer;font-family:inherit;align-items:center;gap:5px;transition:all .15s" onmouseover="this.style.background='#005a9e'" onmouseout="this.style.background='#0078d4'">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:middle;margin-right:4px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          공식 양식 PDF
+        </button>
+      </div>
     </div>
     <div id="voucher-detail-content"></div>
   </div>
