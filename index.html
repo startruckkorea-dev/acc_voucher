@@ -3050,6 +3050,8 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
     hdrCurrency='Multi-Currency'; hdrTotalAmount='-';
   }
 
+  const bpCatSimple = (v.BPCategory||'').includes('Customer') ? 'Customer' : ((v.BPCategory||'').includes('Vendor') ? 'Vendor' : (esc(v.BPCategory)||'-'));
+
   const roleCols=[['TL','Team Leader'],['MC','MC'],['CEO','CEO'],['RD','RD'],['CTRL','Controller'],['AMGR','Accounting Mgr.'],['CFO','CFO']];
   const apprByRole={}; (apprList||[]).forEach(a=>{apprByRole[a.ApproverRole]=a;});
   const fmtApprDate=s=>{if(!s)return '';const d=new Date(s);const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;};
@@ -3084,7 +3086,7 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
     '<table style="width:100%;border-collapse:collapse;border:1px solid #000;border-top:none">'+
       '<tr>'+
         '<td style="'+lblB+';width:15%">Submission Date</td><td style="'+cellB+';width:35%">'+submittedDate+'</td>'+
-        '<td style="'+lblB+';width:15%">BP Category</td><td style="'+cellB+';width:35%">'+(esc(v.BPCategory)||'-')+'</td>'+
+        '<td style="'+lblB+';width:15%">BP Category</td><td style="'+cellB+';width:35%">'+bpCatSimple+'</td>'+
       '</tr>'+
       '<tr>'+
         '<td style="'+lblB+'">Invoice Date(*)</td><td style="'+cellB+'">'+invoiceDate+'</td>'+
@@ -3100,10 +3102,13 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
       '</tr>'+
     '</table>'+
     '<table style="width:100%;border-collapse:collapse;border:1px solid #000;border-top:none">'+
-      '<tr><td style="'+lblB+';width:15%;vertical-align:top">Purpose</td><td colspan="3" style="'+cellB+';white-space:pre-wrap;min-height:34px">'+(esc(v.Purpose)||'-')+'</td></tr>'+
       '<tr>'+
-        '<td style="'+lblB+';width:15%">Currency</td><td style="'+cellB+';width:20%">'+hdrCurrency+'</td>'+
-        '<td style="'+lblB+';width:20%">Total Amount</td><td style="'+cellB+';width:45%;text-align:right;font-weight:700">'+hdrTotalAmount+'</td>'+
+        '<td colspan="2" style="'+lblB+';text-align:left">Purpose</td>'+
+        '<td style="'+lblB+';width:20%">Currency</td><td style="'+lblB+';width:25%">Total Amount</td>'+
+      '</tr>'+
+      '<tr>'+
+        '<td style="'+lblB+';width:15%;vertical-align:top">Requeset for</td><td style="'+cellB+';width:35%;white-space:pre-wrap;min-height:34px">'+(esc(v.Purpose)||'-')+'</td>'+
+        '<td style="'+cellB+'">'+hdrCurrency+'</td><td style="'+cellB+';text-align:right;font-weight:700">'+hdrTotalAmount+'</td>'+
       '</tr>'+
       '<tr>'+
         '<td style="'+lblB+'">Exchange rate</td><td style="'+cellB+';font-size:10px">'+exRateDisplay+'</td>'+
