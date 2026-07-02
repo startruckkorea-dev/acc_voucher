@@ -410,9 +410,13 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
             <button class="btn-search" onclick="openBpModal()">🔍 검색</button>
           </div>
         </div>
-        <div class="form-group" style="grid-column:span 2">
+        <div class="form-group">
           <label>Vendor/Customer Name <span class="auto-tag">자동</span></label>
           <input type="text" id="v-bp-name" readonly placeholder="BP 선택 시 자동입력">
+        </div>
+        <div class="form-group">
+          <label>Vendor Business No. <span class="auto-tag">자동</span></label>
+          <input type="text" id="v-bp-bizno" readonly placeholder="BP 선택 시 자동입력">
         </div>
         <div class="form-group">
           <label>BP Category <span class="auto-tag">자동</span></label>
@@ -1692,6 +1696,7 @@ function selectBP(code) {
   const bp=bpData.find(b=>b.code===code); if(!bp) return;
   document.getElementById('v-bp-code').value=bp.code;
   document.getElementById('v-bp-name').value=bp.name;
+  document.getElementById('v-bp-bizno').value = bp.bizNo||'Master data 미기재';
   const bpCatVal = (bp.type==='Vendor'||bp.type==='S') ? 'S (Vendor)' : 'C (Customer)';
   document.getElementById('v-bp-cat').value = bpCatVal;
   closeBpModal();
@@ -1864,6 +1869,7 @@ async function saveVoucher(status) {
         RequesterCCTR: document.getElementById('v-cctr').value||'',
         BPCode: document.getElementById('v-bp-code').value||'',
         BPName: document.getElementById('v-bp-name').value||'',
+        BPBizNo: document.getElementById('v-bp-bizno').value||'',
         BPCategory: document.getElementById('v-bp-cat').value||'',
         InvoiceDate: document.getElementById('v-inv-date').value||null,
         ExchangeRate: [
@@ -2145,6 +2151,7 @@ async function loadExistingVoucher() {
     // BP 정보
     document.getElementById('v-bp-code').value = f.BPCode||'';
     document.getElementById('v-bp-name').value = f.BPName||'';
+    document.getElementById('v-bp-bizno').value = f.BPBizNo||'';
     document.getElementById('v-bp-cat').value = f.BPCategory||'';
     // Purpose — HTML 태그 제거
     const rawPurpose = f.Purpose||'';
@@ -2163,7 +2170,7 @@ async function loadExistingVoucher() {
 }
 
 function resetForm(){
-  ['v-type','v-inv-date','v-exrate','v-bp-code','v-bp-name','v-bp-cat','v-purpose'].forEach(id=>{
+  ['v-type','v-inv-date','v-exrate','v-bp-code','v-bp-name','v-bp-bizno','v-bp-cat','v-purpose'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value='';
   });
   document.getElementById('voucher-id-badge').textContent='';
@@ -2752,6 +2759,7 @@ async function openVoucherSP(spId){
     <div class="det-sec">BP 정보</div>
     ${row('BP Code', v.BPCode)}
     ${row('BP Name', v.BPName)}
+    ${row('Vendor Business No.', v.BPBizNo||'Master data 미기재')}
     ${row('BP Category', v.BPCategory)}
 
     <div class="det-sec">Purpose / Description</div>
@@ -3081,6 +3089,10 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
       '<tr>'+
         '<td style="'+lblB+'">Voucher class</td><td style="'+cellB+'">'+(esc(TYPE_LABEL[v.VoucherType]||v.VoucherType)||'-')+'</td>'+
         '<td style="'+lblB+'">Vendor/Customer Name</td><td style="'+cellB+'">'+(esc(v.BPName)||'-')+'</td>'+
+      '</tr>'+
+      '<tr>'+
+        '<td style="'+lblB+'"></td><td style="'+cellB+'"></td>'+
+        '<td style="'+lblB+'">Vendor Business No.</td><td style="'+cellB+'">'+(esc(v.BPBizNo)||'Master data 미기재')+'</td>'+
       '</tr>'+
     '</table>'+
     '<table style="width:100%;border-collapse:collapse;border:1px solid #000;border-top:none">'+
