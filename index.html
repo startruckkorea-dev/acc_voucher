@@ -2530,18 +2530,21 @@ function renderB1ChangeLog(logJson) {
   let logs = [];
   if(logJson) { try { logs = JSON.parse(logJson); } catch(e){ logs=[]; } }
   if(!logs.length){ el.innerHTML=''; return; }
+  const postColor = p => p==='완료' ? '#107c10' : '#a4262c';
   el.innerHTML =
     '<div style="font-size:.75rem;font-weight:700;color:#0078d4;padding:5px 9px;background:#f0f6ff;border-left:3px solid #0078d4;border-radius:3px;margin-bottom:6px">🔄 B1 Doc No. / Posting 변경 이력</div>' +
-    '<div style="background:#f0f6ff;border:1px solid #c7e0f4;border-radius:6px;overflow:hidden;max-height:220px;overflow-y:auto">' +
-    logs.slice().reverse().map((log,i,arr)=>
+    '<div id="b1-change-log-list" style="background:#f0f6ff;border:1px solid #c7e0f4;border-radius:6px;overflow:hidden;max-height:220px;overflow-y:auto">' +
+    logs.map((log,i,arr)=>
       '<div style="padding:8px 12px;'+(i===arr.length-1?'':'border-bottom:1px solid #c7e0f4')+'">' +
         '<div style="font-size:.68rem;color:#a19f9d">'+(log.changedAt||'')+'</div>' +
         '<div style="font-size:.72rem;color:#323130;margin-top:2px">변경자: <b>'+(log.changedBy||'')+'</b></div>' +
         '<div style="font-size:.72rem;color:#323130;margin-top:2px">B1 Doc No.: <span style="color:#605e5c">'+(log.fromB1||'-')+'</span> → <span style="font-weight:700;color:#0078d4">'+(log.toB1||'-')+'</span></div>' +
-        '<div style="font-size:.72rem;color:#323130;margin-top:2px">Posting: <span style="color:#605e5c">'+(log.fromPosting||'미완료')+'</span> → <span style="font-weight:700;color:#0078d4">'+(log.toPosting||'미완료')+'</span></div>' +
+        '<div style="font-size:.72rem;color:#323130;margin-top:2px">Posting: <span style="color:'+postColor(log.fromPosting||'미완료')+';font-weight:600">'+(log.fromPosting||'미완료')+'</span> → <span style="font-weight:700;color:'+postColor(log.toPosting||'미완료')+'">'+(log.toPosting||'미완료')+'</span></div>' +
       '</div>'
     ).join('') +
     '</div>';
+  const listEl = document.getElementById('b1-change-log-list');
+  if(listEl) listEl.scrollTop = listEl.scrollHeight; // 최신 기록(맨 아래)이 보이도록 자동 스크롤
 }
 
 function renderAdminList(){
