@@ -2479,16 +2479,62 @@ async function saveB1Doc(spId, b1DocNo, postingDone) {
     const now = new Date(new Date().getTime()+9*3600*1000);
     const p = n=>String(n).padStart(2,'0');
     const updatedAt = `${now.getUTCFullYear()}-${p(now.getUTCMonth()+1)}-${p(now.getUTCDate())} ${p(now.getUTCHours())}:${p(now.getUTCMinutes())}`;
+
+    // 변경 전 값 조회 (SSC PKF 담당자 변경 이력과 동일 패턴: 저장할 때마다 이력 append)
+    const cur = await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${spId}/fields`);
+    const fromB1 = cur.B1DocNo||'';
+    const fromPosting = cur.PostingDone||'';
+    let logs = [];
+    if(cur.B1ChangeLog) { try { logs = JSON.parse(cur.B1ChangeLog); } catch(e){ logs=[]; } }
+
+    const changed = fromB1 !== (b1DocNo||'') || fromPosting !== (postingDone||'');
+    if(changed){
+      logs.push({
+        changedAt: updatedAt,
+        changedBy: updatedBy,
+        fromB1: fromB1||'-',
+        toB1: b1DocNo||'-',
+        fromPosting: fromPosting||'미완료',
+        toPosting: postingDone||'미완료'
+      });
+    }
+
     await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${spId}/fields`, 'PATCH', {
       B1DocNo: b1DocNo||'',
       PostingDone: postingDone||'',
       B1UpdatedBy: updatedBy,
-      B1UpdatedAt: updatedAt
+      B1UpdatedAt: updatedAt,
+      B1ChangeLog: JSON.stringify(logs)
     });
     // 캐시 갱신
     const cached = adminListCache.find(v=>v._spId===spId);
-    if(cached){ cached.B1DocNo=b1DocNo; cached.PostingDone=postingDone; cached.B1UpdatedBy=updatedBy; cached.B1UpdatedAt=updatedAt; }
-  } catch(e){ console.error('saveB1Doc error:', e.message); alert('저장 실패: '+e.message); }
+    if(cached){ cached.B1DocNo=b1DocNo; cached.PostingDone=postingDone; cached.B1UpdatedBy=updatedBy; cached.B1UpdatedAt=updatedAt; cached.B1ChangeLog=JSON.stringify(logs); }
+    if(window._currentVoucherDetail && window._currentVoucherDetail._spId===spId){
+      window._currentVoucherDetail.B1ChangeLog = JSON.stringify(logs);
+    }
+    return logs;
+  } catch(e){ console.error('saveB1Doc error:', e.message); alert('저장 실패: '+e.message); return null; }
+}
+
+// ── B1 Doc No./Posting 변경 이력 렌더링 (SSC PKF 담당자 변경 이력과 동일 카드 스타일) ──
+function renderB1ChangeLog(logJson) {
+  const el = document.getElementById('b1-change-log');
+  if(!el) return;
+  let logs = [];
+  if(logJson) { try { logs = JSON.parse(logJson); } catch(e){ logs=[]; } }
+  if(!logs.length){ el.innerHTML=''; return; }
+  el.innerHTML =
+    '<div style="font-size:.75rem;font-weight:700;color:#0078d4;padding:5px 9px;background:#f0f6ff;border-left:3px solid #0078d4;border-radius:3px;margin-bottom:6px">🔄 B1 Doc No. / Posting 변경 이력</div>' +
+    '<div style="background:#f0f6ff;border:1px solid #c7e0f4;border-radius:6px;overflow:hidden;max-height:220px;overflow-y:auto">' +
+    logs.slice().reverse().map((log,i,arr)=>
+      '<div style="padding:8px 12px;'+(i===arr.length-1?'':'border-bottom:1px solid #c7e0f4')+'">' +
+        '<div style="font-size:.68rem;color:#a19f9d">'+(log.changedAt||'')+'</div>' +
+        '<div style="font-size:.72rem;color:#323130;margin-top:2px">변경자: <b>'+(log.changedBy||'')+'</b></div>' +
+        '<div style="font-size:.72rem;color:#323130;margin-top:2px">B1 Doc No.: <span style="color:#605e5c">'+(log.fromB1||'-')+'</span> → <span style="font-weight:700;color:#0078d4">'+(log.toB1||'-')+'</span></div>' +
+        '<div style="font-size:.72rem;color:#323130;margin-top:2px">Posting: <span style="color:#605e5c">'+(log.fromPosting||'미완료')+'</span> → <span style="font-weight:700;color:#0078d4">'+(log.toPosting||'미완료')+'</span></div>' +
+      '</div>'
+    ).join('') +
+    '</div>';
 }
 
 function renderAdminList(){
@@ -2753,23 +2799,24 @@ async function openVoucherSP(spId){
         <div>
           <div style="font-size:.72rem;color:#605e5c;margin-bottom:4px;font-weight:600">B1 Doc No.</div>
           <input type="text" id="modal-b1docno" placeholder="B1 Doc No. 입력..."
-            style="width:100%;border:1px solid #d2d0ce;border-radius:4px;padding:6px 10px;font-size:.78rem;box-sizing:border-box">
+            style="width:100%;height:34px;border:1px solid #d2d0ce;border-radius:4px;padding:0 10px;font-size:.78rem;font-family:inherit;box-sizing:border-box;line-height:32px;vertical-align:middle">
         </div>
         <div>
           <div style="font-size:.72rem;color:#605e5c;margin-bottom:4px;font-weight:600">Posting</div>
-          <select id="modal-posting" style="width:100%;border:1px solid #d2d0ce;border-radius:4px;padding:6px 10px;font-size:.78rem;font-family:inherit">
+          <select id="modal-posting" style="width:100%;height:34px;border:1px solid #d2d0ce;border-radius:4px;padding:0 10px;font-size:.78rem;font-family:inherit;box-sizing:border-box;line-height:32px;vertical-align:middle;-webkit-appearance:menulist">
             <option value="">미완료</option>
             <option value="완료">✅ 완료</option>
           </select>
         </div>
       </div>
-      <div style="display:flex;align-items:center;justify-content:space-between">
-        <div id="b1-updated-info" style="font-size:.7rem;color:#a19f9d"></div>
+      <div style="display:flex;align-items:center;justify-content:flex-end">
         <button onclick="saveB1DocFromModal()" style="padding:6px 16px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:.78rem;cursor:pointer">저장</button>
       </div>
+      <div id="b1-change-log" style="margin-top:12px"></div>
     </div>
 
     <!-- No.10: 관리자 의견 제시 -->
+
     <div id="admin-comment-section" style="display:none;margin-top:16px;border-top:1px solid #edebe9;padding-top:14px">
       <div class="det-sec">결재 의견 제시 <span style="font-size:.7rem;font-weight:400;color:#a19f9d">(관리자만 입력 가능 · 미결재 건에 한함)</span></div>
       <div id="admin-comments-list" style="margin-bottom:10px;max-height:180px;overflow-y:auto"></div>
@@ -2799,8 +2846,7 @@ async function openVoucherSP(spId){
     b1Section.style.display = 'block';
     document.getElementById('modal-b1docno').value = v.B1DocNo||'';
     document.getElementById('modal-posting').value = v.PostingDone||'';
-    const infoEl = document.getElementById('b1-updated-info');
-    infoEl.textContent = v.B1UpdatedBy ? `마지막 수정: ${v.B1UpdatedBy} · ${v.B1UpdatedAt||''}` : '';
+    renderB1ChangeLog(v.B1ChangeLog);
   }
 
   // 결재 이력 비동기 로드
@@ -2906,14 +2952,8 @@ async function saveB1DocFromModal() {
   const postingDone = document.getElementById('modal-posting')?.value||'';
   const btn = document.querySelector('#b1-input-section button');
   if(btn){btn.disabled=true;btn.textContent='저장 중...';}
-  await saveB1Doc(v._spId, b1DocNo, postingDone);
-  // 표시 갱신
-  const now = new Date(new Date().getTime()+9*3600*1000);
-  const p = n=>String(n).padStart(2,'0');
-  const updatedAt = `${now.getUTCFullYear()}-${p(now.getUTCMonth()+1)}-${p(now.getUTCDate())} ${p(now.getUTCHours())}:${p(now.getUTCMinutes())}`;
-  const updatedBy = user?.email||user?.username||'';
-  const infoEl = document.getElementById('b1-updated-info');
-  if(infoEl) infoEl.textContent = `마지막 수정: ${updatedBy} · ${updatedAt}`;
+  const logs = await saveB1Doc(v._spId, b1DocNo, postingDone);
+  if(logs !== null) renderB1ChangeLog(JSON.stringify(logs));
   if(btn){btn.disabled=false;btn.textContent='저장';}
 }
 
