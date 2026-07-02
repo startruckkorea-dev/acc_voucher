@@ -1912,7 +1912,7 @@ async function saveVoucher(status) {
       }
     }
 
-    showAccAlert('결재 요청이 완료되었습니다.', 'Voucher ID: '+voucherId);
+    showAccAlert('결재 요청이 완료되었습니다.', 'Voucher ID: '+voucherId, '✅');
     resetForm(); await loadMyList(); switchTab('list');
   } catch(e) {
     console.error('saveVoucher error:', e);
@@ -2131,7 +2131,7 @@ async function loadExistingVoucher() {
     updateTotals();
     document.getElementById('voucher-id-badge').textContent = `(${titleVal} 기반 불러옴)`;
     titleInput.value = '';
-    showAccAlert('전표를 불러왔습니다.', 'Invoice Date는 기존 전표 날짜로 복원됩니다.\nExchange Rate는 오늘 기준 환율을 그대로 사용합니다.\n첨부파일은 새로 첨부해주세요.', '완료');
+    showAccAlert('전표를 불러왔습니다.', 'Invoice Date는 기존 전표 날짜로 복원됩니다.\nExchange Rate는 오늘 기준 환율을 그대로 사용합니다.\n첨부파일은 새로 첨부해주세요.', '📋');
   } catch(e) {
     console.error('loadExistingVoucher error:', e);
     showAccAlert('전표 불러오기 실패', e.message, '⚠️');
