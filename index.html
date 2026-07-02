@@ -2861,6 +2861,7 @@ async function loadApprovalHistory(spId){
     if(!res.ok) throw new Error('결재 이력 조회 실패');
     const data = await res.json();
     const list = data.value.map(i=>({...i.fields, _apprId:i.id})).sort((a,b)=>(a.ApprovalOrder||0)-(b.ApprovalOrder||0));
+    window._currentApprovalList = list; // No.14: PDF 출력용 캐시
     if(!list.length){
       document.getElementById('voucher-appr-history').innerHTML = '<div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력이 없습니다.</div>';
       return;
@@ -2973,17 +2974,135 @@ function closeDetailModal(){
   window._currentVoucherDetail = null;
 }
 
-// ── No.13: PDF 출력 (GW exportModalPdf 동일 패턴) ──
+// ── No.14: 공식 전표 양식(F&C_Accounting_Template_01_STK_Accounting_Voucher) 레이아웃 재현 ──
+function buildOfficialVoucherHTML(v, lines_data, apprList) {
+  const fmtK = n => Math.round(n||0).toLocaleString('ko-KR');
+  const fmt2 = n => (parseFloat(n)||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const submittedDate = v.SubmittedDate ? (()=>{const d=new Date(v.SubmittedDate);const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;})() : '-';
+  const invoiceDate = v.InvoiceDate ? v.InvoiceDate.slice(0,10) : '-';
+  const exRateDisplay = v.ExchangeRate ? v.ExchangeRate.split(',').map(s=>{const parts=s.split(':');const c=parts[0];const rv=parseFloat(parts[1]);return rv>0?(c+' '+rv.toLocaleString('ko-KR',{maximumFractionDigits:4})):null;}).filter(Boolean).join('  &nbsp;|&nbsp;  ') : '-';
+
+  const lineCurrencies=[...new Set((lines_data||[]).map(l=>l.currency).filter(c=>c&&c!=='KRW'))];
+  let hdrCurrency='KRW', hdrTotalAmount=fmtK(v.TotalDR_KRW);
+  if(lineCurrencies.length===1){
+    hdrCurrency=lineCurrencies[0];
+    const sum=(lines_data||[]).filter(l=>l.drcr==='DR'&&l.currency===hdrCurrency).reduce((s,l)=>s+(parseFloat(l.amount)||0),0);
+    hdrTotalAmount=fmt2(sum);
+  } else if(lineCurrencies.length>1){
+    hdrCurrency='Multi-Currency'; hdrTotalAmount='-';
+  }
+
+  const roleCols=[['TL','Team Leader'],['MC','MC'],['CEO','CEO'],['RD','RD'],['CTRL','Controller'],['AMGR','Accounting Mgr.'],['CFO','CFO']];
+  const apprByRole={}; (apprList||[]).forEach(a=>{apprByRole[a.ApproverRole]=a;});
+  const fmtApprDate=s=>{if(!s)return '';const d=new Date(s);const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;};
+  const cellB='border:1px solid #000;padding:4px 6px';
+  const lblB=cellB+';background:#f0f0f0;font-weight:600;white-space:nowrap';
+
+  const lineRows=(lines_data||[]).map((l,i)=>(
+    '<tr>'+
+      '<td style="'+cellB+';text-align:center">'+(i+1)+'</td>'+
+      '<td style="'+cellB+'">'+esc(l.glName)+'</td>'+
+      '<td style="'+cellB+'">'+esc(l.gl)+'</td>'+
+      '<td style="'+cellB+'">'+esc(l.cctrName||l.cctr||l.pcName||l.pc)+'</td>'+
+      '<td style="'+cellB+'">'+esc(l.subpcName||l.subpc)+'</td>'+
+      '<td style="'+cellB+'">'+esc(l.lineDesc)+'</td>'+
+      '<td style="'+cellB+';text-align:center">'+esc(l.currency)+'</td>'+
+      '<td style="'+cellB+';text-align:right">'+(l.drcr==='DR'?fmt2(l.amount):'')+'</td>'+
+      '<td style="'+cellB+';text-align:right">'+(l.drcr==='CR'?fmt2(l.amount):'')+'</td>'+
+    '</tr>')).join('');
+  const drSum=(lines_data||[]).filter(l=>l.drcr==='DR').reduce((s,l)=>s+(parseFloat(l.amount)||0),0);
+  const crSum=(lines_data||[]).filter(l=>l.drcr==='CR').reduce((s,l)=>s+(parseFloat(l.amount)||0),0);
+
+  const apprRow=(type)=>roleCols.map(rc=>{
+    const role=rc[0]; const a=apprByRole[role];
+    const val=type==='sig' ? (a&&a.ApprovalDate?fmtApprDate(a.ApprovalDate):'') : (a?esc(a.ApproverName||''):'');
+    return '<td style="'+cellB+';text-align:center;font-size:9px">'+val+'</td>';
+  }).join('');
+
+  return ''+
+  '<div style="width:760px;background:#fff;color:#000;font-family:\'Malgun Gothic\',sans-serif;padding:18px;box-sizing:border-box;font-size:11px;line-height:1.45">'+
+    '<div style="text-align:center;font-weight:700;font-size:16px;border:2px solid #000;border-bottom:none;padding:8px">Star Truck Korea Co., Ltd.</div>'+
+    '<div style="text-align:center;font-weight:600;font-size:12px;border:2px solid #000;border-top:none;padding:6px">Application for Payments/Invoicing/Internal Posting</div>'+
+    '<table style="width:100%;border-collapse:collapse;border:1px solid #000;border-top:none">'+
+      '<tr>'+
+        '<td style="'+lblB+';width:15%">Submission Date</td><td style="'+cellB+';width:35%">'+submittedDate+'</td>'+
+        '<td style="'+lblB+';width:15%">BP Category</td><td style="'+cellB+';width:35%">'+(esc(v.BPCategory)||'-')+'</td>'+
+      '</tr>'+
+      '<tr>'+
+        '<td style="'+lblB+'">Invoice Date(*)</td><td style="'+cellB+'">'+invoiceDate+'</td>'+
+        '<td style="'+lblB+'">Vendor/Customer No.</td><td style="'+cellB+'">'+(esc(v.BPCode)||'-')+'</td>'+
+      '</tr>'+
+      '<tr>'+
+        '<td style="'+lblB+'">Voucher class</td><td style="'+cellB+'">'+(esc(TYPE_LABEL[v.VoucherType]||v.VoucherType)||'-')+'</td>'+
+        '<td style="'+lblB+'">Vendor/Customer Name</td><td style="'+cellB+'">'+(esc(v.BPName)||'-')+'</td>'+
+      '</tr>'+
+    '</table>'+
+    '<table style="width:100%;border-collapse:collapse;border:1px solid #000;border-top:none">'+
+      '<tr><td style="'+lblB+';width:15%;vertical-align:top">Purpose</td><td colspan="3" style="'+cellB+';white-space:pre-wrap;min-height:34px">'+(esc(v.Purpose)||'-')+'</td></tr>'+
+      '<tr>'+
+        '<td style="'+lblB+';width:15%">Currency</td><td style="'+cellB+';width:20%">'+hdrCurrency+'</td>'+
+        '<td style="'+lblB+';width:20%">Total Amount</td><td style="'+cellB+';width:45%;text-align:right;font-weight:700">'+hdrTotalAmount+'</td>'+
+      '</tr>'+
+      '<tr>'+
+        '<td style="'+lblB+'">Exchange rate</td><td style="'+cellB+';font-size:10px">'+exRateDisplay+'</td>'+
+        '<td style="'+lblB+'">KRW TOTAL</td><td style="'+cellB+';text-align:right;font-weight:700">'+fmtK(v.TotalDR_KRW)+'</td>'+
+      '</tr>'+
+      '<tr>'+
+        '<td style="'+lblB+'">Requester</td><td style="'+cellB+'">'+esc(v.RequesterName)+' ('+esc(v.RequesterEmail)+')</td>'+
+        '<td style="'+lblB+'">Cost Center No.</td><td style="'+cellB+'">'+(esc(v.RequesterCCTR)||'-')+'</td>'+
+      '</tr>'+
+    '</table>'+
+
+    '<div style="font-weight:700;margin-top:10px;padding:4px 2px;border-bottom:2px solid #000">Details of Accounts</div>'+
+    '<table style="width:100%;border-collapse:collapse;border:1px solid #000;font-size:10px">'+
+      '<thead><tr style="background:#f0f0f0">'+
+        '<th style="'+cellB+'">No</th><th style="'+cellB+'">G/L Account Description</th><th style="'+cellB+'">G/L Acc No.</th>'+
+        '<th style="'+cellB+'">Cost/Profit Center</th><th style="'+cellB+'">Sub_PC</th><th style="'+cellB+'">Description</th>'+
+        '<th style="'+cellB+'">Curr</th><th style="'+cellB+'">DEBIT</th><th style="'+cellB+'">CREDIT</th>'+
+      '</tr></thead>'+
+      '<tbody>'+(lineRows||('<tr><td colspan="9" style="'+cellB+';text-align:center;color:#888">라인 없음</td></tr>'))+'</tbody>'+
+      '<tfoot><tr style="font-weight:700;background:#f9f9f9">'+
+        '<td colspan="7" style="'+cellB+';text-align:right">Total</td>'+
+        '<td style="'+cellB+';text-align:right">'+fmt2(drSum)+'</td>'+
+        '<td style="'+cellB+';text-align:right">'+fmt2(crSum)+'</td>'+
+      '</tr></tfoot>'+
+    '</table>'+
+    '<div style="font-size:8.5px;color:#666;margin-top:2px">* DEBIT/CREDIT 합계는 각 라인 원 통화 기준 단순 합산입니다. KRW 환산 합계는 상단 KRW TOTAL을 참고하세요.</div>'+
+
+    '<div style="font-weight:700;margin-top:12px;padding:4px 2px;border-bottom:2px solid #000">Authorization</div>'+
+    '<table style="width:100%;border-collapse:collapse;border:1px solid #000;font-size:10px;text-align:center">'+
+      '<tr style="background:#f0f0f0">'+
+        '<td style="'+lblB+';width:12%">Title</td>'+roleCols.map(rc=>'<td style="'+cellB+';font-weight:600">'+rc[1]+'</td>').join('')+
+      '</tr>'+
+      '<tr><td style="'+lblB+'">(E) Signature<br>&amp; Date</td>'+apprRow('sig')+'</tr>'+
+      '<tr><td style="'+lblB+'">Name</td>'+apprRow('name')+'</tr>'+
+    '</table>'+
+  '</div>';
+}
+
+// ── No.13/No.14: PDF 출력 (공식 양식 레이아웃 재현, GW exportModalPdf 동일 패턴) ──
 async function exportVoucherPdf() {
   const btn = document.getElementById('btn-export-pdf');
   const orig = btn.innerHTML; btn.innerHTML = '⏳ 생성 중...'; btn.disabled = true;
+  let printHost = null;
   try {
     const { PDFDocument } = PDFLib;
-    const contentEl = document.getElementById('voucher-detail-content');
-    const btnWrap = document.getElementById('voucher-appr-action-btns');
-    if(btnWrap) btnWrap.style.display='none';
-    const cvs = await html2canvas(contentEl, {scale:2,useCORS:true,allowTaint:true,backgroundColor:'#fff',scrollY:0,windowWidth:780});
-    if(btnWrap) btnWrap.style.display='';
+    const v = window._currentVoucherDetail;
+    if(!v) throw new Error('전표 정보를 찾을 수 없습니다.');
+    let lines_data = [];
+    try { lines_data = JSON.parse(v.LinesJSON||'[]'); } catch(e) { lines_data = []; }
+    const apprList = window._currentApprovalList || [];
+
+    // 화면 밖에 공식 양식 HTML을 렌더링 후 캡처
+    printHost = document.createElement('div');
+    printHost.style.cssText = 'position:fixed;left:-9999px;top:0;z-index:-1;';
+    printHost.innerHTML = buildOfficialVoucherHTML(v, lines_data, apprList);
+    document.body.appendChild(printHost);
+    const contentEl = printHost.firstElementChild;
+    const cvs = await html2canvas(contentEl, {scale:2,useCORS:true,allowTaint:true,backgroundColor:'#fff',scrollY:0,windowWidth:800});
+    document.body.removeChild(printHost); printHost = null;
+
     const mainDoc = await PDFDocument.create();
     const A4W=595,A4H=842,marginPt=34,hdrH=22;
     const printW_pt=A4W-marginPt*2;
@@ -2998,7 +3117,7 @@ async function exportVoucherPdf() {
     const hx=hc.getContext('2d');const g=hx.createLinearGradient(0,0,hc.width,0);
     g.addColorStop(0,'#0f2744');g.addColorStop(1,'#0a4a8a');hx.fillStyle=g;hx.fillRect(0,0,hc.width,hc.height);
     hx.fillStyle='#fff';hx.font='500 13px "Malgun Gothic",sans-serif';hx.textBaseline='middle';
-    hx.fillText('STK Accounting Voucher · 전표 상세 증빙',14,13);
+    hx.fillText('STK Accounting Voucher · 공식 전표 양식',14,13);
     hx.textAlign='right';hx.font='400 12px "Malgun Gothic",sans-serif';hx.fillStyle='rgba(255,255,255,.6)';
     hx.fillText('출력일: '+ds,hc.width-14,13);
     const hdrBytes=await dataUrlToUint8(hc.toDataURL('image/png'));
@@ -3018,12 +3137,11 @@ async function exportVoucherPdf() {
     }
     const finalBytes=await mainDoc.save();
     const finalBlob=new Blob([finalBytes],{type:'application/pdf'});
-    const v=window._currentVoucherDetail||{};
     const fname='ACC-Voucher_'+(v.Title||'detail')+'_'+ds+'.pdf';
     const a=document.createElement('a');a.href=URL.createObjectURL(finalBlob);a.download=fname;
     document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);
   } catch(e){alert('PDF 생성 오류: '+e.message);console.error(e);}
-  finally{btn.innerHTML=orig;btn.disabled=false;}
+  finally{if(printHost&&printHost.parentNode)printHost.parentNode.removeChild(printHost);btn.innerHTML=orig;btn.disabled=false;}
 }
 
 // ── Init ──
