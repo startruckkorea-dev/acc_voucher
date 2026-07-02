@@ -2266,7 +2266,7 @@ function renderApprovalQueue() {
   tbody.innerHTML = approvalQueueCache.map((item,i)=>{
     const v = item._voucher;
     if(!v._spId) console.warn('[ApprQueue] _voucher 매칭 실패 - RequestID:', item.RequestID);
-    return `<tr onclick="openVoucherSP('${v._spId}')" style="cursor:pointer">
+    return `<tr onclick="openVoucherSP('${v._spId}','approval')" style="cursor:pointer">
       <td style="color:#a19f9d;font-size:.78rem">${i+1}</td>
       <td style="font-size:.78rem;color:#605e5c">${v.RequesterEmail||'-'}</td>
       <td style="font-size:.75rem;color:#0078d4">${v.Title||'-'}</td>
@@ -2576,7 +2576,7 @@ function renderAdminList(){
     const isCompleted = v.Status === '승인완료';
     const b1DocNo = v.B1DocNo||'';
     const postingDone = v.PostingDone||'';
-    return `<tr onclick="openVoucherSP('${v._spId}')">
+    return `<tr onclick="openVoucherSP('${v._spId}','admin')">
     <td style="color:#a19f9d;font-size:.78rem">${reverseNo}</td>
     <td style="font-size:.78rem;color:#605e5c">${v.RequesterEmail||'-'}</td>
     <td style="font-size:.75rem;color:#0078d4">${v.Title||'-'}</td>
@@ -2636,7 +2636,7 @@ function renderList(){
     const p = n=>String(n).padStart(2,'0');
     return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
   };
-  body.innerHTML=list.map((v,i)=>`<tr onclick="openVoucherSP('${v._spId}')">
+  body.innerHTML=list.map((v,i)=>`<tr onclick="openVoucherSP('${v._spId}','mylist')">
     <td style="color:#a19f9d;font-size:.78rem">${list.length-i}</td>
     <td style="font-size:.78rem;color:#605e5c">${v.RequesterEmail||'-'}</td>
     <td style="font-size:.75rem;color:#0078d4">${v.Title||'-'}</td>
@@ -2682,7 +2682,7 @@ async function withdrawRequest(spId) {
   }
 }
 
-async function openVoucherSP(spId){
+async function openVoucherSP(spId, fromTab){
   const v = voucherListCache.find(x=>x._spId===spId)
     || adminListCache.find(x=>x._spId===spId)
     || (approvalQueueCache.find(x=>x._voucher?._spId===spId)?._voucher);
@@ -2870,23 +2870,28 @@ async function openVoucherSP(spId){
 
   document.getElementById('voucher-detail-modal').classList.add('open');
 
-  // 관리자 의견 섹션 표시 (관리자에게만)
+  // 관리자 의견 섹션 표시 (관리자 탭에서 연 경우에만 — 내 전표 목록/결재함에선 본인이 관리자여도 숨김)
   const commentSection = document.getElementById('admin-comment-section');
   const userIsAdmin = ADMIN_EMAILS.map(e=>e.toLowerCase()).includes((user?.email||user?.username||'').toLowerCase());
-  if(commentSection && userIsAdmin) {
+  const showAdminSections = userIsAdmin && fromTab==='admin';
+  if(commentSection && showAdminSections) {
     commentSection.style.display = 'block';
     const isCompleted = v.Status === '승인완료' || v.Status === '철회';
     document.getElementById('admin-comment-input-wrap').style.display = isCompleted ? 'none' : 'flex';
     document.getElementById('admin-comment-closed').style.display = isCompleted ? 'block' : 'none';
     loadAdminComments(v._spId);
+  } else if(commentSection) {
+    commentSection.style.display = 'none';
   }
-  // B1 Doc No./Posting 입력 섹션 (관리자에게만)
+  // B1 Doc No./Posting 입력 섹션 (관리자 탭에서 연 경우에만)
   const b1Section = document.getElementById('b1-input-section');
-  if(b1Section && userIsAdmin) {
+  if(b1Section && showAdminSections) {
     b1Section.style.display = 'block';
     document.getElementById('modal-b1docno').value = v.B1DocNo||'';
     document.getElementById('modal-posting').value = v.PostingDone||'';
     renderB1ChangeLog(v.B1ChangeLog);
+  } else if(b1Section) {
+    b1Section.style.display = 'none';
   }
 
   // 결재 이력 비동기 로드
