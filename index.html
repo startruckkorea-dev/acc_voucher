@@ -1046,15 +1046,18 @@ function applyTodayExchangeRate() {
   }
 
   // 환율 자동 입력 (오늘 값이 0이면 입력하지 않음)
+  // 한번 적용된 환율은 window._cachedRates에 저장해두고 재활용
   if(hasTodayValidRate || (!hasToday && fallbackDate)) {
-    if(exEl && !exEl.value) {
-      const eur = displayRates.find(r=>r.currency==='EUR');
-      if(eur && eur.rate>0) { exEl.value=eur.rate; exEl.dispatchEvent(new Event('input')); }
-    }
+    if(!window._cachedRates) window._cachedRates = {};
+    ['EUR','USD','SGD','JPY','CNY'].forEach(cur=>{
+      const r = displayRates.find(x=>x.currency===cur);
+      if(r && r.rate>0) window._cachedRates[cur] = r.rate;
+    });
+    const elEur = document.getElementById('v-exrate');
+    if(elEur && !elEur.value && window._cachedRates['EUR']) { elEur.value=window._cachedRates['EUR']; elEur.dispatchEvent(new Event('input')); }
     ['USD','SGD','JPY','CNY'].forEach(cur=>{
       const el = document.getElementById('v-exrate-'+cur.toLowerCase());
-      const r = displayRates.find(x=>x.currency===cur);
-      if(el && r && r.rate>0 && !el.value) el.value = r.rate;
+      if(el && !el.value && window._cachedRates[cur]) el.value = window._cachedRates[cur];
     });
   }
 
@@ -1325,6 +1328,15 @@ function switchTab(tab) {
   if(tab==='list') loadMyList();
   if(tab==='appr') loadApprovalQueue();
   if(tab==='admin') loadAdminList();
+  // 바우처 작성 탭 복귀 시 캐시된 환율 복원 (탭 전환으로 빈칸이 됐을 경우)
+  if(tab==='new' && window._cachedRates) {
+    const elEur = document.getElementById('v-exrate');
+    if(elEur && !elEur.value && window._cachedRates['EUR']) { elEur.value=window._cachedRates['EUR']; }
+    ['USD','SGD','JPY','CNY'].forEach(cur=>{
+      const el = document.getElementById('v-exrate-'+cur.toLowerCase());
+      if(el && !el.value && window._cachedRates[cur]) el.value = window._cachedRates[cur];
+    });
+  }
 }
 
 // ── Form ──
@@ -1730,7 +1742,8 @@ function selectGL(code){
 }
 
 function showAccAlert(title, sub='', icon='✅') {
-  document.getElementById('acc-alert-icon').textContent = icon;
+  const iconEl = document.getElementById('acc-alert-icon');
+  if(iconEl){ iconEl.textContent = icon; iconEl.style.display = icon ? 'block' : 'none'; }
   document.getElementById('acc-alert-title').textContent = title;
   document.getElementById('acc-alert-sub').textContent = sub;
   document.getElementById('acc-alert-modal').style.display = 'flex';
@@ -2616,7 +2629,11 @@ async function openVoucherSP(spId){
 
   const row = (label, value) => `<div class="det-row"><div class="det-lbl">${label}</div><div class="det-val">${value||'-'}</div></div>`;
 
-  const submittedDate = v.SubmittedDate ? new Date(v.SubmittedDate).toLocaleString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}) : '-';
+  const submittedDate = v.SubmittedDate ? (() => {
+    const d = new Date(v.SubmittedDate);
+    const p = n => String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  })() : '-';
   const invoiceDate = v.InvoiceDate ? v.InvoiceDate.slice(0,10) : '-';
   const exchangeRateDisplay = v.ExchangeRate
     ? v.ExchangeRate.split(',').map(s=>s.replace(':',': ')).join(' &nbsp;|&nbsp; ')
@@ -2895,8 +2912,8 @@ window.addEventListener('load',async()=>{
 <!-- GW 스타일 알림 모달 -->
 <div id="acc-alert-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2000;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:12px;padding:28px 32px;max-width:380px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.18);text-align:center">
-    <div id="acc-alert-icon" style="display:none"></div>
-    <div id="acc-alert-title" style="font-size:1rem;font-weight:700;color:#1e293b;margin-bottom:8px;line-height:1.5"></div>
+    <div id="acc-alert-icon" style="font-size:2rem;margin-bottom:10px">✅</div>
+    <div id="acc-alert-title" style="font-size:1rem;font-weight:700;color:#1e293b;margin-bottom:6px;line-height:1.6"></div>
     <div id="acc-alert-sub" style="font-size:.8rem;color:#64748b;margin-bottom:20px;white-space:pre-line;line-height:1.7;text-align:left"></div>
     <button style="background:#0078d4;color:#fff;border:none;border-radius:8px;padding:9px 32px;font-size:.88rem;font-weight:600;cursor:pointer;font-family:inherit" onclick="closeAccAlert()">확인</button>
   </div>
