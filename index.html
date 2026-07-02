@@ -3135,10 +3135,11 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
   '<div style="width:760px;background:#fff;color:#000;font-family:\'Malgun Gothic\',sans-serif;padding:18px;box-sizing:border-box;font-size:11px;line-height:1.45">'+
     '<div style="text-align:center;font-weight:700;font-size:16px;border:2px solid #000;border-bottom:none;padding:8px">Star Truck Korea Co., Ltd.</div>'+
     '<div style="text-align:center;font-weight:600;font-size:12px;border:2px solid #000;border-top:none;padding:6px">Application for Payments/Invoicing/Internal Posting</div>'+
-    '<table style="width:100%;border-collapse:collapse;border:1px solid #000;border-top:none">'+
+    '<table style="width:100%;border-collapse:collapse;border:1px solid #000;border-top:none;table-layout:fixed">'+
+      '<colgroup><col style="width:15%"><col style="width:35%"><col style="width:15%"><col style="width:35%"></colgroup>'+
       '<tr>'+
-        '<td style="'+lblB+';width:15%">Submission Date</td><td style="'+cellB+';width:35%">'+submittedDate+'</td>'+
-        '<td style="'+lblB+';width:15%">BP Category</td><td style="'+cellB+';width:35%">'+bpCatSimple+'</td>'+
+        '<td style="'+lblB+'">Submission Date</td><td style="'+cellB+'">'+submittedDate+'</td>'+
+        '<td style="'+lblB+'">BP Category</td><td style="'+cellB+'">'+bpCatSimple+'</td>'+
       '</tr>'+
       '<tr>'+
         '<td style="'+lblB+'">Invoice Date(*)</td><td style="'+cellB+'">'+invoiceDate+'</td>'+
