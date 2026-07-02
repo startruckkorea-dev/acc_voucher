@@ -3113,13 +3113,14 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
         '<td style="'+lblB+'">Vendor Business No.</td><td style="'+cellB+'">'+(esc(v.BPBizNo)||'Master data 미기재')+'</td>'+
       '</tr>'+
     '</table>'+
-    '<table style="width:100%;border-collapse:collapse;border:1px solid #000;border-top:none">'+
+    '<table style="width:100%;border-collapse:collapse;border:1px solid #000;border-top:none;table-layout:fixed">'+
+      '<colgroup><col style="width:14%"><col style="width:44%"><col style="width:12%"><col style="width:30%"></colgroup>'+
       '<tr>'+
         '<td colspan="2" style="'+lblB+';text-align:left">Purpose</td>'+
-        '<td style="'+lblB+';width:20%">Currency</td><td style="'+lblB+';width:25%">Total Amount</td>'+
+        '<td style="'+lblB+'">Currency</td><td style="'+lblB+'">Total Amount</td>'+
       '</tr>'+
       '<tr>'+
-        '<td style="'+lblB+';width:15%;vertical-align:top">Requeset for</td><td style="'+cellB+';width:35%;white-space:pre-wrap;min-height:34px">'+(esc(v.Purpose)||'-')+'</td>'+
+        '<td style="'+lblB+';vertical-align:top">Requeset for</td><td style="'+cellB+';white-space:pre-wrap;min-height:34px">'+(esc(v.Purpose)||'-')+'</td>'+
         '<td style="'+cellB+'">'+hdrCurrency+'</td><td style="'+cellB+';text-align:right;font-weight:700">'+hdrTotalAmount+'</td>'+
       '</tr>'+
       '<tr>'+
