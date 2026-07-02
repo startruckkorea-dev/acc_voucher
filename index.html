@@ -2824,7 +2824,7 @@ async function openVoucherSP(spId){
         </div>
       </div>
       <div style="display:flex;align-items:center;justify-content:flex-end">
-        <button onclick="saveB1DocFromModal()" style="padding:6px 16px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:.78rem;cursor:pointer">저장</button>
+        <button id="b1-save-btn" onclick="saveB1DocFromModal()" style="padding:6px 16px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:.78rem;cursor:pointer">저장</button>
       </div>
       <div id="b1-change-log" style="margin-top:12px"></div>
     </div>
@@ -3278,6 +3278,10 @@ async function exportVoucherDetailPdf() {
   let tableHost = null;
   let accSection = null;
   let accSectionOrigDisplay = null;
+  let commentInputWrap = null;
+  let commentInputOrigDisplay = null;
+  let b1SaveBtn = null;
+  let b1SaveBtnOrigDisplay = null;
   try {
     const v = window._currentVoucherDetail;
     if(!v) throw new Error('전표 정보를 찾을 수 없습니다.');
@@ -3286,6 +3290,12 @@ async function exportVoucherDetailPdf() {
     const contentEl = document.getElementById('voucher-detail-content');
     btnWrap = document.getElementById('voucher-appr-action-btns');
     if(btnWrap) btnWrap.style.display='none';
+
+    // 결재/승인 관련 입력용 UI(의견 입력란·등록 버튼, B1 저장 버튼)는 PDF 출력물엔 불필요하므로 캡처 중 숨김
+    commentInputWrap = document.getElementById('admin-comment-input-wrap');
+    if(commentInputWrap){ commentInputOrigDisplay = commentInputWrap.style.display; commentInputWrap.style.display='none'; }
+    b1SaveBtn = document.getElementById('b1-save-btn');
+    if(b1SaveBtn){ b1SaveBtnOrigDisplay = b1SaveBtn.style.display; b1SaveBtn.style.display='none'; }
 
     // 회계 정보 표는 컬럼이 많아 세로 페이지 폭에 다 안 들어가므로, 본문 캡처에서는 잠시 숨기고 별도 가로 페이지로 캡처
     accSection = document.getElementById('acc-lines-section');
@@ -3307,6 +3317,8 @@ async function exportVoucherDetailPdf() {
 
     restoreFns.forEach(([el, style])=>{ if(style===null) el.removeAttribute('style'); else el.setAttribute('style', style); });
     if(accSection){ accSection.style.display = accSectionOrigDisplay||''; }
+    if(commentInputWrap){ commentInputWrap.style.display = commentInputOrigDisplay||''; }
+    if(b1SaveBtn){ b1SaveBtn.style.display = b1SaveBtnOrigDisplay||''; }
 
     // 회계 정보 표를 화면 밖에서 넓게(가로형) 별도 캡처
     tableHost = document.createElement('div');
@@ -3332,6 +3344,8 @@ async function exportVoucherDetailPdf() {
   finally{
     restoreFns.forEach(([el, style])=>{ if(style===null) el.removeAttribute('style'); else el.setAttribute('style', style); });
     if(accSection){ accSection.style.display = accSectionOrigDisplay||''; }
+    if(commentInputWrap){ commentInputWrap.style.display = commentInputOrigDisplay||''; }
+    if(b1SaveBtn){ b1SaveBtn.style.display = b1SaveBtnOrigDisplay||''; }
     if(tableHost && tableHost.parentNode) tableHost.parentNode.removeChild(tableHost);
     if(btnWrap) btnWrap.style.display='';
     btn.innerHTML=orig;btn.disabled=false;
