@@ -89,11 +89,12 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 .totals-bar .total-label { font-size: 11px; color: #605e5c; font-weight: 600; letter-spacing: .3px; margin-right: 2px; }
 .totals-bar .total-main { font-size: 16px; font-weight: 700; color: #0078d4; }
 .totals-bar .total-krw { font-size: 11px; color: #605e5c; }
-.totals-dr-cr { display: flex; gap: 6px; align-items: center; }
-.totals-dr-cr .dr-block { background: #dbeafe; color: #1d4ed8; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
-.totals-dr-cr .cr-block { background: #fde8e8; color: #c0392b; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
-.totals-dr-cr .eq-block { background: #dff6dd; color: #107c10; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
-.totals-dr-cr .neq-block { background: #fde7e9; color: #a4262c; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
+.totals-dr-cr { display: grid; grid-template-columns: repeat(4, max-content); column-gap: 8px; row-gap: 6px; align-items: center; justify-content: end; }
+.totals-dr-cr .cmp-sign { font-size: 13px; color: #a19f9d; text-align: center; }
+.totals-dr-cr .dr-block { background: #dbeafe; color: #1d4ed8; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.totals-dr-cr .cr-block { background: #fde8e8; color: #c0392b; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.totals-dr-cr .eq-block { background: #dff6dd; color: #107c10; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.totals-dr-cr .neq-block { background: #fde7e9; color: #a4262c; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .appr-block { background:#fff; border:1px solid #edebe9; border-radius:8px; padding:14px 16px; margin-bottom:10px; }
 .appr-block.appr-fixed { background:#f0f6ff; border-color:#c7e0f4; }
 .appr-block-title { font-size:12px; font-weight:700; color:#323130; margin-bottom:10px; }
@@ -214,6 +215,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
   .form-row { grid-template-columns: 1fr; }
   .form-row.three, .form-row.four { grid-template-columns: 1fr 1fr; }
   .appr-grid { grid-template-columns: repeat(2,1fr); }
+  .totals-dr-cr { grid-template-columns: repeat(2, max-content); justify-content: center; }
 }
 
 /* ── Tab btn (GW style) ── */
@@ -436,9 +438,11 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
         <span>4. 회계 정보 (Account Information)</span>
-        <button class="btn btn-add" onclick="addLine()">＋ 라인 추가</button>
-        <button class="btn btn-add" id="btn-add-bp" onclick="addBPLine()" style="display:none;margin-left:6px">＋ BP라인 추가</button>
-        <button class="btn btn-add" id="btn-add-vat" onclick="addVATLine()" style="display:none;margin-left:6px">＋ VAT라인 추가</button>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-add" onclick="addLine()">＋ 라인 추가</button>
+          <button class="btn btn-add" id="btn-add-bp" onclick="addBPLine()" style="display:none">＋ BP라인 추가</button>
+          <button class="btn btn-add" id="btn-add-vat" onclick="addVATLine()" style="display:none">＋ VAT라인 추가</button>
+        </div>
       </div>
       <div class="lines-scroll">
         <table class="lines">
@@ -1621,22 +1625,18 @@ function updateTotals() {
       const dr=drByCur[cur]||0, cr=crByCur[cur]||0;
       const fmt=n=>n.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
       const eq = Math.abs(dr-cr)<0.01;
-      html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-        <span class="dr-block">DR <span style="font-size:10px;opacity:.8">Total(${cur})</span> ${fmt(dr)}</span>
-        <span style="color:#a19f9d;font-size:13px">${eq?'=':'≠'}</span>
+      html += `<span class="dr-block">DR <span style="font-size:10px;opacity:.8">Total(${cur})</span> ${fmt(dr)}</span>
+        <span class="cmp-sign">${eq?'=':'≠'}</span>
         <span class="cr-block">CR <span style="font-size:10px;opacity:.8">Total(${cur})</span> ${fmt(cr)}</span>
-        <span class="${eq?'eq-block':'neq-block'}">${eq?'✔ 일치':'✕ 불일치'}</span>
-      </div>`;
+        <span class="${eq?'eq-block':'neq-block'}">${eq?'✔ 일치':'✕ 불일치'}</span>`;
     });
 
     // KRW 환산 비교 (항상 표시)
     const krwEq = Math.abs(drKrw-crKrw)<1;
-    html += `<div style="display:flex;align-items:center;gap:8px">
-      <span class="dr-block">DR <span style="font-size:10px;opacity:.8">Total(KRW)</span> ${fmtK(drKrw)}</span>
-      <span style="color:#a19f9d;font-size:13px">${krwEq?'=':'≠'}</span>
+    html += `<span class="dr-block">DR <span style="font-size:10px;opacity:.8">Total(KRW)</span> ${fmtK(drKrw)}</span>
+      <span class="cmp-sign">${krwEq?'=':'≠'}</span>
       <span class="cr-block">CR <span style="font-size:10px;opacity:.8">Total(KRW)</span> ${fmtK(crKrw)}</span>
-      <span class="${krwEq?'eq-block':'neq-block'}">${krwEq?'✔ 일치':'✕ 불일치'}</span>
-    </div>`;
+      <span class="${krwEq?'eq-block':'neq-block'}">${krwEq?'✔ 일치':'✕ 불일치'}</span>`;
 
     blocks.innerHTML = html;
   }
