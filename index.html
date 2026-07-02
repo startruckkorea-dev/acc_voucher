@@ -2112,7 +2112,7 @@ async function loadExistingVoucher() {
     updateTotals();
     document.getElementById('voucher-id-badge').textContent = `(${titleVal} 기반 불러옴)`;
     titleInput.value = '';
-    showAccAlert('전표를 불러왔습니다.', '📌 Invoice Date는 기존 날짜로 복원됐습니다.\n💱 Exchange Rate는 오늘 기준 환율을 그대로 사용합니다.\n📎 첨부파일은 새로 첨부해주세요.', '📋');
+    showAccAlert('전표를 불러왔습니다.', 'Invoice Date는 기존 전표 날짜로 복원됩니다.\nExchange Rate는 오늘 기준 환율을 그대로 사용합니다.\n첨부파일은 새로 첨부해주세요.', '완료');
   } catch(e) {
     console.error('loadExistingVoucher error:', e);
     showAccAlert('전표 불러오기 실패', e.message, '⚠️');
@@ -2883,9 +2883,9 @@ window.addEventListener('load',async()=>{
 <!-- GW 스타일 알림 모달 -->
 <div id="acc-alert-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2000;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:12px;padding:28px 32px;max-width:380px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.18);text-align:center">
-    <div id="acc-alert-icon" style="font-size:2rem;margin-bottom:10px">✅</div>
-    <div id="acc-alert-title" style="font-size:1rem;font-weight:700;color:#1e293b;margin-bottom:6px;line-height:1.6"></div>
-    <div id="acc-alert-sub" style="font-size:.8rem;color:#64748b;margin-bottom:20px;word-break:break-all"></div>
+    <div id="acc-alert-icon" style="display:none"></div>
+    <div id="acc-alert-title" style="font-size:1rem;font-weight:700;color:#1e293b;margin-bottom:8px;line-height:1.5"></div>
+    <div id="acc-alert-sub" style="font-size:.8rem;color:#64748b;margin-bottom:20px;white-space:pre-line;line-height:1.7;text-align:left"></div>
     <button style="background:#0078d4;color:#fff;border:none;border-radius:8px;padding:9px 32px;font-size:.88rem;font-weight:600;cursor:pointer;font-family:inherit" onclick="closeAccAlert()">확인</button>
   </div>
 </div>
