@@ -3199,19 +3199,41 @@ async function exportVoucherPdf() {
 async function exportVoucherDetailPdf() {
   const btn = document.getElementById('btn-export-detail-pdf');
   const orig = btn.innerHTML; btn.innerHTML = '⏳ 생성 중...'; btn.disabled = true;
+  const restoreFns = [];
+  let btnWrap = null;
   try {
     const v = window._currentVoucherDetail;
     if(!v) throw new Error('전표 정보를 찾을 수 없습니다.');
     const contentEl = document.getElementById('voucher-detail-content');
-    const btnWrap = document.getElementById('voucher-appr-action-btns');
+    btnWrap = document.getElementById('voucher-appr-action-btns');
     if(btnWrap) btnWrap.style.display='none';
-    const cvs = await html2canvas(contentEl, {scale:2,useCORS:true,allowTaint:true,backgroundColor:'#fff',scrollY:0,windowWidth:780});
+
+    // 캡처 전: 결재 의견 목록·B1 변경 이력·회계 정보 표처럼 내부 스크롤(max-height/overflow)로 잘리는 영역을
+    // 모두 펼쳐서 PDF에 전체 내용이 나오도록 함 (캡처 직후 원래 스타일로 복원)
+    const clippedEls = contentEl.querySelectorAll('[style*="overflow-y"], [style*="overflow-x"], [style*="max-height"]');
+    clippedEls.forEach(el=>{
+      restoreFns.push([el, el.getAttribute('style')]);
+      if (el.scrollWidth > el.clientWidth) { el.style.width = el.scrollWidth + 'px'; }
+      el.style.maxHeight = 'none';
+      el.style.overflow = 'visible';
+      el.style.overflowY = 'visible';
+      el.style.overflowX = 'visible';
+    });
+
+    const cvs = await html2canvas(contentEl, {scale:2,useCORS:true,allowTaint:true,backgroundColor:'#fff',scrollY:0,windowWidth:900});
+
+    restoreFns.forEach(([el, style])=>{ if(style===null) el.removeAttribute('style'); else el.setAttribute('style', style); });
     if(btnWrap) btnWrap.style.display='';
+
     const now=new Date(new Date().getTime()+9*3600*1000);
     const ds=now.getUTCFullYear()+'-'+String(now.getUTCMonth()+1).padStart(2,'0')+'-'+String(now.getUTCDate()).padStart(2,'0');
     await canvasToPdfAndDownload(cvs, 'STK Accounting Voucher · 전표 상세 화면', 'ACC-Voucher_'+(v.Title||'detail')+'_상세화면_'+ds+'.pdf');
   } catch(e){alert('PDF 생성 오류: '+e.message);console.error(e);}
-  finally{btn.innerHTML=orig;btn.disabled=false;}
+  finally{
+    restoreFns.forEach(([el, style])=>{ if(style===null) el.removeAttribute('style'); else el.setAttribute('style', style); });
+    if(btnWrap) btnWrap.style.display='';
+    btn.innerHTML=orig;btn.disabled=false;
+  }
 }
 
 // ── Init ──
@@ -3253,7 +3275,7 @@ window.addEventListener('load',async()=>{
       <span>전표 상세 내용</span>
       <div style="display:flex;gap:6px">
         <button id="btn-export-detail-pdf" onclick="exportVoucherDetailPdf()" title="화면에 보이는 상세 내용 그대로 PDF 출력" style="display:none;background:#fff;color:#0078d4;border:1px solid #0078d4;border-radius:8px;padding:6px 14px;font-size:.75rem;font-weight:600;cursor:pointer;font-family:inherit;align-items:center;gap:5px;transition:all .15s" onmouseover="this.style.background='#f0f6ff'" onmouseout="this.style.background='#fff'">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:middle;margin-right:4px"><rect x="3" y="4" width="18" height="13" rx="1.5"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:middle;margin-right:4px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
           상세화면 PDF
         </button>
         <button id="btn-export-pdf" onclick="exportVoucherPdf()" title="공식 전표 양식(F&amp;C_Accounting_Template)으로 PDF 출력" style="display:none;background:#0078d4;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:.75rem;font-weight:600;cursor:pointer;font-family:inherit;align-items:center;gap:5px;transition:all .15s" onmouseover="this.style.background='#005a9e'" onmouseout="this.style.background='#0078d4'">
