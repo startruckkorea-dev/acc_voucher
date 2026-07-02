@@ -2873,24 +2873,21 @@ async function loadApprovalHistory(spId){
     document.getElementById('voucher-appr-history').innerHTML = '<div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력을 불러올 수 없습니다.</div>';
   }
 }
-// ── No.10: 관리자 의견 기능 (ACC-Voucher_Comments SP 목록) ──
-const LIST_COMMENTS = 'ACC-Voucher_Comments';
-
+// ── No.10: 관리자 의견 기능 (ACC-Voucher_Requests의 AdminComments 필드 사용) ──
 async function loadAdminComments(reqSpId) {
   const listEl = document.getElementById('admin-comments-list');
   if(!listEl) return;
   if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
   try {
-    const data = await apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_COMMENTS}/items?$expand=fields&$filter=fields/RequestSPId eq '${reqSpId}'&$orderby=fields/Created asc`);
-    if(!data.value.length){ listEl.innerHTML='<div style="font-size:.75rem;color:#a19f9d;padding:6px 0">등록된 의견이 없습니다.</div>'; return; }
-    const fmtT = s=>{ if(!s) return ''; const d=new Date(s); const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
-    listEl.innerHTML = data.value.map(item=>{
-      const f=item.fields;
-      return `<div style="background:#f0f6ff;border:1px solid #c7e0f4;border-radius:6px;padding:8px 12px;margin-bottom:8px">
-        <div style="font-size:.75rem;font-weight:600;color:#0078d4;margin-bottom:4px">${f.AuthorEmail||''} <span style="font-weight:400;color:#a19f9d">${fmtT(f.Created)}</span></div>
-        <div style="font-size:.78rem;color:#323130;white-space:pre-wrap">${f.Comment||''}</div>
-      </div>`;
-    }).join('');
+    const f = await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${reqSpId}/fields`);
+    let comments = [];
+    try { comments = JSON.parse(f.AdminComments||'[]'); } catch(e){ comments=[]; }
+    if(!comments.length){ listEl.innerHTML='<div style="font-size:.75rem;color:#a19f9d;padding:6px 0">등록된 의견이 없습니다.</div>'; return; }
+    listEl.innerHTML = comments.map(c=>`
+      <div style="background:#f0f6ff;border:1px solid #c7e0f4;border-radius:6px;padding:8px 12px;margin-bottom:8px">
+        <div style="font-size:.75rem;font-weight:600;color:#0078d4;margin-bottom:4px">${c.email||''} <span style="font-weight:400;color:#a19f9d">${c.date||''}</span></div>
+        <div style="font-size:.78rem;color:#323130;white-space:pre-wrap">${c.text||''}</div>
+      </div>`).join('');
   } catch(e) { listEl.innerHTML='<div style="font-size:.75rem;color:#a19f9d">의견을 불러올 수 없습니다.</div>'; }
 }
 
@@ -2899,7 +2896,6 @@ async function submitAdminComment(reqSpId) {
   const comment = (textEl?.value||'').trim();
   if(!comment) { alert('의견을 입력해주세요.'); return; }
   if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
-  // 방어 로직: 제출 직전 최신 상태 확인
   try {
     const check = await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${reqSpId}/fields`);
     if(check.Status==='승인완료'||check.Status==='철회') {
@@ -2908,12 +2904,16 @@ async function submitAdminComment(reqSpId) {
       document.getElementById('admin-comment-closed').style.display='block';
       return;
     }
-  } catch(e){ console.warn('상태 확인 실패', e); }
-  try {
+    let existing = [];
+    try { existing = JSON.parse(check.AdminComments||'[]'); } catch(e){ existing=[]; }
+    const now = new Date(new Date().getTime()+9*3600*1000);
+    const p = n=>String(n).padStart(2,'0');
+    const dateStr = `${now.getUTCFullYear()}-${p(now.getUTCMonth()+1)}-${p(now.getUTCDate())} ${p(now.getUTCHours())}:${p(now.getUTCMinutes())}`;
+    existing.push({ email: user?.email||user?.username||'', date: dateStr, text: comment });
     const btn = document.querySelector('#admin-comment-input-wrap button');
     if(btn){btn.disabled=true;btn.textContent='저장 중...';}
-    await api(`/sites/${siteId}/lists/${LIST_COMMENTS}/items`, 'POST', {
-      fields: { RequestSPId: String(reqSpId), Comment: comment, AuthorEmail: user?.email||user?.username||'' }
+    await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${reqSpId}/fields`, 'PATCH', {
+      AdminComments: JSON.stringify(existing)
     });
     textEl.value='';
     await loadAdminComments(reqSpId);
