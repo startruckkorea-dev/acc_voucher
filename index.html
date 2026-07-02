@@ -3149,12 +3149,16 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
         '<td style="'+lblB+';vertical-align:top">Requeset for</td><td style="'+cellB+';white-space:pre-wrap;min-height:34px">'+(esc(v.Purpose)||'-')+'</td>'+
         '<td style="'+cellB+'">'+hdrCurrency+'</td><td style="'+cellB+';text-align:right;font-weight:700">'+hdrTotalAmount+'</td>'+
       '</tr>'+
+    '</table>'+
+    '<table style="width:100%;border-collapse:collapse;border:1px solid #000;margin-top:8px;table-layout:fixed">'+
+      '<colgroup><col style="width:12%"><col style="width:48%"><col style="width:17%"><col style="width:23%"></colgroup>'+
       '<tr>'+
         '<td style="'+lblB+'">Exchange rate</td><td style="'+cellB+';font-size:10px">'+exRateDisplay+'</td>'+
         '<td style="'+lblB+'">KRW TOTAL</td><td style="'+cellB+';text-align:right;font-weight:700">'+fmtK(v.TotalDR_KRW)+'</td>'+
       '</tr>'+
     '</table>'+
-    '<table style="width:100%;border-collapse:collapse;border:1px solid #000;margin-top:8px;table-layout:fixed">'+
+    '<div style="font-weight:700;margin-top:8px;padding:4px 2px;border-bottom:2px solid #000">Requester Info.</div>'+
+    '<table style="width:100%;border-collapse:collapse;border:1px solid #000;table-layout:fixed">'+
       '<colgroup><col style="width:12%"><col style="width:48%"><col style="width:17%"><col style="width:23%"></colgroup>'+
       '<tr>'+
         '<td style="'+lblB+'">Requester</td><td style="'+cellB+'">'+esc(v.RequesterName)+' ('+esc(v.RequesterEmail)+')</td>'+
