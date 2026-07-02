@@ -2589,7 +2589,6 @@ function renderAdminList(){
     <td style="font-size:.78rem;color:#605e5c">${fmtDate(v.SubmittedDate)}</td>
     <td style="font-size:.75rem;color:#323130">
       ${b1DocNo || '<span style="color:#a19f9d">-</span>'}
-      ${v.B1UpdatedBy ? `<div style="font-size:.65rem;color:#a19f9d;margin-top:2px">${v.B1UpdatedBy}<br>${v.B1UpdatedAt||''}</div>` : ''}
     </td>
     <td style="text-align:center;font-size:.75rem">
       ${postingDone==='완료' ? '<span style="color:#107c10;font-weight:600">✅ 완료</span>' : '<span style="color:#a19f9d">미완료</span>'}
