@@ -3150,9 +3150,10 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
     '<div style="font-size:8.5px;color:#666;margin-top:2px">* DEBIT/CREDIT 합계는 각 라인 원 통화 기준 단순 합산입니다. KRW 환산 합계는 상단 KRW TOTAL을 참고하세요.</div>'+
 
     '<div style="font-weight:700;margin-top:12px;padding:4px 2px;border-bottom:2px solid #000">Authorization</div>'+
-    '<table style="width:100%;border-collapse:collapse;border:1px solid #000;font-size:10px;text-align:center">'+
+    '<table style="width:100%;border-collapse:collapse;border:1px solid #000;font-size:10px;text-align:center;table-layout:fixed">'+
+      '<colgroup><col style="width:13%">'+roleCols.map(()=>'<col style="width:'+(87/roleCols.length).toFixed(2)+'%">').join('')+'</colgroup>'+
       '<tr style="background:#f0f0f0">'+
-        '<td style="'+lblB+';width:12%">Title</td>'+roleCols.map(rc=>'<td style="'+cellB+';font-weight:600">'+rc[1]+'</td>').join('')+
+        '<td style="'+lblB+'">Title</td>'+roleCols.map(rc=>'<td style="'+cellB+';font-weight:600">'+rc[1]+'</td>').join('')+
       '</tr>'+
       '<tr><td style="'+lblB+'">(E) Signature<br>&amp; Date</td>'+apprRow('sig')+'</tr>'+
       '<tr><td style="'+lblB+'">Name</td>'+apprRow('name')+'</tr>'+
