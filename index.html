@@ -3108,8 +3108,11 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
     let val='';
     if(type==='sig'){
       if(a && a.ApprovalDate){
-        val='<div style="display:inline-block;border:1.1px solid #0078d4;border-radius:4px;padding:2px 5px;line-height:1.35">'+
-              '<div style="font-size:8px;font-weight:700;color:#0078d4;white-space:nowrap">✅ 전자결재</div>'+
+        const isRejected = a.Status==='반려';
+        const stampColor = isRejected ? '#a4262c' : '#0078d4';
+        const stampLabel = isRejected ? '❌ 반려' : '✅ 전자결재';
+        val='<div style="display:inline-block;border:1.1px solid '+stampColor+';border-radius:4px;padding:2px 5px;line-height:1.35">'+
+              '<div style="font-size:8px;font-weight:700;color:'+stampColor+';white-space:nowrap">'+stampLabel+'</div>'+
               '<div style="font-size:7.5px;color:#333;white-space:nowrap">'+esc(a.ApproverName||'')+'</div>'+
               '<div style="font-size:7px;color:#666;white-space:nowrap">'+fmtApprDateTime(a.ApprovalDate)+'</div>'+
             '</div>';
@@ -3152,9 +3155,6 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
         '<td style="'+lblB+';vertical-align:top">Requeset for</td><td style="'+cellB+';white-space:pre-wrap;min-height:34px">'+(esc(v.Purpose)||'-')+'</td>'+
         '<td style="'+cellB+'">'+hdrCurrency+'</td><td style="'+cellB+';text-align:right;font-weight:700">'+hdrTotalAmount+'</td>'+
       '</tr>'+
-    '</table>'+
-    '<table style="width:100%;border-collapse:collapse;border:1px solid #000;margin-top:8px;table-layout:fixed">'+
-      '<colgroup><col style="width:12%"><col style="width:48%"><col style="width:17%"><col style="width:23%"></colgroup>'+
       '<tr>'+
         '<td style="'+lblB+'">Exchange rate</td><td style="'+cellB+';font-size:10px">'+exRateDisplay+'</td>'+
         '<td style="'+lblB+'">KRW TOTAL</td><td style="'+cellB+';text-align:right;font-weight:700">'+fmtK(v.TotalDR_KRW)+'</td>'+
