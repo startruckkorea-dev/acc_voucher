@@ -2828,12 +2828,6 @@ async function openVoucherSP(spId, fromTab){
     </div>
     </div>
 
-    <div class="det-sec">결재 이력</div>
-    <div id="voucher-appr-history" style="background:#f9f9f9;border-radius:4px;border:1px solid #edebe9">
-      <div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력을 불러오는 중...</div>
-    </div>
-    <div id="voucher-appr-action-btns" style="margin-top:14px;text-align:right"></div>
-
     <!-- No.11: B1 Doc No. / Posting 입력 (관리자, 언제든 가능) -->
     <div id="b1-input-section" style="display:none;margin-top:16px;border-top:1px solid #edebe9;padding-top:14px">
       <div class="det-sec">B1 Doc No. / Posting</div>
@@ -2868,6 +2862,12 @@ async function openVoucherSP(spId, fromTab){
       </div>
       <div id="admin-comment-closed" style="display:none;font-size:.78rem;color:#a19f9d;padding:8px 0">승인완료된 전표는 의견을 입력할 수 없습니다.</div>
     </div>
+
+    <div class="det-sec" style="margin-top:16px">결재 이력</div>
+    <div id="voucher-appr-history" style="background:#f9f9f9;border-radius:4px;border:1px solid #edebe9">
+      <div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력을 불러오는 중...</div>
+    </div>
+    <div id="voucher-appr-action-btns" style="margin-top:14px;text-align:right"></div>
   `;
 
   document.getElementById('voucher-detail-modal').classList.add('open');
