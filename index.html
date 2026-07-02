@@ -2770,6 +2770,7 @@ async function openVoucherSP(spId){
     <div class="det-sec">첨부파일</div>
     <div style="padding:4px 0;font-size:.78rem">${attHtml}</div>
 
+    <div id="acc-lines-section">
     <div class="det-sec">회계 정보 (Account Information)</div>
     <div style="overflow-x:auto;margin-top:4px">
       <table style="width:100%;border-collapse:collapse;font-size:.74rem;min-width:760px">
@@ -2796,6 +2797,7 @@ async function openVoucherSP(spId){
       <span style="font-size:.75rem;color:#a19f9d">|</span>
       <span style="font-size:.75rem;color:#605e5c">CR Total(KRW)</span>
       <span style="font-weight:700;font-size:.85rem;color:#c0392b">${fmtK(v.TotalCR_KRW)}</span>
+    </div>
     </div>
 
     <div class="det-sec">결재 이력</div>
@@ -3141,44 +3143,99 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
 }
 
 // ── 공통: 캔버스를 여러 페이지 PDF로 변환 후 다운로드 (GW exportModalPdf 동일 패턴) ──
-async function canvasToPdfAndDownload(cvs, headerText, fname) {
+// ── 공통: 캔버스 세그먼트들을 PDF로 변환 후 다운로드 (세그먼트별 portrait/landscape 지정 가능) ──
+// segments: [{cvs, headerText, orientation:'portrait'|'landscape'}]
+async function canvasToPdfAndDownload(segments, fname) {
   const { PDFDocument } = PDFLib;
   const mainDoc = await PDFDocument.create();
-  const A4W=595,A4H=842,marginPt=34,hdrH=22;
-  const printW_pt=A4W-marginPt*2;
-  const printableH_pt=A4H-marginPt*2-hdrH;
-  const pxPerPt=cvs.width/A4W;
-  const sliceH_px=Math.round(printableH_pt*pxPerPt);
-  const numPages=Math.ceil(cvs.height/sliceH_px);
   const now=new Date(new Date().getTime()+9*3600*1000);
   const ds=now.getUTCFullYear()+'-'+String(now.getUTCMonth()+1).padStart(2,'0')+'-'+String(now.getUTCDate()).padStart(2,'0');
   async function dataUrlToUint8(u){const r=await fetch(u);const ab=await r.arrayBuffer();return new Uint8Array(ab);}
-  const hc=document.createElement('canvas');hc.width=1190;hc.height=28;
-  const hx=hc.getContext('2d');const g=hx.createLinearGradient(0,0,hc.width,0);
-  g.addColorStop(0,'#0f2744');g.addColorStop(1,'#0a4a8a');hx.fillStyle=g;hx.fillRect(0,0,hc.width,hc.height);
-  hx.fillStyle='#fff';hx.font='500 13px "Malgun Gothic",sans-serif';hx.textBaseline='middle';
-  hx.fillText(headerText,14,13);
-  hx.textAlign='right';hx.font='400 12px "Malgun Gothic",sans-serif';hx.fillStyle='rgba(255,255,255,.6)';
-  hx.fillText('출력일: '+ds,hc.width-14,13);
-  const hdrBytes=await dataUrlToUint8(hc.toDataURL('image/png'));
-  for(let i=0;i<numPages;i++){
-    const page=mainDoc.addPage([A4W,A4H]);
-    const hdrImg=await mainDoc.embedPng(hdrBytes);
-    page.drawImage(hdrImg,{x:0,y:A4H-hdrH,width:A4W,height:hdrH});
-    const srcY=i*sliceH_px;
-    const sliceActual_px=Math.min(sliceH_px,cvs.height-srcY);
-    const sliceActual_pt=sliceActual_px/pxPerPt;
-    const sc=document.createElement('canvas');sc.width=cvs.width;sc.height=sliceActual_px;
-    sc.getContext('2d').drawImage(cvs,0,srcY,cvs.width,sliceActual_px,0,0,cvs.width,sliceActual_px);
-    const sd=sc.toDataURL('image/jpeg',0.92);
-    const sb=await dataUrlToUint8(sd);
-    const si=await mainDoc.embedJpg(sb);
-    page.drawImage(si,{x:marginPt,y:A4H-hdrH-marginPt-sliceActual_pt,width:printW_pt,height:sliceActual_pt});
+  async function makeHeaderBytes(text){
+    const hc=document.createElement('canvas');hc.width=1190;hc.height=28;
+    const hx=hc.getContext('2d');const g=hx.createLinearGradient(0,0,hc.width,0);
+    g.addColorStop(0,'#0f2744');g.addColorStop(1,'#0a4a8a');hx.fillStyle=g;hx.fillRect(0,0,hc.width,hc.height);
+    hx.fillStyle='#fff';hx.font='500 13px "Malgun Gothic",sans-serif';hx.textBaseline='middle';
+    hx.fillText(text,14,13);
+    hx.textAlign='right';hx.font='400 12px "Malgun Gothic",sans-serif';hx.fillStyle='rgba(255,255,255,.6)';
+    hx.fillText('출력일: '+ds,hc.width-14,13);
+    return dataUrlToUint8(hc.toDataURL('image/png'));
+  }
+  for(const seg of segments){
+    const {cvs, headerText, orientation} = seg;
+    const isLandscape = orientation==='landscape';
+    const A4W = isLandscape?842:595, A4H = isLandscape?595:842;
+    const marginPt=34, hdrH=22;
+    const printW_pt=A4W-marginPt*2;
+    const printableH_pt=A4H-marginPt*2-hdrH;
+    const pxPerPt=cvs.width/A4W;
+    const sliceH_px=Math.round(printableH_pt*pxPerPt);
+    const numPages=Math.ceil(cvs.height/sliceH_px);
+    const hdrBytes = await makeHeaderBytes(headerText);
+    for(let i=0;i<numPages;i++){
+      const page=mainDoc.addPage([A4W,A4H]);
+      const hdrImg=await mainDoc.embedPng(hdrBytes);
+      page.drawImage(hdrImg,{x:0,y:A4H-hdrH,width:A4W,height:hdrH});
+      const srcY=i*sliceH_px;
+      const sliceActual_px=Math.min(sliceH_px,cvs.height-srcY);
+      const sliceActual_pt=sliceActual_px/pxPerPt;
+      const sc=document.createElement('canvas');sc.width=cvs.width;sc.height=sliceActual_px;
+      sc.getContext('2d').drawImage(cvs,0,srcY,cvs.width,sliceActual_px,0,0,cvs.width,sliceActual_px);
+      const sd=sc.toDataURL('image/jpeg',0.92);
+      const sb=await dataUrlToUint8(sd);
+      const si=await mainDoc.embedJpg(sb);
+      page.drawImage(si,{x:marginPt,y:A4H-hdrH-marginPt-sliceActual_pt,width:printW_pt,height:sliceActual_pt});
+    }
   }
   const finalBytes=await mainDoc.save();
   const finalBlob=new Blob([finalBytes],{type:'application/pdf'});
   const a=document.createElement('a');a.href=URL.createObjectURL(finalBlob);a.download=fname;
   document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);
+}
+
+// ── 회계 정보(Account Information) 표를 별도의 깔끔한 가로형(landscape) 레이아웃으로 재구성 ──
+// (컬럼이 많아 세로 페이지 폭에 다 안 들어가므로, 상세화면 PDF에서는 이 표만 별도 가로 페이지로 출력)
+function buildAccountLinesTableHTML(v, lines_data) {
+  const fmtK = n => Math.round(n||0).toLocaleString('ko-KR');
+  const fmt2 = n => (parseFloat(n)||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const stripHtml = s => String(s==null?'':s).replace(/<[^>]*>/g,'').replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>').trim();
+  const esc = s => stripHtml(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const cellB='border:1px solid #d8d6d4;padding:6px 9px';
+  const hdrB=cellB+';background:#f3f2f1;font-weight:700;color:#605e5c;font-size:11px;white-space:nowrap';
+
+  const rows=(lines_data||[]).map((l,i)=>(
+    '<tr style="background:'+(i%2?'#fafafa':'#fff')+'">'+
+      '<td style="'+cellB+';text-align:center;color:#a19f9d">'+(i+1)+'</td>'+
+      '<td style="'+cellB+';text-align:center;font-weight:700;color:'+(l.drcr==='DR'?'#0078d4':'#c0392b')+'">'+(esc(l.drcr)||'-')+'</td>'+
+      '<td style="'+cellB+'">'+esc(l.gl)+'</td>'+
+      '<td style="'+cellB+'">'+esc(l.glName)+'</td>'+
+      '<td style="'+cellB+'">'+esc(l.cctrName||l.cctr)+'</td>'+
+      '<td style="'+cellB+'">'+esc(l.pcName||l.pc)+'</td>'+
+      '<td style="'+cellB+'">'+esc(l.subpcName||l.subpc)+'</td>'+
+      '<td style="'+cellB+'">'+esc(l.lineDesc)+'</td>'+
+      '<td style="'+cellB+';text-align:center">'+esc(l.currency)+'</td>'+
+      '<td style="'+cellB+';text-align:right;font-weight:600">'+(l.drcr==='DR'?fmt2(l.amount):'')+'</td>'+
+      '<td style="'+cellB+';text-align:right;font-weight:600">'+(l.drcr==='CR'?fmt2(l.amount):'')+'</td>'+
+    '</tr>')).join('');
+
+  return ''+
+  '<div style="width:1080px;background:#fff;color:#000;font-family:\'Malgun Gothic\',sans-serif;padding:22px;box-sizing:border-box">'+
+    '<div style="font-size:15px;font-weight:700;color:#0078d4;margin-bottom:3px">회계 정보 (Account Information)</div>'+
+    '<div style="font-size:11px;color:#605e5c;margin-bottom:12px">'+esc(v.Title)+'</div>'+
+    '<table style="width:100%;border-collapse:collapse;font-size:11.5px">'+
+      '<thead><tr>'+
+        '<th style="'+hdrB+'">No</th><th style="'+hdrB+'">DR/CR</th><th style="'+hdrB+'">GL</th><th style="'+hdrB+'">계정명</th>'+
+        '<th style="'+hdrB+'">Cost Center</th><th style="'+hdrB+'">Profit Center</th><th style="'+hdrB+'">Sub_PC</th>'+
+        '<th style="'+hdrB+'">Line Desc</th><th style="'+hdrB+'">CCY</th><th style="'+hdrB+'text-align:right">DEBIT</th><th style="'+hdrB+'text-align:right">CREDIT</th>'+
+      '</tr></thead>'+
+      '<tbody>'+(rows||('<tr><td colspan="11" style="'+cellB+';text-align:center;color:#888">라인 없음</td></tr>'))+'</tbody>'+
+    '</table>'+
+    '<div style="display:flex;justify-content:flex-end;gap:16px;padding:10px 12px;background:#f3f2f1;border-radius:4px;margin-top:8px;font-size:13px">'+
+      '<span style="color:#605e5c">DR Total(KRW)</span> <b style="color:#0078d4">'+fmtK(v.TotalDR_KRW)+'</b>'+
+      '<span style="color:#a19f9d">|</span>'+
+      '<span style="color:#605e5c">CR Total(KRW)</span> <b style="color:#c0392b">'+fmtK(v.TotalCR_KRW)+'</b>'+
+    '</div>'+
+  '</div>';
 }
 
 // ── No.13/No.14: 공식 전표 양식 PDF 출력 (양식 레이아웃 재현) ──
@@ -3204,25 +3261,37 @@ async function exportVoucherPdf() {
 
     const now=new Date(new Date().getTime()+9*3600*1000);
     const ds=now.getUTCFullYear()+'-'+String(now.getUTCMonth()+1).padStart(2,'0')+'-'+String(now.getUTCDate()).padStart(2,'0');
-    await canvasToPdfAndDownload(cvs, 'STK Accounting Voucher · 공식 전표 양식', 'ACC-Voucher_'+(v.Title||'detail')+'_공식양식_'+ds+'.pdf');
+    await canvasToPdfAndDownload(
+      [{cvs, headerText:'STK Accounting Voucher · 공식 전표 양식', orientation:'portrait'}],
+      'ACC-Voucher_'+(v.Title||'detail')+'_공식양식_'+ds+'.pdf'
+    );
   } catch(e){alert('PDF 생성 오류: '+e.message);console.error(e);}
   finally{if(printHost&&printHost.parentNode)printHost.parentNode.removeChild(printHost);btn.innerHTML=orig;btn.disabled=false;}
 }
 
-// ── 전표 상세 내용(화면 그대로) PDF 출력 ──
+// ── 전표 상세 내용(화면 그대로) PDF 출력 — 회계 정보 표는 컬럼이 많아 별도 가로(landscape) 페이지로 분리 ──
 async function exportVoucherDetailPdf() {
   const btn = document.getElementById('btn-export-detail-pdf');
   const orig = btn.innerHTML; btn.innerHTML = '⏳ 생성 중...'; btn.disabled = true;
   const restoreFns = [];
   let btnWrap = null;
+  let tableHost = null;
+  let accSection = null;
+  let accSectionOrigDisplay = null;
   try {
     const v = window._currentVoucherDetail;
     if(!v) throw new Error('전표 정보를 찾을 수 없습니다.');
+    let lines_data = [];
+    try { lines_data = JSON.parse(v.LinesJSON||'[]'); } catch(e) { lines_data = []; }
     const contentEl = document.getElementById('voucher-detail-content');
     btnWrap = document.getElementById('voucher-appr-action-btns');
     if(btnWrap) btnWrap.style.display='none';
 
-    // 캡처 전: 결재 의견 목록·B1 변경 이력·회계 정보 표처럼 내부 스크롤(max-height/overflow)로 잘리는 영역을
+    // 회계 정보 표는 컬럼이 많아 세로 페이지 폭에 다 안 들어가므로, 본문 캡처에서는 잠시 숨기고 별도 가로 페이지로 캡처
+    accSection = document.getElementById('acc-lines-section');
+    if(accSection){ accSectionOrigDisplay = accSection.style.display; accSection.style.display='none'; }
+
+    // 캡처 전: 결재 의견 목록·B1 변경 이력처럼 내부 스크롤(max-height/overflow)로 잘리는 영역을
     // 모두 펼쳐서 PDF에 전체 내용이 나오도록 함 (캡처 직후 원래 스타일로 복원)
     const clippedEls = contentEl.querySelectorAll('[style*="overflow-y"], [style*="overflow-x"], [style*="max-height"]');
     clippedEls.forEach(el=>{
@@ -3234,21 +3303,41 @@ async function exportVoucherDetailPdf() {
       el.style.overflowX = 'visible';
     });
 
-    const cvs = await html2canvas(contentEl, {scale:2,useCORS:true,allowTaint:true,backgroundColor:'#fff',scrollY:0,windowWidth:900});
+    const mainCvs = await html2canvas(contentEl, {scale:2,useCORS:true,allowTaint:true,backgroundColor:'#fff',scrollY:0,windowWidth:900});
 
     restoreFns.forEach(([el, style])=>{ if(style===null) el.removeAttribute('style'); else el.setAttribute('style', style); });
+    if(accSection){ accSection.style.display = accSectionOrigDisplay||''; }
+
+    // 회계 정보 표를 화면 밖에서 넓게(가로형) 별도 캡처
+    tableHost = document.createElement('div');
+    tableHost.style.cssText = 'position:fixed;left:-9999px;top:0;z-index:-1;';
+    tableHost.innerHTML = buildAccountLinesTableHTML(v, lines_data);
+    document.body.appendChild(tableHost);
+    const tableEl = tableHost.firstElementChild;
+    const tableCvs = await html2canvas(tableEl, {scale:2,useCORS:true,allowTaint:true,backgroundColor:'#fff',scrollY:0,windowWidth:1120});
+    document.body.removeChild(tableHost); tableHost = null;
+
     if(btnWrap) btnWrap.style.display='';
 
     const now=new Date(new Date().getTime()+9*3600*1000);
     const ds=now.getUTCFullYear()+'-'+String(now.getUTCMonth()+1).padStart(2,'0')+'-'+String(now.getUTCDate()).padStart(2,'0');
-    await canvasToPdfAndDownload(cvs, 'STK Accounting Voucher · 전표 상세 화면', 'ACC-Voucher_'+(v.Title||'detail')+'_상세화면_'+ds+'.pdf');
+    await canvasToPdfAndDownload(
+      [
+        {cvs: mainCvs, headerText:'STK Accounting Voucher · 전표 상세 화면', orientation:'portrait'},
+        {cvs: tableCvs, headerText:'STK Accounting Voucher · 회계 정보(가로형)', orientation:'landscape'}
+      ],
+      'ACC-Voucher_'+(v.Title||'detail')+'_상세화면_'+ds+'.pdf'
+    );
   } catch(e){alert('PDF 생성 오류: '+e.message);console.error(e);}
   finally{
     restoreFns.forEach(([el, style])=>{ if(style===null) el.removeAttribute('style'); else el.setAttribute('style', style); });
+    if(accSection){ accSection.style.display = accSectionOrigDisplay||''; }
+    if(tableHost && tableHost.parentNode) tableHost.parentNode.removeChild(tableHost);
     if(btnWrap) btnWrap.style.display='';
     btn.innerHTML=orig;btn.disabled=false;
   }
 }
+
 
 // ── Init ──
 window.addEventListener('load',async()=>{
