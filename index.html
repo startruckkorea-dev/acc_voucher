@@ -2475,8 +2475,10 @@ async function exportAdminExcel(){
 async function saveB1Doc(spId, b1DocNo, postingDone) {
   if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
   try {
-    const updatedBy = user?.username||'';
-    const updatedAt = new Date().toISOString();
+    const updatedBy = user?.email||user?.username||'';
+    const now = new Date(new Date().getTime()+9*3600*1000);
+    const p = n=>String(n).padStart(2,'0');
+    const updatedAt = `${now.getUTCFullYear()}-${p(now.getUTCMonth()+1)}-${p(now.getUTCDate())} ${p(now.getUTCHours())}:${p(now.getUTCMinutes())}`;
     await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${spId}/fields`, 'PATCH', {
       B1DocNo: b1DocNo||'',
       PostingDone: postingDone||'',
@@ -2486,7 +2488,7 @@ async function saveB1Doc(spId, b1DocNo, postingDone) {
     // 캐시 갱신
     const cached = adminListCache.find(v=>v._spId===spId);
     if(cached){ cached.B1DocNo=b1DocNo; cached.PostingDone=postingDone; cached.B1UpdatedBy=updatedBy; cached.B1UpdatedAt=updatedAt; }
-  } catch(e){ console.error('saveB1Doc error:', e.message); }
+  } catch(e){ console.error('saveB1Doc error:', e.message); alert('저장 실패: '+e.message); }
 }
 
 function renderAdminList(){
@@ -2529,21 +2531,18 @@ function renderAdminList(){
     <td style="text-align:right;font-weight:700;color:#c0392b;font-size:.78rem">${fmtK(v.TotalCR_KRW)}</td>
     <td><span class="${stMap[v.Status]||'badge-대기'}">${stLabel[v.Status]||v.Status}</span></td>
     <td style="font-size:.78rem;color:#605e5c">${fmtDate(v.SubmittedDate)}</td>
-    <td onclick="event.stopPropagation()" style="font-size:.75rem">
-      ${isCompleted
-        ? `<input type="text" value="${b1DocNo}" placeholder="B1 Doc No." onclick="event.stopPropagation()"
-             onblur="saveB1Doc('${v._spId}', this.value, document.getElementById('posting-${v._spId}')?.value)"
-             style="width:100%;border:1px solid #d2d0ce;border-radius:3px;padding:3px 5px;font-size:.72rem">`
-        : `<span style="color:#a19f9d">-</span>`}
+    <td onclick="event.stopPropagation()" style="font-size:.75rem;min-width:130px">
+      <input type="text" value="${b1DocNo}" placeholder="B1 Doc No." onclick="event.stopPropagation()"
+        onblur="saveB1Doc('${v._spId}', this.value, document.getElementById('posting-${v._spId}')?.value)"
+        style="width:100%;border:1px solid #d2d0ce;border-radius:3px;padding:3px 5px;font-size:.72rem">
+      ${v.B1UpdatedBy ? `<div style="font-size:.65rem;color:#a19f9d;margin-top:2px">${v.B1UpdatedBy}<br>${v.B1UpdatedAt||''}</div>` : ''}
     </td>
     <td onclick="event.stopPropagation()" style="text-align:center">
-      ${isCompleted
-        ? `<select id="posting-${v._spId}" onchange="saveB1Doc('${v._spId}', document.querySelector('[onblur*=${v._spId}]')?.value||'${b1DocNo}', this.value)"
-             style="font-size:.7rem;border:1px solid #d2d0ce;border-radius:3px;padding:2px 4px">
-             <option value="" ${!postingDone?'selected':''}>미완료</option>
-             <option value="완료" ${'완료'===postingDone?'selected':''}>✅ 완료</option>
-           </select>`
-        : `<span style="color:#a19f9d">-</span>`}
+      <select id="posting-${v._spId}" onchange="saveB1Doc('${v._spId}', document.querySelector('input[onblur*=\\'${v._spId}\\']')?.value||'${b1DocNo}', this.value)"
+         style="font-size:.7rem;border:1px solid #d2d0ce;border-radius:3px;padding:2px 4px">
+         <option value="" ${!postingDone?'selected':''}>미완료</option>
+         <option value="완료" ${'완료'===postingDone?'selected':''}>✅ 완료</option>
+      </select>
     </td>
   </tr>`;
   }).join('');
