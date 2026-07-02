@@ -433,6 +433,8 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
       <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
         <span>4. 회계 정보 (Account Information)</span>
         <button class="btn btn-add" onclick="addLine()">＋ 라인 추가</button>
+        <button class="btn btn-add" id="btn-add-bp" onclick="addBPLine()" style="display:none;margin-left:6px">＋ BP라인 추가</button>
+        <button class="btn btn-add" id="btn-add-vat" onclick="addVATLine()" style="display:none;margin-left:6px">＋ VAT라인 추가</button>
       </div>
       <div class="lines-scroll">
         <table class="lines">
@@ -1345,6 +1347,13 @@ function onTypeChange() {
   document.getElementById('bp-req-mark').style.display = (type==='GL')?'none':'';
   renderApproval();
 
+  // No.6: AP/AR 유형일 때 BP/VAT 라인 추가 버튼 표시
+  const showBpVat = ['AP','AP_IMS','AP_CR','AR'].includes(type);
+  const btnBp = document.getElementById('btn-add-bp');
+  const btnVat = document.getElementById('btn-add-vat');
+  if(btnBp) btnBp.style.display = showBpVat ? '' : 'none';
+  if(btnVat) btnVat.style.display = showBpVat ? '' : 'none';
+
   // Voucher Type 변경 시 BP Category 경고 재평가
   const bpCatVal = document.getElementById('v-bp-cat').value;
   if(!bpCatVal) return; // BP 미선택이면 무시
@@ -1418,7 +1427,7 @@ function renderApproval() {
   if(needed(rules.MC,drKrw))  apLine.push({role:'MC',  label:'Department Head (부서장)',rule:rules.MC,  fixed:false});
   if(needed(rules.CEO,drKrw)) apLine.push({role:'CEO', label:'CEO',                      rule:rules.CEO, fixed:true, person:CEO});
   if(needed(rules.RD,drKrw))  apLine.push({role:'RD',  label:'RD',                       rule:rules.RD,  fixed:true, person:RD});
-  if(needed(rules.Controller||'필요시',drKrw)) apLine.push({role:'CTRL',label:'Controlling Head', rule:'필요시', fixed:true, person:CTRL});
+  // No.10: Controlling Head 제거됨 (관리자 탭 의견 기능으로 대체)
   apLine.push({role:'AMGR',label:'Accounting Head', rule:'필수', fixed:true, person:AMGR});
   if(needed(rules.CFO,drKrw)) apLine.push({role:'CFO', label:'CFO',                      rule:rules.CFO, fixed:true, person:CFO});
   if(ACC.email) apLine.push({role:'ACC',label:'Accounting 담당자', rule:'필수', fixed:true, person:ACC});
@@ -1502,6 +1511,19 @@ function gwPersonChange(order){
 function addLine() {
   lines.push({drcr:'',gl:'',glName:'',cctr:'',cctrName:'',pc:'',pcName:'',subpc:'',subpcName:'',lineDesc:'',currency:'KRW',unitPrice:'',qty:1,amount:0});
   renderLines();
+}
+// No.6: BP 라인 — GL에 BP코드, 계정명에 BP Name 자동 입력
+function addBPLine() {
+  const bpCode = document.getElementById('v-bp-code').value||'';
+  const bpName = document.getElementById('v-bp-name').value||'';
+  if(!bpCode){ alert('먼저 BP를 선택해주세요.'); return; }
+  lines.push({drcr:'',gl:bpCode,glName:bpName,cctr:'',cctrName:'',pc:'',pcName:'',subpc:'',subpcName:'',lineDesc:'BP',currency:'KRW',unitPrice:'',qty:1,amount:0});
+  renderLines(); openLineModal(lines.length-1);
+}
+// No.6: VAT 라인
+function addVATLine() {
+  lines.push({drcr:'',gl:'',glName:'VAT',cctr:'',cctrName:'',pc:'',pcName:'',subpc:'',subpcName:'',lineDesc:'VAT',currency:'KRW',unitPrice:'',qty:1,amount:0});
+  renderLines(); openLineModal(lines.length-1);
 }
 function deleteLine(i) { lines.splice(i,1); renderLines(); }
 
@@ -1958,7 +1980,7 @@ function buildApprovers() {
   if(needed(rules.MC,drKrw))  apLine.push({fixed:false,role:'MC'});
   if(needed(rules.CEO,drKrw)) apLine.push({fixed:true,role:'CEO',person:CEO});
   if(needed(rules.RD,drKrw))  apLine.push({fixed:true,role:'RD',person:RD});
-  if(needed(rules.Controller||'필요시',drKrw)) apLine.push({fixed:true,role:'CTRL',person:CTRL});
+  // No.10: Controlling Head 제거됨
   apLine.push({fixed:true,role:'AMGR',person:AMGR});
   if(needed(rules.CFO,drKrw)) apLine.push({fixed:true,role:'CFO',person:CFO});
   if(ACC.email) apLine.push({fixed:true,role:'ACC',person:ACC});
@@ -2728,9 +2750,30 @@ async function openVoucherSP(spId){
       <div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력을 불러오는 중...</div>
     </div>
     <div id="voucher-appr-action-btns" style="margin-top:14px;text-align:right"></div>
+
+    <!-- No.10: 관리자 의견 제시 -->
+    <div id="admin-comment-section" style="display:none;margin-top:16px;border-top:1px solid #edebe9;padding-top:14px">
+      <div class="det-sec">결재 의견 제시 <span style="font-size:.7rem;font-weight:400;color:#a19f9d">(관리자만 입력 가능 · 미결재 건에 한함)</span></div>
+      <div id="admin-comments-list" style="margin-bottom:10px;max-height:180px;overflow-y:auto"></div>
+      <div id="admin-comment-input-wrap" style="display:flex;gap:8px;align-items:flex-end">
+        <textarea id="admin-comment-text" placeholder="의견을 입력해주세요..." rows="2" style="flex:1;border:1px solid #d2d0ce;border-radius:4px;padding:8px 10px;font-size:.78rem;font-family:inherit;resize:vertical"></textarea>
+        <button onclick="submitAdminComment('${v._spId}')" style="padding:7px 16px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:.78rem;cursor:pointer;white-space:nowrap;height:fit-content">등록</button>
+      </div>
+      <div id="admin-comment-closed" style="display:none;font-size:.78rem;color:#a19f9d;padding:8px 0">승인완료된 전표는 의견을 입력할 수 없습니다.</div>
+    </div>
   `;
 
   document.getElementById('voucher-detail-modal').classList.add('open');
+
+  // 관리자 의견 섹션 표시 (관리자에게만)
+  const commentSection = document.getElementById('admin-comment-section');
+  if(commentSection && isAdmin()) {
+    commentSection.style.display = 'block';
+    const isCompleted = v.Status === '승인완료' || v.Status === '철회';
+    document.getElementById('admin-comment-input-wrap').style.display = isCompleted ? 'none' : 'flex';
+    document.getElementById('admin-comment-closed').style.display = isCompleted ? 'block' : 'none';
+    loadAdminComments(v._spId);
+  }
 
   // 결재 이력 비동기 로드
   loadApprovalHistory(v._spId);
@@ -2827,6 +2870,54 @@ async function loadApprovalHistory(spId){
     document.getElementById('voucher-appr-history').innerHTML = '<div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력을 불러올 수 없습니다.</div>';
   }
 }
+// ── No.10: 관리자 의견 기능 (ACC-Voucher_Comments SP 목록) ──
+const LIST_COMMENTS = 'ACC-Voucher_Comments';
+
+async function loadAdminComments(reqSpId) {
+  const listEl = document.getElementById('admin-comments-list');
+  if(!listEl) return;
+  if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
+  try {
+    const data = await apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_COMMENTS}/items?$expand=fields&$filter=fields/RequestSPId eq '${reqSpId}'&$orderby=fields/Created asc`);
+    if(!data.value.length){ listEl.innerHTML='<div style="font-size:.75rem;color:#a19f9d;padding:6px 0">등록된 의견이 없습니다.</div>'; return; }
+    const fmtT = s=>{ if(!s) return ''; const d=new Date(s); const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+    listEl.innerHTML = data.value.map(item=>{
+      const f=item.fields;
+      return `<div style="background:#f0f6ff;border:1px solid #c7e0f4;border-radius:6px;padding:8px 12px;margin-bottom:8px">
+        <div style="font-size:.75rem;font-weight:600;color:#0078d4;margin-bottom:4px">${f.AuthorEmail||''} <span style="font-weight:400;color:#a19f9d">${fmtT(f.Created)}</span></div>
+        <div style="font-size:.78rem;color:#323130;white-space:pre-wrap">${f.Comment||''}</div>
+      </div>`;
+    }).join('');
+  } catch(e) { listEl.innerHTML='<div style="font-size:.75rem;color:#a19f9d">의견을 불러올 수 없습니다.</div>'; }
+}
+
+async function submitAdminComment(reqSpId) {
+  const textEl = document.getElementById('admin-comment-text');
+  const comment = (textEl?.value||'').trim();
+  if(!comment) { alert('의견을 입력해주세요.'); return; }
+  if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
+  // 방어 로직: 제출 직전 최신 상태 확인
+  try {
+    const check = await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${reqSpId}/fields`);
+    if(check.Status==='승인완료'||check.Status==='철회') {
+      alert('이미 결재가 완료되어 의견을 입력할 수 없습니다.');
+      document.getElementById('admin-comment-input-wrap').style.display='none';
+      document.getElementById('admin-comment-closed').style.display='block';
+      return;
+    }
+  } catch(e){ console.warn('상태 확인 실패', e); }
+  try {
+    const btn = document.querySelector('#admin-comment-input-wrap button');
+    if(btn){btn.disabled=true;btn.textContent='저장 중...';}
+    await api(`/sites/${siteId}/lists/${LIST_COMMENTS}/items`, 'POST', {
+      fields: { RequestSPId: String(reqSpId), Comment: comment, AuthorEmail: user?.email||user?.username||'' }
+    });
+    textEl.value='';
+    await loadAdminComments(reqSpId);
+    if(btn){btn.disabled=false;btn.textContent='등록';}
+  } catch(e) { alert('의견 저장 실패: '+e.message); }
+}
+
 function closeDetailModal(){
   document.getElementById('voucher-detail-modal').classList.remove('open');
   const pdfBtn = document.getElementById('btn-export-pdf');
