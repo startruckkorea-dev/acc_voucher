@@ -3081,6 +3081,9 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
   const roleCols=[['TL','Team Leader'],['MC','MC'],['CEO','CEO'],['RD','RD'],['AMGR','Accounting Mgr.'],['CFO','CFO']];
   const apprByRole={}; (apprList||[]).forEach(a=>{apprByRole[a.ApproverRole]=a;});
   const fmtApprDateTime=s=>{if(!s)return '';const d=new Date(s);const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;};
+  // "이준순 스타트럭코리아 IT(Junsoon Lee)" 형태에서 한글 이름만 추출
+  const koreanName = (s)=>{ const m=String(s||'').match(/^[가-힣]+/); return m ? m[0] : (s||'-'); };
+  const requesterKoName = koreanName(v.RequesterName);
   const cellB='border:1px solid #000;padding:4px 6px';
   const lblB=cellB+';background:#f0f0f0;font-weight:600;white-space:nowrap;padding:4px 4px;font-size:10.5px';
 
@@ -3139,7 +3142,7 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
         '<td style="'+lblB+'">Vendor Business No.</td><td style="'+cellB+'">'+(esc(v.BPBizNo)||'Master data 미기재')+'</td>'+
       '</tr>'+
     '</table>'+
-    '<table style="width:100%;border-collapse:collapse;border:1px solid #000;border-top:none;table-layout:fixed">'+
+    '<table style="width:100%;border-collapse:collapse;border:1px solid #000;margin-top:8px;table-layout:fixed">'+
       '<colgroup><col style="width:12%"><col style="width:48%"><col style="width:17%"><col style="width:23%"></colgroup>'+
       '<tr>'+
         '<td colspan="2" style="'+lblB+';text-align:left">Purpose</td>'+
@@ -3159,10 +3162,20 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
     '</table>'+
     '<div style="font-weight:700;margin-top:8px;padding:4px 2px;border-bottom:2px solid #000">Requester Info.</div>'+
     '<table style="width:100%;border-collapse:collapse;border:1px solid #000;table-layout:fixed">'+
-      '<colgroup><col style="width:12%"><col style="width:48%"><col style="width:17%"><col style="width:23%"></colgroup>'+
+      '<colgroup><col style="width:10%"><col style="width:16%"><col style="width:14%"><col style="width:20%"><col style="width:13%"><col style="width:27%"></colgroup>'+
       '<tr>'+
-        '<td style="'+lblB+'">Requester</td><td style="'+cellB+'">'+esc(v.RequesterName)+' ('+esc(v.RequesterEmail)+')</td>'+
+        '<td style="'+lblB+'">Requester</td><td style="'+cellB+'">'+(esc(requesterKoName))+'</td>'+
         '<td style="'+lblB+'">Cost Center No.</td><td style="'+cellB+'">'+(esc(v.RequesterCCTR)||'-')+'</td>'+
+        '<td style="'+lblB+'">(E) Signature</td>'+
+        '<td style="'+cellB+';text-align:center">'+
+          (v.SubmittedDate ? (
+            '<div style="display:inline-block;border:1.1px solid #0078d4;border-radius:4px;padding:2px 5px;line-height:1.35">'+
+              '<div style="font-size:8px;font-weight:700;color:#0078d4;white-space:nowrap">✅ 전자결재</div>'+
+              '<div style="font-size:7.5px;color:#333;white-space:nowrap">'+esc(requesterKoName)+'</div>'+
+              '<div style="font-size:7px;color:#666;white-space:nowrap">'+fmtApprDateTime(v.SubmittedDate)+'</div>'+
+            '</div>'
+          ) : '') +
+        '</td>'+
       '</tr>'+
     '</table>'+
 
