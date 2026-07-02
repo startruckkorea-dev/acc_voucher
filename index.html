@@ -3210,7 +3210,7 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
 // ── 공통: 캔버스를 여러 페이지 PDF로 변환 후 다운로드 (GW exportModalPdf 동일 패턴) ──
 // ── 공통: 캔버스 세그먼트들을 PDF로 변환 후 다운로드 (세그먼트별 portrait/landscape 지정 가능) ──
 // segments: [{cvs, headerText, orientation:'portrait'|'landscape'}]
-async function canvasToPdfAndDownload(segments, fname) {
+async function buildPdfDocFromSegments(segments) {
   const { PDFDocument } = PDFLib;
   const mainDoc = await PDFDocument.create();
   const now=new Date(new Date().getTime()+9*3600*1000);
@@ -3252,10 +3252,81 @@ async function canvasToPdfAndDownload(segments, fname) {
       page.drawImage(si,{x:marginPt,y:A4H-hdrH-marginPt-sliceActual_pt,width:printW_pt,height:sliceActual_pt});
     }
   }
+  return { mainDoc, dataUrlToUint8, makeHeaderBytes };
+}
+
+async function downloadPdfDoc(mainDoc, fname) {
   const finalBytes=await mainDoc.save();
   const finalBlob=new Blob([finalBytes],{type:'application/pdf'});
   const a=document.createElement('a');a.href=URL.createObjectURL(finalBlob);a.download=fname;
   document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);
+}
+
+// ── 첨부파일(세금계산서/Invoice 등) 실제 내용을 PDF 뒤에 병합 (GW exportModalPdf와 동일 패턴) ──
+// 이미지(jpg/png/gif/webp)는 페이지로 직접 삽입, PDF/Office 문서는 Graph API로 PDF 변환 후 페이지째 병합
+async function appendAttachmentPagesToDoc(mainDoc, dataUrlToUint8, makeHeaderBytes, contentEl, btn) {
+  const { PDFDocument } = PDFLib;
+  const A4W=595, A4H=842, marginPt=34, hdrH=22, printW_pt=A4W-marginPt*2;
+  const fileLinks = contentEl.querySelectorAll('.file-dl-link');
+  if(!fileLinks.length) return;
+  const _t = await token();
+  for(const link of fileLinks){
+    const name = decodeURIComponent(link.dataset.name||'');
+    if(!name) continue;
+    const dId = decodeURIComponent(link.dataset.drive||'');
+    const iId = decodeURIComponent(link.dataset.id||'');
+    if(!dId||!iId) continue;
+    const ext = name.split('.').pop().toLowerCase();
+    const imgExts = ['jpg','jpeg','png','gif','webp'];
+    if(btn) btn.innerHTML = '⏳ '+name.substring(0,20)+'...';
+
+    try {
+      if(imgExts.includes(ext)){
+        // 이미지: 직접 fetch → 새 페이지에 삽입
+        const res = await fetch('https://graph.microsoft.com/v1.0/drives/'+dId+'/items/'+iId+'/content', {headers:{Authorization:'Bearer '+_t}});
+        if(!res.ok) throw new Error(String(res.status));
+        const imgAb = await res.arrayBuffer();
+        const attachPage = mainDoc.addPage([A4W, A4H]);
+        const aHdrBytes = await makeHeaderBytes('첨부파일: '+name);
+        const aHdrImg = await mainDoc.embedPng(aHdrBytes);
+        attachPage.drawImage(aHdrImg, {x:0,y:A4H-hdrH,width:A4W,height:hdrH});
+        let embImg;
+        if(['jpg','jpeg'].includes(ext)) embImg = await mainDoc.embedJpg(new Uint8Array(imgAb));
+        else embImg = await mainDoc.embedPng(new Uint8Array(imgAb));
+        const {width:iW, height:iH} = embImg;
+        const ratio = Math.min(printW_pt/iW, (A4H-hdrH-marginPt*2)/iH);
+        attachPage.drawImage(embImg, {x:marginPt, y:A4H-hdrH-marginPt-iH*ratio, width:iW*ratio, height:iH*ratio});
+      } else {
+        // PDF/Office 문서: Graph API로 PDF 변환(?format=pdf) 후 페이지째 병합
+        const convertUrl = ext==='pdf'
+          ? 'https://graph.microsoft.com/v1.0/drives/'+dId+'/items/'+iId+'/content'
+          : 'https://graph.microsoft.com/v1.0/drives/'+dId+'/items/'+iId+'/content?format=pdf';
+        const res = await fetch(convertUrl, {headers:{Authorization:'Bearer '+_t}});
+        if(!res.ok) throw new Error('변환실패 '+res.status);
+        const pdfBytes = new Uint8Array(await res.arrayBuffer());
+        const srcDoc = await PDFDocument.load(pdfBytes, {ignoreEncryption:true});
+        const copiedPages = await mainDoc.copyPages(srcDoc, srcDoc.getPageIndices());
+        const aHdrBytes2 = await makeHeaderBytes('첨부파일: '+name);
+        for(const pg of copiedPages){
+          mainDoc.addPage(pg);
+          const aHdrImg2 = await mainDoc.embedPng(aHdrBytes2);
+          const {width:pgW, height:pgH} = pg.getSize();
+          pg.drawImage(aHdrImg2, {x:0,y:pgH-hdrH,width:pgW,height:hdrH});
+        }
+      }
+    } catch(e){
+      console.warn('첨부파일 처리 실패:', name, e.message);
+      const errPage = mainDoc.addPage([A4W, A4H]);
+      const aHdrBytes3 = await makeHeaderBytes('첨부파일: '+name+' (변환 실패)');
+      const aHdrImg3 = await mainDoc.embedPng(aHdrBytes3);
+      errPage.drawImage(aHdrImg3, {x:0,y:A4H-hdrH,width:A4W,height:hdrH});
+    }
+  }
+}
+
+async function canvasToPdfAndDownload(segments, fname) {
+  const { mainDoc } = await buildPdfDocFromSegments(segments);
+  await downloadPdfDoc(mainDoc, fname);
 }
 
 // ── 회계 정보(Account Information) 표를 별도의 깔끔한 가로형(landscape) 레이아웃으로 재구성 ──
@@ -3415,13 +3486,14 @@ async function exportVoucherDetailPdf() {
 
     const now=new Date(new Date().getTime()+9*3600*1000);
     const ds=now.getUTCFullYear()+'-'+String(now.getUTCMonth()+1).padStart(2,'0')+'-'+String(now.getUTCDate()).padStart(2,'0');
-    await canvasToPdfAndDownload(
-      [
-        {cvs: mainCvs, headerText:'STK Accounting Voucher · 전표 상세 화면', orientation:'portrait'},
-        {cvs: tableCvs, headerText:'STK Accounting Voucher · 회계 정보(가로형)', orientation:'landscape'}
-      ],
-      'ACC-Voucher_'+(v.Title||'detail')+'_상세화면_'+ds+'.pdf'
-    );
+    const { mainDoc, dataUrlToUint8, makeHeaderBytes } = await buildPdfDocFromSegments([
+      {cvs: mainCvs, headerText:'STK Accounting Voucher · 전표 상세 화면', orientation:'portrait'},
+      {cvs: tableCvs, headerText:'STK Accounting Voucher · 회계 정보(가로형)', orientation:'landscape'}
+    ]);
+    // 실제 첨부파일(세금계산서/Invoice 등) 내용을 뒤에 페이지로 병합 (GW 방식)
+    await appendAttachmentPagesToDoc(mainDoc, dataUrlToUint8, makeHeaderBytes, contentEl, btn);
+    btn.innerHTML = '⏳ 생성 중...';
+    await downloadPdfDoc(mainDoc, 'ACC-Voucher_'+(v.Title||'detail')+'_상세화면_'+ds+'.pdf');
   } catch(e){alert('PDF 생성 오류: '+e.message);console.error(e);}
   finally{
     restoreFns.forEach(([el, style])=>{ if(style===null) el.removeAttribute('style'); else el.setAttribute('style', style); });
