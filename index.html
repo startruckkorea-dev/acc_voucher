@@ -319,13 +319,15 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
   <!-- ── 바우처 작성 ── -->
   <div id="tab-new">
     <div class="card">
-      <div class="card-title">회계 전표 작성 <span id="voucher-id-badge" style="font-size:11px;font-weight:400;color:#a19f9d"></span></div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:10px 12px;background:#f0f6ff;border:1px solid #c7e0f4;border-radius:6px">
-        <span style="font-size:.78rem;color:#0078d4;font-weight:600;white-space:nowrap">기존 전표 불러오기</span>
-        <input type="text" id="load-voucher-id" placeholder="예: ACC-Voucher-2026-07-01_ID-8" style="flex:1;border:1px solid #d2d0ce;border-radius:4px;padding:6px 10px;font-size:.78rem">
-        <button onclick="loadExistingVoucher()" style="padding:6px 14px;border:none;border-radius:4px;background:#0078d4;color:#fff;font-size:.78rem;cursor:pointer;white-space:nowrap">불러오기</button>
+      <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;row-gap:8px">
+        <span>회계 전표 작성 <span id="voucher-id-badge" style="font-size:11px;font-weight:400;color:#a19f9d"></span></span>
+        <div style="display:flex;align-items:center;gap:6px;font-weight:400">
+          <span style="font-size:.72rem;color:#0078d4;font-weight:600;white-space:nowrap">기존 전표 불러오기</span>
+          <input type="text" id="load-voucher-id" placeholder="예: ACC-Voucher-2026-07-01_ID-8" style="width:220px;border:1px solid #d2d0ce;border-radius:4px;padding:5px 9px;font-size:.74rem">
+          <button onclick="loadExistingVoucher()" style="padding:5px 12px;border:none;border-radius:4px;background:#0078d4;color:#fff;font-size:.74rem;cursor:pointer;white-space:nowrap">불러오기</button>
+        </div>
       </div>
-      <div style="font-size:.72rem;color:#605e5c;margin-top:6px;line-height:1.7">
+      <div style="font-size:.68rem;color:#a19f9d;margin:-8px 0 14px;line-height:1.6">
         * Invoice Date는 기존 전표 날짜로 복원됩니다 &nbsp;·&nbsp;
         * Exchange Rate는 <b>오늘 기준 환율</b>을 그대로 사용합니다 &nbsp;·&nbsp;
         * 첨부파일은 새로 첨부해주세요
