@@ -2531,18 +2531,12 @@ function renderAdminList(){
     <td style="text-align:right;font-weight:700;color:#c0392b;font-size:.78rem">${fmtK(v.TotalCR_KRW)}</td>
     <td><span class="${stMap[v.Status]||'badge-대기'}">${stLabel[v.Status]||v.Status}</span></td>
     <td style="font-size:.78rem;color:#605e5c">${fmtDate(v.SubmittedDate)}</td>
-    <td onclick="event.stopPropagation()" style="font-size:.75rem;min-width:130px">
-      <input type="text" value="${b1DocNo}" placeholder="B1 Doc No." onclick="event.stopPropagation()"
-        onblur="saveB1Doc('${v._spId}', this.value, document.getElementById('posting-${v._spId}')?.value)"
-        style="width:100%;border:1px solid #d2d0ce;border-radius:3px;padding:3px 5px;font-size:.72rem">
+    <td style="font-size:.75rem;color:#323130">
+      ${b1DocNo || '<span style="color:#a19f9d">-</span>'}
       ${v.B1UpdatedBy ? `<div style="font-size:.65rem;color:#a19f9d;margin-top:2px">${v.B1UpdatedBy}<br>${v.B1UpdatedAt||''}</div>` : ''}
     </td>
-    <td onclick="event.stopPropagation()" style="text-align:center">
-      <select id="posting-${v._spId}" onchange="saveB1Doc('${v._spId}', document.querySelector('input[onblur*=\\'${v._spId}\\']')?.value||'${b1DocNo}', this.value)"
-         style="font-size:.7rem;border:1px solid #d2d0ce;border-radius:3px;padding:2px 4px">
-         <option value="" ${!postingDone?'selected':''}>미완료</option>
-         <option value="완료" ${'완료'===postingDone?'selected':''}>✅ 완료</option>
-      </select>
+    <td style="text-align:center;font-size:.75rem">
+      ${postingDone==='완료' ? '<span style="color:#107c10;font-weight:600">✅ 완료</span>' : '<span style="color:#a19f9d">미완료</span>'}
     </td>
   </tr>`;
   }).join('');
@@ -2752,6 +2746,29 @@ async function openVoucherSP(spId){
     </div>
     <div id="voucher-appr-action-btns" style="margin-top:14px;text-align:right"></div>
 
+    <!-- No.11: B1 Doc No. / Posting 입력 (관리자, 언제든 가능) -->
+    <div id="b1-input-section" style="display:none;margin-top:16px;border-top:1px solid #edebe9;padding-top:14px">
+      <div class="det-sec">B1 Doc No. / Posting</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">
+        <div>
+          <div style="font-size:.72rem;color:#605e5c;margin-bottom:4px;font-weight:600">B1 Doc No.</div>
+          <input type="text" id="modal-b1docno" placeholder="B1 Doc No. 입력..."
+            style="width:100%;border:1px solid #d2d0ce;border-radius:4px;padding:6px 10px;font-size:.78rem;box-sizing:border-box">
+        </div>
+        <div>
+          <div style="font-size:.72rem;color:#605e5c;margin-bottom:4px;font-weight:600">Posting</div>
+          <select id="modal-posting" style="width:100%;border:1px solid #d2d0ce;border-radius:4px;padding:6px 10px;font-size:.78rem;font-family:inherit">
+            <option value="">미완료</option>
+            <option value="완료">✅ 완료</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div id="b1-updated-info" style="font-size:.7rem;color:#a19f9d"></div>
+        <button onclick="saveB1DocFromModal()" style="padding:6px 16px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:.78rem;cursor:pointer">저장</button>
+      </div>
+    </div>
+
     <!-- No.10: 관리자 의견 제시 -->
     <div id="admin-comment-section" style="display:none;margin-top:16px;border-top:1px solid #edebe9;padding-top:14px">
       <div class="det-sec">결재 의견 제시 <span style="font-size:.7rem;font-weight:400;color:#a19f9d">(관리자만 입력 가능 · 미결재 건에 한함)</span></div>
@@ -2775,6 +2792,15 @@ async function openVoucherSP(spId){
     document.getElementById('admin-comment-input-wrap').style.display = isCompleted ? 'none' : 'flex';
     document.getElementById('admin-comment-closed').style.display = isCompleted ? 'block' : 'none';
     loadAdminComments(v._spId);
+  }
+  // B1 Doc No./Posting 입력 섹션 (관리자에게만)
+  const b1Section = document.getElementById('b1-input-section');
+  if(b1Section && userIsAdmin) {
+    b1Section.style.display = 'block';
+    document.getElementById('modal-b1docno').value = v.B1DocNo||'';
+    document.getElementById('modal-posting').value = v.PostingDone||'';
+    const infoEl = document.getElementById('b1-updated-info');
+    infoEl.textContent = v.B1UpdatedBy ? `마지막 수정: ${v.B1UpdatedBy} · ${v.B1UpdatedAt||''}` : '';
   }
 
   // 결재 이력 비동기 로드
@@ -2872,6 +2898,24 @@ async function loadApprovalHistory(spId){
     document.getElementById('voucher-appr-history').innerHTML = '<div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력을 불러올 수 없습니다.</div>';
   }
 }
+async function saveB1DocFromModal() {
+  const v = window._currentVoucherDetail;
+  if(!v) return;
+  const b1DocNo = document.getElementById('modal-b1docno')?.value||'';
+  const postingDone = document.getElementById('modal-posting')?.value||'';
+  const btn = document.querySelector('#b1-input-section button');
+  if(btn){btn.disabled=true;btn.textContent='저장 중...';}
+  await saveB1Doc(v._spId, b1DocNo, postingDone);
+  // 표시 갱신
+  const now = new Date(new Date().getTime()+9*3600*1000);
+  const p = n=>String(n).padStart(2,'0');
+  const updatedAt = `${now.getUTCFullYear()}-${p(now.getUTCMonth()+1)}-${p(now.getUTCDate())} ${p(now.getUTCHours())}:${p(now.getUTCMinutes())}`;
+  const updatedBy = user?.email||user?.username||'';
+  const infoEl = document.getElementById('b1-updated-info');
+  if(infoEl) infoEl.textContent = `마지막 수정: ${updatedBy} · ${updatedAt}`;
+  if(btn){btn.disabled=false;btn.textContent='저장';}
+}
+
 // ── No.10: 관리자 의견 기능 (ACC-Voucher_Requests의 AdminComments 필드 사용) ──
 async function loadAdminComments(reqSpId) {
   const listEl = document.getElementById('admin-comments-list');
