@@ -2769,7 +2769,8 @@ async function openVoucherSP(spId){
 
   // 관리자 의견 섹션 표시 (관리자에게만)
   const commentSection = document.getElementById('admin-comment-section');
-  if(commentSection && isAdmin()) {
+  const userIsAdmin = ADMIN_EMAILS.map(e=>e.toLowerCase()).includes((user?.email||user?.username||'').toLowerCase());
+  if(commentSection && userIsAdmin) {
     commentSection.style.display = 'block';
     const isCompleted = v.Status === '승인완료' || v.Status === '철회';
     document.getElementById('admin-comment-input-wrap').style.display = isCompleted ? 'none' : 'flex';
