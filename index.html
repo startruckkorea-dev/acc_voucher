@@ -2885,8 +2885,10 @@ async function loadAdminComments(reqSpId) {
     if(!comments.length){ listEl.innerHTML='<div style="font-size:.75rem;color:#a19f9d;padding:6px 0">등록된 의견이 없습니다.</div>'; return; }
     listEl.innerHTML = comments.map(c=>`
       <div style="background:#f0f6ff;border:1px solid #c7e0f4;border-radius:6px;padding:8px 12px;margin-bottom:8px">
-        <div style="font-size:.75rem;font-weight:600;color:#0078d4;margin-bottom:4px">${c.email||''} <span style="font-weight:400;color:#a19f9d">${c.date||''}</span></div>
-        <div style="font-size:.78rem;color:#323130;white-space:pre-wrap">${c.text||''}</div>
+        <div style="font-size:.72rem;color:#a19f9d;margin-bottom:3px">${c.date||''}</div>
+        <div style="font-size:.75rem;color:#605e5c;margin-bottom:3px">작성자: <span style="font-weight:600;color:#0078d4">${c.email||''}</span></div>
+        <div style="font-size:.75rem;color:#605e5c;margin-bottom:2px">내용:</div>
+        <div style="font-size:.78rem;color:#323130;white-space:pre-wrap;padding-left:8px">${c.text||''}</div>
       </div>`).join('');
   } catch(e) { listEl.innerHTML='<div style="font-size:.75rem;color:#a19f9d">의견을 불러올 수 없습니다.</div>'; }
 }
