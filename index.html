@@ -1427,10 +1427,11 @@ function renderApproval() {
   if(needed(rules.MC,drKrw))  apLine.push({role:'MC',  label:'Department Head (부서장)',rule:rules.MC,  fixed:false});
   if(needed(rules.CEO,drKrw)) apLine.push({role:'CEO', label:'CEO',                      rule:rules.CEO, fixed:true, person:CEO});
   if(needed(rules.RD,drKrw))  apLine.push({role:'RD',  label:'RD',                       rule:rules.RD,  fixed:true, person:RD});
-  // No.10: Controlling Head 제거됨 (관리자 탭 의견 기능으로 대체)
+  // No.3: BU 승인 후 ACC 담당자 → Accounting Head → CFO 순서
+  // No.10: Controlling Head 완전 제거
+  if(ACC.email) apLine.push({role:'ACC',label:'Accounting 담당자', rule:'필수', fixed:true, person:ACC});
   apLine.push({role:'AMGR',label:'Accounting Head', rule:'필수', fixed:true, person:AMGR});
   if(needed(rules.CFO,drKrw)) apLine.push({role:'CFO', label:'CFO',                      rule:rules.CFO, fixed:true, person:CFO});
-  if(ACC.email) apLine.push({role:'ACC',label:'Accounting 담당자', rule:'필수', fixed:true, person:ACC});
 
   const container = document.getElementById('appr-blocks-container');
   const preview   = document.getElementById('appr-line-preview');
@@ -1980,10 +1981,11 @@ function buildApprovers() {
   if(needed(rules.MC,drKrw))  apLine.push({fixed:false,role:'MC'});
   if(needed(rules.CEO,drKrw)) apLine.push({fixed:true,role:'CEO',person:CEO});
   if(needed(rules.RD,drKrw))  apLine.push({fixed:true,role:'RD',person:RD});
-  // No.10: Controlling Head 제거됨
+  // No.3: BU 승인 후 ACC 담당자(회계담당자) 처리 → 그 다음 Accounting Head → CFO
+  // No.10: Controlling Head 완전 제거
+  if(ACC.email) apLine.push({fixed:true,role:'ACC',person:ACC});
   apLine.push({fixed:true,role:'AMGR',person:AMGR});
   if(needed(rules.CFO,drKrw)) apLine.push({fixed:true,role:'CFO',person:CFO});
-  if(ACC.email) apLine.push({fixed:true,role:'ACC',person:ACC});
   const result=[];
   apLine.forEach((a,i)=>{
     const order=i+1;
