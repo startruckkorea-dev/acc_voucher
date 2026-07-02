@@ -322,7 +322,11 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         <span style="font-size:.78rem;color:#0078d4;font-weight:600;white-space:nowrap">기존 전표 불러오기</span>
         <input type="text" id="load-voucher-id" placeholder="예: ACC-Voucher-2026-07-01_ID-8" style="flex:1;border:1px solid #d2d0ce;border-radius:4px;padding:6px 10px;font-size:.78rem">
         <button onclick="loadExistingVoucher()" style="padding:6px 14px;border:none;border-radius:4px;background:#0078d4;color:#fff;font-size:.78rem;cursor:pointer;white-space:nowrap">불러오기</button>
-        <span style="font-size:.72rem;color:#a19f9d">첨부파일 제외 전부 불러옵니다</span>
+      </div>
+      <div style="font-size:.72rem;color:#605e5c;margin-top:6px;line-height:1.7">
+        * Invoice Date는 기존 전표 날짜로 복원됩니다 &nbsp;·&nbsp;
+        * Exchange Rate는 <b>오늘 기준 환율</b>을 그대로 사용합니다 &nbsp;·&nbsp;
+        * 첨부파일은 새로 첨부해주세요
       </div>
 
       <div class="section-title">1. 바우처 정보 (Voucher Information)</div>
@@ -1825,6 +1829,8 @@ async function saveVoucher(status) {
         BPCode: document.getElementById('v-bp-code').value||'',
         BPName: document.getElementById('v-bp-name').value||'',
         BPCategory: document.getElementById('v-bp-cat').value||'',
+        InvoiceDate: document.getElementById('v-inv-date').value||null,
+        ExchangeRateEUR: parseFloat(document.getElementById('v-exrate').value)||null,
         Purpose: purpose,
         LinesJSON: JSON.stringify(lines),
         TotalDR_KRW: drKrw,
@@ -2087,20 +2093,26 @@ async function loadExistingVoucher() {
     const data = await apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_REQUESTS}/items?$expand=fields&$filter=fields/Title eq '${titleVal}'&$top=5`);
     if(!data.value.length){ alert(`전표를 찾을 수 없습니다: ${titleVal}`); return; }
     const f = data.value[0].fields;
-    // 폼 채우기
+    // Voucher Type
     document.getElementById('v-type').value = f.VoucherType||'';
     onTypeChange();
+    // Invoice Date 불러오기 (기존 전표 날짜 그대로)
     document.getElementById('v-inv-date').value = f.InvoiceDate ? f.InvoiceDate.slice(0,10) : '';
+    // Exchange Rate: 불러오지 않음 — 오늘 환율 그대로 유지 (applyTodayExchangeRate가 이미 적용돼있음)
+    // BP 정보
     document.getElementById('v-bp-code').value = f.BPCode||'';
     document.getElementById('v-bp-name').value = f.BPName||'';
     document.getElementById('v-bp-cat').value = f.BPCategory||'';
-    document.getElementById('v-purpose').value = f.Purpose||'';
+    // Purpose — HTML 태그 제거
+    const rawPurpose = f.Purpose||'';
+    document.getElementById('v-purpose').value = rawPurpose.replace(/<[^>]*>/g,'').trim();
     // 라인 복원
     try { lines = JSON.parse(f.LinesJSON||'[]'); } catch(e){ lines=[]; }
     renderLines();
+    updateTotals();
     document.getElementById('voucher-id-badge').textContent = `(${titleVal} 기반 불러옴)`;
     titleInput.value = '';
-    showAccAlert('전표를 불러왔습니다.', titleVal+' · 첨부파일은 새로 첨부해주세요.', '📋');
+    showAccAlert('전표를 불러왔습니다.', '📌 Invoice Date는 기존 날짜로 복원됐습니다.\n💱 Exchange Rate는 오늘 기준 환율을 그대로 사용합니다.\n📎 첨부파일은 새로 첨부해주세요.', '📋');
   } catch(e) {
     console.error('loadExistingVoucher error:', e);
     showAccAlert('전표 불러오기 실패', e.message, '⚠️');
