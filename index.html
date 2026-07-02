@@ -3127,6 +3127,9 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
         '<td style="'+lblB+'">Exchange rate</td><td style="'+cellB+';font-size:10px">'+exRateDisplay+'</td>'+
         '<td style="'+lblB+'">KRW TOTAL</td><td style="'+cellB+';text-align:right;font-weight:700">'+fmtK(v.TotalDR_KRW)+'</td>'+
       '</tr>'+
+    '</table>'+
+    '<table style="width:100%;border-collapse:collapse;border:1px solid #000;margin-top:8px;table-layout:fixed">'+
+      '<colgroup><col style="width:12%"><col style="width:48%"><col style="width:17%"><col style="width:23%"></colgroup>'+
       '<tr>'+
         '<td style="'+lblB+'">Requester</td><td style="'+cellB+'">'+esc(v.RequesterName)+' ('+esc(v.RequesterEmail)+')</td>'+
         '<td style="'+lblB+'">Cost Center No.</td><td style="'+cellB+'">'+(esc(v.RequesterCCTR)||'-')+'</td>'+
