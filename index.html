@@ -3258,6 +3258,22 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
       '</tr>'+
       '<tr><td style="'+lblB+'">(E) Signature<br>&amp; Date</td>'+apprRow('sig')+'</tr>'+
       '<tr><td style="'+lblB+'">Name</td>'+apprRow('name')+'</tr>'+
+      '<tr><td style="'+lblB+'">Amount range</td>'+
+        roleCols.map(rc=>{
+          const role=rc[0];
+          const rules = APPROVAL_RULES[v.VoucherType]||{};
+          let ruleText;
+          if(role==='ACC'||role==='AMGR') ruleText='Required'; // 항상 결재라인에 포함 (needed() 체크 없이 무조건 push)
+          else {
+            const rv = rules[role];
+            if(!rv || rv==='-') ruleText='Not Required';
+            else if(rv==='필수') ruleText='Required';
+            else if(rv==='필요시') ruleText='If necessary';
+            else ruleText=rv; // 예: '>= 1,000,000', '> 50,000,000' 등 실제 임계값 그대로 표기
+          }
+          return '<td style="'+cellB+';font-size:8.5px">'+esc(ruleText)+'</td>';
+        }).join('')+
+      '</tr>'+
     '</table>'+
   '</div>';
 }
