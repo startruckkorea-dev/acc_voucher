@@ -952,11 +952,12 @@ async function loadAccMasters() {
         const mainFlag = (r[6]||'').toString().trim().toUpperCase()==='O';
         const pcEnabled = (r[7]||'').toString().trim().toUpperCase()==='O';
         const subpcEnabled = (r[8]||'').toString().trim().toUpperCase()==='O';
+        const cctrEnabled = (r[9]||'').toString().trim().toUpperCase()==='O';
         if(!glName) continue;
         const code = /^\d+$/.test(glNew) ? glNew : (/^\d+$/.test(glOld) ? glOld : '');
         if(!code) continue;
         if(newGL.find(g=>g.code===code)) continue;
-        newGL.push({code, altCode:(/^\d+$/.test(glOld)&&glOld!==code?glOld:''), name:glName, mainFlag, pcEnabled, subpcEnabled});
+        newGL.push({code, altCode:(/^\d+$/.test(glOld)&&glOld!==code?glOld:''), name:glName, mainFlag, pcEnabled, subpcEnabled, cctrEnabled});
       }
       // 검색 최상단 고정(G열 'O') 항목을 앞으로 정렬
       newGL.sort((a,b)=> (b.mainFlag - a.mainFlag));
@@ -1757,24 +1758,27 @@ function renderGlResults(list){
 function selectGL(code){
   const gl=GL_LIST.find(g=>g.code===code); if(!gl||currentGlIdx===null) return;
   lines[currentGlIdx].gl=gl.code; lines[currentGlIdx].glName=gl.name;
-  // COA 시트 H열/I열 'O' 여부에 따라 Profit Center / Sub_PC 활성화 여부 결정
+  // COA 시트 H열/I열/J열 'O' 여부에 따라 Profit Center / Sub_PC / Cost Center 활성화 여부 결정
   lines[currentGlIdx].pcEnabled = !!gl.pcEnabled;
   lines[currentGlIdx].subpcEnabled = !!gl.subpcEnabled;
+  lines[currentGlIdx].cctrEnabled = !!gl.cctrEnabled;
   if(!gl.pcEnabled){ lines[currentGlIdx].pc=''; lines[currentGlIdx].pcName=''; }
   if(!gl.subpcEnabled){ lines[currentGlIdx].subpc=''; lines[currentGlIdx].subpcName=''; }
+  if(!gl.cctrEnabled){ lines[currentGlIdx].cctr=''; lines[currentGlIdx].cctrName=''; }
   // 라인 모달이 열려있으면 lm 필드도 업데이트
   if(document.getElementById('line-modal').classList.contains('open')){
     document.getElementById('lm-gl').value = gl.code;
     document.getElementById('lm-glname').textContent = gl.name;
-    applyPcSubpcAvailability(gl.pcEnabled, gl.subpcEnabled);
+    applyPcSubpcAvailability(gl.pcEnabled, gl.subpcEnabled, gl.cctrEnabled);
   }
   renderLines(); closeGlModal();
 }
 
-// COA 시트 H열/I열 'O' 여부에 따라 Profit Center / Sub_PC select 활성/비활성 처리
-function applyPcSubpcAvailability(pcEnabled, subpcEnabled){
+// COA 시트 H열/I열/J열 'O' 여부에 따라 Profit Center / Sub_PC / Cost Center select 활성/비활성 처리
+function applyPcSubpcAvailability(pcEnabled, subpcEnabled, cctrEnabled){
   const pcSel = document.getElementById('lm-pc');
   const subSel = document.getElementById('lm-subpc');
+  const ccSel = document.getElementById('lm-cctr');
   pcSel.disabled = !pcEnabled;
   subSel.disabled = !subpcEnabled;
   pcSel.style.background = pcEnabled ? '' : '#f3f2f1';
@@ -1783,6 +1787,12 @@ function applyPcSubpcAvailability(pcEnabled, subpcEnabled){
   subSel.style.color = subpcEnabled ? '' : '#a19f9d';
   if(!pcEnabled){ pcSel.value=''; document.getElementById('lm-pcname').textContent=''; }
   if(!subpcEnabled){ subSel.value=''; document.getElementById('lm-subpcname').textContent=''; }
+  if(ccSel){
+    ccSel.disabled = !cctrEnabled;
+    ccSel.style.background = cctrEnabled ? '' : '#f3f2f1';
+    ccSel.style.color = cctrEnabled ? '' : '#a19f9d';
+    if(!cctrEnabled){ ccSel.value=''; document.getElementById('lm-cctrname').textContent=''; }
+  }
 }
 
 function showAccAlert(title, sub='', icon='✅') {
@@ -2060,12 +2070,13 @@ function openLineModal(i) {
   subSel.innerHTML = '<option value="">-</option>' +
     getSubPCs().map(s=>`<option value="${s.code}" ${l.subpc===s.code?'selected':''}>${s.code} ${s.name}</option>`).join('');
   document.getElementById('lm-subpcname').textContent = l.subpcName || '';
-  // GL의 COA 등록 정보(H열/I열 'O') 기준으로 PC/Sub_PC 활성화 여부 반영
-  // GL이 아직 선택 안 된 새 라인은 기본적으로 둘 다 활성화 상태로 둠
+  // GL의 COA 등록 정보(H열/I열/J열 'O') 기준으로 PC/Sub_PC/Cost Center 활성화 여부 반영
+  // GL이 아직 선택 안 된 새 라인은 기본적으로 전부 활성화 상태로 둠
   const glInfo = l.gl ? GL_LIST.find(g=>g.code===l.gl) : null;
   const pcEnabled = glInfo ? !!glInfo.pcEnabled : (l.pcEnabled !== false);
   const subpcEnabled = glInfo ? !!glInfo.subpcEnabled : (l.subpcEnabled !== false);
-  applyPcSubpcAvailability(pcEnabled, subpcEnabled);
+  const cctrEnabled = glInfo ? !!glInfo.cctrEnabled : (l.cctrEnabled !== false);
+  applyPcSubpcAvailability(pcEnabled, subpcEnabled, cctrEnabled);
   // Line Desc / Amount
   document.getElementById('lm-linedesc').value = l.lineDesc || '';
   const amtVal = l.amount ? parseFloat(l.amount).toLocaleString('en', {minimumFractionDigits:2, maximumFractionDigits:2}) : '';
@@ -2124,6 +2135,7 @@ function saveLineModal() {
   lines[i].subpcName= getSubPCs().find(s=>s.code===subCode)?.name || '';
   lines[i].pcEnabled    = !document.getElementById('lm-pc').disabled;
   lines[i].subpcEnabled = !document.getElementById('lm-subpc').disabled;
+  lines[i].cctrEnabled  = !document.getElementById('lm-cctr').disabled;
   lines[i].lineDesc  = document.getElementById('lm-linedesc').value;
   lines[i].unitPrice = '';
   lines[i].qty       = 1;
