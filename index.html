@@ -704,10 +704,9 @@ const GRAPH  = 'https://graph.microsoft.com/v1.0';
 const SCOPES = ['User.Read','Sites.ReadWrite.All','Files.ReadWrite.All'];
 const BP_FILE_NAME   = 'Master data List 2014_Final(DTK).xlsx';
 const CCTR_FILE_NAME    = 'acc_cctr_list.xlsx';
-const COA_FILE_NAME      = 'acc_voucher_coa.xlsx';
 const EXCHANGE_FILE_NAME = 'acc_voucher_exchange.xlsx';
-const PC_FILE_NAME       = 'acc_voucher_pc.xlsx';
-const TEAM_FILE_NAME     = 'acc_voucher_GL_CCTR_COPA.xlsx'; // 통합 마스터
+const COA_PC_FILE_NAME   = 'acc_voucher_COA_PC.xlsx'; // GL(COA)/Profit Center/Sub_PC 통합 마스터 (2026-07-03부터 사용)
+const TEAM_FILE_NAME     = 'acc_voucher_GL_CCTR_COPA.xlsx'; // 구 통합 마스터 — GL/PC/Sub_PC 로딩은 COA_PC_FILE_NAME으로 대체됨, CCTR은 미사용
 
 let msal_g = null, user = null, siteId = null, nasId = null;
 let bpData = []; // SharePoint Excel에서 로드
@@ -936,57 +935,54 @@ async function loadAccMasters() {
       return XLSX.read(buf, {type:'array', cellDates:false});
     }
 
-    // ── GL_CCTR_COPA 통합 파일 파싱 (2026-06-30 신규 구조 기준)
-    // row0(index0)=상단 헤더, row1=빈행, row2=컬럼헤더, row3~=실데이터
-    // GL: A/B/C열(index0/1/2) · CCTR: H/I열(index6/7, 미사용) · PC: K/L열(index9/10) · Sub_PC: N/O열(index12/13, 신규 위치)
+    // ── acc_voucher_COA_PC.xlsx 파싱 (2026-07-03부터 사용, GL_CCTR_COPA 대체) ──
+    // COA 시트: C열=New GL, D열=Legacy GL, E열=Description, G열='O'=검색 최상단 고정, H열='O'=Profit Center 활성화, I열='O'=Sub_PC 활성화
+    // PC 시트: H열='PC목록'(코드+이름 결합 문자열), Q열='Sub Profit Center'(코드+이름 결합 문자열)
     try {
-      const wb = await fetchXlsx(TEAM_FILE_NAME); // acc_voucher_GL_CCTR_COPA.xlsx
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1});
+      const wb = await fetchXlsx(COA_PC_FILE_NAME);
 
-      const newGL=[], newCC=[], newPC=[], newSubPC=[];
+      // COA 시트: row0=병합헤더, row1=컬럼헤더, row2~=데이터
+      const coaRows = XLSX.utils.sheet_to_json(wb.Sheets['COA'], {header:1});
+      const newGL=[];
+      for(let i=2;i<coaRows.length;i++){
+        const r=coaRows[i]; if(!r) continue;
+        const glNew=(r[2]!=null?r[2]:'').toString().trim();
+        const glOld=(r[3]!=null?r[3]:'').toString().trim();
+        const glName=(r[4]||'').toString().trim();
+        const mainFlag = (r[6]||'').toString().trim().toUpperCase()==='O';
+        const pcEnabled = (r[7]||'').toString().trim().toUpperCase()==='O';
+        const subpcEnabled = (r[8]||'').toString().trim().toUpperCase()==='O';
+        if(!glName) continue;
+        const code = /^\d+$/.test(glNew) ? glNew : (/^\d+$/.test(glOld) ? glOld : '');
+        if(!code) continue;
+        if(newGL.find(g=>g.code===code)) continue;
+        newGL.push({code, altCode:(/^\d+$/.test(glOld)&&glOld!==code?glOld:''), name:glName, mainFlag, pcEnabled, subpcEnabled});
+      }
+      // 검색 최상단 고정(G열 'O') 항목을 앞으로 정렬
+      newGL.sort((a,b)=> (b.mainFlag - a.mainFlag));
 
-      // 실데이터는 index 3부터 시작 (index0=상단헤더, 1=빈행, 2=컬럼헤더)
-      for(let i=3;i<rows.length;i++){
-        const r=rows[i];
-        if(!r) continue;
-        // col1=New GL Code(숫자), col2=Old GL Code(숫자), col3=Description(EN)
-        const glNew=(r[0]!=null?r[0]:'').toString().trim();
-        const glOld=(r[1]!=null?r[1]:'').toString().trim();
-        const glName=(r[2]||'').toString().trim();
-        if(glNew && glNew!=='Need to be created' && /^\d+$/.test(glNew) && glNew.length>=4) {
-          if(!newGL.find(g=>g.code===glNew))
-            newGL.push({code:glNew, altCode:(/^\d+$/.test(glOld)?glOld:''), name:glName});
-        } else if(glOld && /^\d+$/.test(glOld) && glOld.length>=4) {
-          if(!newGL.find(g=>g.code===glOld))
-            newGL.push({code:glOld, altCode:'', name:glName});
-        }
-        // CCTR: H열=index6(Code), I열=index7(Name) — 읽기만 하고 실제로는 미사용 (acc_cctr_list.xlsx 사용)
-        const ccCode=(r[6]!=null?r[6]:'').toString().trim();
-        const ccName=(r[7]!=null?r[7]:'').toString().trim();
-        if(ccCode && /^\d{8}$/.test(ccCode) && ccCode.startsWith('47')) {
-          if(!newCC.find(c=>c.code===ccCode)) newCC.push({code:ccCode, name:ccName});
-        }
-        // PC: K열(index9), L열(index10) — 숫자 코드만, DUMMY 마커에서 중단
-        const pcCode=(r[9]!=null?r[9]:'').toString().trim();
-        const pcName=(r[10]||'').toString().trim();
-        if(pcCode && pcName && pcCode!=='DUMMY' && pcName!=='WSL DUMMY' && /^\d+$/.test(pcCode)) {
-          if(!newPC.find(p=>p.code===pcCode)) newPC.push({code:pcCode, name:pcName});
-        }
-        // Sub_PC: N열(index12), O열(index13) — 2026-06-30부터 PC와 별도 컬럼으로 분리됨
-        // "Distribution Rule" 헤더 텍스트와 "NA" 마커는 제외, 숫자 코드만 사용
-        const subCode=(r[12]!=null?r[12]:'').toString().trim();
-        const subName=(r[13]||'').toString().trim();
-        if(subCode && subName && subCode!=='Distribution Rule' && subCode!=='NA' && /^\d+$/.test(subCode)) {
-          if(!newSubPC.find(s=>s.code===subCode)) newSubPC.push({code:subCode, name:subName});
-        }
+      // PC 시트: H열(index7)="PC목록"(코드+이름 결합), Q열(index16)="Sub Profit Center"(코드+이름 결합). row0=헤더, row1~=데이터
+      const pcRows = XLSX.utils.sheet_to_json(wb.Sheets['PC'], {header:1});
+      const newPC=[], newSubPC=[];
+      const splitCodeName = s => {
+        const str=(s||'').toString().trim();
+        if(!str) return null;
+        const m = str.match(/^(\S+)\s+(.+)$/);
+        return m ? {code:m[1], name:m[2]} : {code:str, name:str};
+      };
+      for(let i=1;i<pcRows.length;i++){
+        const r=pcRows[i]; if(!r) continue;
+        const pc = splitCodeName(r[7]);
+        if(pc && !newPC.find(p=>p.code===pc.code)) newPC.push(pc);
+        const sub = splitCodeName(r[16]);
+        if(sub && !newSubPC.find(s=>s.code===sub.code)) newSubPC.push(sub);
       }
 
       if(newGL.length){ GL_LIST.length=0; newGL.forEach(g=>GL_LIST.push(g)); }
-      // COST_CENTERS는 acc_cctr_list.xlsx에서 로드 (GL_CCTR_COPA 덮어쓰기 비활성화)
       if(newPC.length){ PROFIT_CENTERS.length=0; newPC.forEach(p=>PROFIT_CENTERS.push(p)); }
       window._subProfitCenters = newSubPC;
-      console.log('[GL_CCTR_COPA] GL:'+newGL.length+' CC:'+newCC.length+' PC:'+newPC.length+' Sub_PC:'+newSubPC.length);
-    } catch(e){ console.error('[GL_CCTR_COPA] 파싱 실패:', e.message, e.stack); }
+      console.log('[COA_PC] GL:'+newGL.length+' PC:'+newPC.length+' Sub_PC:'+newSubPC.length);
+    } catch(e){ console.error('[COA_PC] 파싱 실패:', e.message, e.stack); }
 
     // COA 별도 로드 제거 - GL_CCTR_COPA 파일만 사용
 
@@ -1761,12 +1757,32 @@ function renderGlResults(list){
 function selectGL(code){
   const gl=GL_LIST.find(g=>g.code===code); if(!gl||currentGlIdx===null) return;
   lines[currentGlIdx].gl=gl.code; lines[currentGlIdx].glName=gl.name;
+  // COA 시트 H열/I열 'O' 여부에 따라 Profit Center / Sub_PC 활성화 여부 결정
+  lines[currentGlIdx].pcEnabled = !!gl.pcEnabled;
+  lines[currentGlIdx].subpcEnabled = !!gl.subpcEnabled;
+  if(!gl.pcEnabled){ lines[currentGlIdx].pc=''; lines[currentGlIdx].pcName=''; }
+  if(!gl.subpcEnabled){ lines[currentGlIdx].subpc=''; lines[currentGlIdx].subpcName=''; }
   // 라인 모달이 열려있으면 lm 필드도 업데이트
   if(document.getElementById('line-modal').classList.contains('open')){
     document.getElementById('lm-gl').value = gl.code;
     document.getElementById('lm-glname').textContent = gl.name;
+    applyPcSubpcAvailability(gl.pcEnabled, gl.subpcEnabled);
   }
   renderLines(); closeGlModal();
+}
+
+// COA 시트 H열/I열 'O' 여부에 따라 Profit Center / Sub_PC select 활성/비활성 처리
+function applyPcSubpcAvailability(pcEnabled, subpcEnabled){
+  const pcSel = document.getElementById('lm-pc');
+  const subSel = document.getElementById('lm-subpc');
+  pcSel.disabled = !pcEnabled;
+  subSel.disabled = !subpcEnabled;
+  pcSel.style.background = pcEnabled ? '' : '#f3f2f1';
+  pcSel.style.color = pcEnabled ? '' : '#a19f9d';
+  subSel.style.background = subpcEnabled ? '' : '#f3f2f1';
+  subSel.style.color = subpcEnabled ? '' : '#a19f9d';
+  if(!pcEnabled){ pcSel.value=''; document.getElementById('lm-pcname').textContent=''; }
+  if(!subpcEnabled){ subSel.value=''; document.getElementById('lm-subpcname').textContent=''; }
 }
 
 function showAccAlert(title, sub='', icon='✅') {
@@ -2044,6 +2060,12 @@ function openLineModal(i) {
   subSel.innerHTML = '<option value="">-</option>' +
     getSubPCs().map(s=>`<option value="${s.code}" ${l.subpc===s.code?'selected':''}>${s.code} ${s.name}</option>`).join('');
   document.getElementById('lm-subpcname').textContent = l.subpcName || '';
+  // GL의 COA 등록 정보(H열/I열 'O') 기준으로 PC/Sub_PC 활성화 여부 반영
+  // GL이 아직 선택 안 된 새 라인은 기본적으로 둘 다 활성화 상태로 둠
+  const glInfo = l.gl ? GL_LIST.find(g=>g.code===l.gl) : null;
+  const pcEnabled = glInfo ? !!glInfo.pcEnabled : (l.pcEnabled !== false);
+  const subpcEnabled = glInfo ? !!glInfo.subpcEnabled : (l.subpcEnabled !== false);
+  applyPcSubpcAvailability(pcEnabled, subpcEnabled);
   // Line Desc / Amount
   document.getElementById('lm-linedesc').value = l.lineDesc || '';
   const amtVal = l.amount ? parseFloat(l.amount).toLocaleString('en', {minimumFractionDigits:2, maximumFractionDigits:2}) : '';
@@ -2100,6 +2122,8 @@ function saveLineModal() {
   lines[i].pcName   = PROFIT_CENTERS.find(p=>p.code===pcCode)?.name || '';
   lines[i].subpc    = subCode;
   lines[i].subpcName= getSubPCs().find(s=>s.code===subCode)?.name || '';
+  lines[i].pcEnabled    = !document.getElementById('lm-pc').disabled;
+  lines[i].subpcEnabled = !document.getElementById('lm-subpc').disabled;
   lines[i].lineDesc  = document.getElementById('lm-linedesc').value;
   lines[i].unitPrice = '';
   lines[i].qty       = 1;
