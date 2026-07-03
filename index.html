@@ -2750,20 +2750,24 @@ async function openVoucherSP(spId, fromTab){
     ? v.ExchangeRate.split(',').map(s=>s.replace(':',': ')).join(' &nbsp;|&nbsp; ')
     : '-';
 
-  const lineRows = lines_data.map((l,i)=>`
+  const lineRows = lines_data.map((l,i)=>{
+    const amt = parseFloat(l.amount)||0;
+    const cpTxt = l.cctrName ? `${l.cctr} ${l.cctrName}` : (l.cctr ? l.cctr : (l.pcName ? `${l.pc} ${l.pcName}` : (l.pc || '-')));
+    const drTxt = l.drcr==='DR' && amt ? `<span style="color:#0078d4">${amt.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>` : '<span style="color:#a19f9d">-</span>';
+    const crTxt = l.drcr==='CR' && amt ? `<span style="color:#d83b01">${amt.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>` : '<span style="color:#a19f9d">-</span>';
+    return `
     <tr style="border-bottom:1px solid #f3f2f1">
       <td style="padding:6px 7px;color:#605e5c;font-size:.74rem">${i+1}</td>
-      <td style="padding:6px 7px;font-weight:600;font-size:.74rem;color:${l.drcr==='DR'?'#0078d4':'#c0392b'}">${l.drcr||'-'}</td>
-      <td style="padding:6px 7px;font-size:.74rem">${l.gl||'-'}</td>
       <td style="padding:6px 7px;font-size:.74rem">${l.glName||'-'}</td>
-      <td style="padding:6px 7px;font-size:.74rem">${l.cctrName||l.cctr||'-'}</td>
-      <td style="padding:6px 7px;font-size:.74rem">${l.pcName||l.pc||'-'}</td>
+      <td style="padding:6px 7px;font-size:.74rem">${l.gl||'-'}</td>
+      <td style="padding:6px 7px;font-size:.74rem">${cpTxt}</td>
       <td style="padding:6px 7px;font-size:.74rem">${l.subpcName||l.subpc||'-'}</td>
       <td style="padding:6px 7px;font-size:.74rem;max-width:120px;overflow:hidden;text-overflow:ellipsis">${l.lineDesc||'-'}</td>
       <td style="padding:6px 7px;font-size:.74rem">${l.currency||'-'}</td>
-
-      <td style="padding:6px 7px;text-align:right;font-weight:600;font-size:.74rem">${(parseFloat(l.amount)||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
-    </tr>`).join('');
+      <td style="padding:6px 7px;text-align:right;font-weight:600;font-size:.74rem">${drTxt}</td>
+      <td style="padding:6px 7px;text-align:right;font-weight:600;font-size:.74rem">${crTxt}</td>
+    </tr>`;
+  }).join('');
 
   // 첨부파일 목록 (클릭 시 다운로드)
   let attHtml = '<span style="color:#a19f9d">첨부파일 없음</span>';
@@ -2833,22 +2837,21 @@ async function openVoucherSP(spId, fromTab){
     <div id="acc-lines-section">
     <div class="det-sec">회계 정보 (Account Information)</div>
     <div style="overflow-x:auto;margin-top:4px">
-      <table style="width:100%;border-collapse:collapse;font-size:.74rem;min-width:760px">
+      <table style="width:100%;border-collapse:collapse;font-size:.74rem;min-width:800px">
         <thead>
           <tr style="background:#f3f2f1">
             <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">No</th>
-            <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">DR/CR</th>
-            <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">GL</th>
-            <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">계정명</th>
-            <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">Cost Center</th>
-            <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">Profit Center</th>
+            <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">G/L Account Description</th>
+            <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">G/L Acc No.</th>
+            <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">Cost/Profit Center</th>
             <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">Sub_PC</th>
-            <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">Line Desc</th>
-            <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">CCY</th>
-            <th style="padding:6px 7px;text-align:right;color:#605e5c;font-weight:600;font-size:.68rem">Amount</th>
+            <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">Description</th>
+            <th style="padding:6px 7px;text-align:left;color:#605e5c;font-weight:600;font-size:.68rem">Curr</th>
+            <th style="padding:6px 7px;text-align:right;color:#605e5c;font-weight:600;font-size:.68rem">DR(DEBIT)</th>
+            <th style="padding:6px 7px;text-align:right;color:#605e5c;font-weight:600;font-size:.68rem">CR(CREDIT)</th>
           </tr>
         </thead>
-        <tbody>${lineRows||'<tr><td colspan="10" style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">라인 없음</td></tr>'}</tbody>
+        <tbody>${lineRows||'<tr><td colspan="9" style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">라인 없음</td></tr>'}</tbody>
       </table>
     </div>
     <div style="display:flex;flex-wrap:wrap;justify-content:flex-end;gap:14px;row-gap:8px;padding:9px 8px;background:#f3f2f1;border-radius:4px;margin-top:6px">
