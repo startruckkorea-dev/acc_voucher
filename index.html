@@ -3166,7 +3166,10 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
         '<td style="'+lblB+'">Currency</td><td style="'+lblB+'">Total Amount</td>'+
       '</tr>'+
       '<tr>'+
-        '<td style="'+lblB+';vertical-align:top">Requeset for</td><td style="'+cellB+';white-space:pre-wrap;min-height:34px">'+(esc(v.Purpose)||'-')+'</td>'+
+        '<td colspan="2" style="'+cellB+';padding:6px 8px">'+
+          '<div style="font-size:8.5px;color:#888;font-weight:600;margin-bottom:2px">Requeset for</div>'+
+          '<div style="white-space:pre-wrap;min-height:28px">'+(esc(v.Purpose)||'-')+'</div>'+
+        '</td>'+
         '<td style="'+cellB+'">'+hdrCurrency+'</td><td style="'+cellB+';text-align:right;font-weight:700">'+hdrTotalAmount+'</td>'+
       '</tr>'+
       '<tr>'+
