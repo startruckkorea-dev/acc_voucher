@@ -451,15 +451,14 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
           <thead>
             <tr>
               <th style="width:36px">No</th>
-              <th style="width:80px">DR/CR</th>
-              <th style="width:80px">GL</th>
-              <th style="min-width:160px">계정명</th>
-              <th style="min-width:120px">Cost Center</th>
-              <th style="min-width:120px">Profit Center</th>
+              <th style="min-width:160px">G/L Account Description</th>
+              <th style="width:90px">G/L Acc No.</th>
+              <th style="min-width:140px">Cost/Profit Center</th>
               <th style="min-width:120px">Sub_PC</th>
-              <th style="min-width:110px">Line Desc</th>
-              <th style="width:70px">CCY</th>
-              <th style="width:140px;text-align:right">Amount</th>
+              <th style="min-width:110px">Description</th>
+              <th style="width:70px">Curr</th>
+              <th style="width:120px;text-align:right">DR(DEBIT)</th>
+              <th style="width:120px;text-align:right">CR(CREDIT)</th>
               <th style="width:130px;text-align:right">Total(KRW)</th>
               <th style="width:32px"></th>
             </tr>
@@ -1541,7 +1540,7 @@ function deleteLine(i) { lines.splice(i,1); renderLines(); }
 function renderLines() {
   const tbody = document.getElementById('lines-body');
   if(!lines.length) {
-    tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;padding:20px;color:#a19f9d">＋ 라인 추가 버튼을 눌러 회계 라인을 추가하세요</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:20px;color:#a19f9d">＋ 라인 추가 버튼을 눌러 회계 라인을 추가하세요</td></tr>`;
     updateTotals(); return;
   }
   const fmt = n=>(n||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -1556,23 +1555,22 @@ function renderLines() {
       }
     } else totalTxt = '<span style="color:#a19f9d">0.00</span>';
 
-    const drcrLabel = l.drcr==='DR'?'<span style="color:#0078d4;font-weight:600">DR</span>':l.drcr==='CR'?'<span style="color:#d83b01;font-weight:600">CR</span>':'<span style="color:#a19f9d">-</span>';
-    const cctrTxt = l.cctr ? `${l.cctr}` : '-';
-    const pcTxt   = l.pc   ? `${l.pc}` : '-';
-    const subTxt  = l.subpc? `${l.subpc}` : '-';
+    // Cost Center / Profit Center 병합 표기 (공식 양식과 동일하게 Cost/Profit Center 한 칸으로)
+    const cpTxt = l.cctrName ? `${l.cctr} ${l.cctrName}` : (l.cctr ? l.cctr : (l.pcName ? `${l.pc} ${l.pcName}` : (l.pc || '-')));
+    const subTxt  = l.subpcName ? `${l.subpc} ${l.subpcName}` : (l.subpc ? l.subpc : '-');
     const glTxt   = l.gl   ? l.gl : '-';
+    const drTxt = l.drcr==='DR' && amt ? `<span style="color:#0078d4">${fmt(amt)}</span>` : '<span style="color:#a19f9d">-</span>';
+    const crTxt = l.drcr==='CR' && amt ? `<span style="color:#d83b01">${fmt(amt)}</span>` : '<span style="color:#a19f9d">-</span>';
     return `<tr style="cursor:pointer" onclick="openLineModal(${i})">
       <td style="text-align:center;color:#a19f9d">${i+1}</td>
-      <td style="text-align:center">${drcrLabel}</td>
-      <td style="font-size:12px">${glTxt}</td>
       <td style="font-size:11px;color:#605e5c">${l.glName||'-'}</td>
-      <td style="font-size:11px">${l.cctrName||cctrTxt}</td>
-      <td style="font-size:11px">${l.pcName ? l.pc+' '+l.pcName : pcTxt}</td>
-      <td style="font-size:11px">${l.subpcName ? l.subpc+' '+l.subpcName : subTxt}</td>
+      <td style="font-size:12px">${glTxt}</td>
+      <td style="font-size:11px">${cpTxt}</td>
+      <td style="font-size:11px">${subTxt}</td>
       <td style="font-size:11px;color:#605e5c">${l.lineDesc||'-'}</td>
       <td style="font-size:11px">${l.currency||'EUR'}</td>
-
-      <td style="text-align:right;font-weight:600">${amt?fmt(amt):'<span style="color:#a19f9d">0.00</span>'}</td>
+      <td style="text-align:right;font-weight:600">${drTxt}</td>
+      <td style="text-align:right;font-weight:600">${crTxt}</td>
       <td style="text-align:right;font-weight:600;color:#323130">${totalTxt}</td>
       <td><button class="btn-del" onclick="event.stopPropagation();deleteLine(${i})">✕</button></td>
     </tr>`;
