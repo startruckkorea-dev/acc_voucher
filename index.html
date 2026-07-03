@@ -3091,7 +3091,7 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
 
   const bpCatSimple = (v.BPCategory||'').includes('Customer') ? 'Customer' : ((v.BPCategory||'').includes('Vendor') ? 'Vendor' : (esc(v.BPCategory)||'-'));
 
-  const roleCols=[['TL','Team Leader'],['MC','MC'],['CEO','CEO'],['RD','RD'],['AMGR','Accounting Mgr.'],['CFO','CFO']];
+  const roleCols=[['TL','Team Leader'],['MC','MC'],['CEO','CEO'],['RD','RD'],['ACC','Acc. Specialist'],['AMGR','Accounting Mgr.'],['CFO','CFO']];
   const apprByRole={}; (apprList||[]).forEach(a=>{apprByRole[a.ApproverRole]=a;});
   const fmtApprDateTime=s=>{if(!s)return '';const d=new Date(s);const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;};
   // "이준순 스타트럭코리아 IT(Junsoon Lee)" 형태에서 한글 이름만 추출
@@ -3129,9 +3129,11 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
               '<div style="font-size:7.5px;color:#333;white-space:nowrap">'+esc(a.ApproverName||'')+'</div>'+
               '<div style="font-size:7px;color:#666;white-space:nowrap">'+fmtApprDateTime(a.ApprovalDate)+'</div>'+
             '</div>';
+      } else if(!a){
+        val='<span style="color:#c7c6c4">―――</span>'; // 해당 결재건에 이 단계가 없음
       }
     } else {
-      val = a ? esc(a.ApproverName||'') : '';
+      val = a ? esc(a.ApproverName||'') : '<span style="color:#c7c6c4">―――</span>';
     }
     return '<td style="'+cellB+';text-align:center;font-size:9px">'+val+'</td>';
   }).join('');
