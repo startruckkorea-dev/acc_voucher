@@ -2182,6 +2182,7 @@ function resetForm(){
 
 // ── List ──
 const TYPE_LABEL={AP:'AP',AP_IMS:'AP (IMS)',AP_CR:'AP (CR)',AR:'AR',GL:'GL',FA:'FA',ADV:'ADV',SET:'SET'};
+const TYPE_LABEL_FULL={AP:'AP - Accounts Payable',AP_IMS:'AP (IMS) - 부품',AP_CR:'AP - Customer Refund',AR:'AR - Accounts Receivable',GL:'GL - General Ledger',FA:'Fixed Asset',ADV:'Advance Payment',SET:'Settlement of Advance'};
 let voucherListCache = []; // SharePoint에서 로드한 내 전표 캐시
 
 async function loadMyList() {
@@ -3150,7 +3151,7 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
         '<td style="'+lblB+'">Vendor/Customer No.</td><td style="'+cellB+'">'+(esc(v.BPCode)||'-')+'</td>'+
       '</tr>'+
       '<tr>'+
-        '<td style="'+lblB+'">Voucher class</td><td style="'+cellB+'">'+(esc(TYPE_LABEL[v.VoucherType]||v.VoucherType)||'-')+'</td>'+
+        '<td style="'+lblB+'">Voucher class</td><td style="'+cellB+'">'+(esc(TYPE_LABEL_FULL[v.VoucherType]||v.VoucherType)||'-')+'</td>'+
         '<td style="'+lblB+'">Vendor/Customer Name</td><td style="'+cellB+'">'+(esc(v.BPName)||'-')+'</td>'+
       '</tr>'+
       '<tr>'+
