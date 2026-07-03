@@ -3181,7 +3181,7 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
     '<div style="text-align:center;font-weight:700;font-size:16px;border:2px solid #000;border-bottom:none;padding:8px">Star Truck Korea Co., Ltd.</div>'+
     '<div style="text-align:center;font-weight:600;font-size:12px;border:2px solid #000;border-top:none;padding:6px">Application for Payments/Invoicing/Internal Posting</div>'+
     '<table style="width:100%;border-collapse:collapse;border:1px solid #000;border-top:none;table-layout:fixed">'+
-      '<colgroup><col style="width:12%"><col style="width:32%"><col style="width:21%"><col style="width:35%"></colgroup>'+
+      '<colgroup><col style="width:14%"><col style="width:30%"><col style="width:21%"><col style="width:35%"></colgroup>'+
       '<tr>'+
         '<td style="'+lblB+'">Submission Date</td><td style="'+cellB+'">'+submittedDate+'</td>'+
         '<td style="'+lblB+'">BP Category</td><td style="'+cellB+'">'+bpCatSimple+'</td>'+
@@ -3269,7 +3269,7 @@ async function buildPdfDocFromSegments(segments) {
   const { PDFDocument } = PDFLib;
   const mainDoc = await PDFDocument.create();
   const now=new Date(new Date().getTime()+9*3600*1000);
-  const ds=now.getUTCFullYear()+'-'+String(now.getUTCMonth()+1).padStart(2,'0')+'-'+String(now.getUTCDate()).padStart(2,'0');
+  const ds=now.getUTCFullYear()+'-'+String(now.getUTCMonth()+1).padStart(2,'0')+'-'+String(now.getUTCDate()).padStart(2,'0')+' '+String(now.getUTCHours()).padStart(2,'0')+':'+String(now.getUTCMinutes()).padStart(2,'0');
   async function dataUrlToUint8(u){const r=await fetch(u);const ab=await r.arrayBuffer();return new Uint8Array(ab);}
   async function makeHeaderBytes(text){
     const hc=document.createElement('canvas');hc.width=1190;hc.height=28;
@@ -3278,7 +3278,7 @@ async function buildPdfDocFromSegments(segments) {
     hx.fillStyle='#fff';hx.font='500 13px "Malgun Gothic",sans-serif';hx.textBaseline='middle';
     hx.fillText(text,14,13);
     hx.textAlign='right';hx.font='400 12px "Malgun Gothic",sans-serif';hx.fillStyle='rgba(255,255,255,.6)';
-    hx.fillText('출력일: '+ds,hc.width-14,13);
+    hx.fillText('출력일시: '+ds,hc.width-14,13);
     return dataUrlToUint8(hc.toDataURL('image/png'));
   }
   for(const seg of segments){
