@@ -3091,7 +3091,7 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
 
   const bpCatSimple = (v.BPCategory||'').includes('Customer') ? 'Customer' : ((v.BPCategory||'').includes('Vendor') ? 'Vendor' : (esc(v.BPCategory)||'-'));
 
-  const roleCols=[['TL','Team Leader'],['MC','MC'],['CEO','CEO'],['RD','RD'],['ACC','Acc. Specialist'],['AMGR','Accounting Mgr.'],['CFO','CFO']];
+  const roleCols=[['TL','Team Leader'],['MC','MC'],['CEO','CEO'],['RD','RD'],['ACC','Acc. Specialist'],['AMGR','Acc. Manager'],['CFO','CFO']];
   const NA_BADGE='<span style="display:inline-block;background:#e1dfdd;color:#484644;font-size:8.5px;font-weight:800;padding:2px 7px;border-radius:3px;letter-spacing:.3px">NOT REQUIRED</span>';
   const apprByRole={}; (apprList||[]).forEach(a=>{apprByRole[a.ApproverRole]=a;});
   const fmtApprDateTime=s=>{if(!s)return '';const d=new Date(s);const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;};
