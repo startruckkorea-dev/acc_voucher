@@ -1561,8 +1561,9 @@ function applyFixedLines() {
     if(!lines[1].lineDesc) lines[1].lineDesc = 'VAT';
     lines[1]._lockCC = true;
   } else {
-    if(lines[0]) lines[0]._lockCC = false;
-    if(lines[1]) lines[1]._lockCC = false;
+    // GL/FA로 전환 시: 이전에 이 기능으로 자동 채워졌던 BP/VAT 라인 내용을 완전히 초기화(빈 라인으로 복원)
+    if(lines[0] && lines[0]._lockCC) lines[0] = blankLine();
+    if(lines[1] && lines[1]._lockCC) lines[1] = blankLine();
   }
   renderLines();
 }
