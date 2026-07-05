@@ -594,7 +594,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">GL ACCOUNT <span style="color:#d83b01">*</span></div>
         <div style="display:flex;gap:8px;align-items:center">
           <input type="text" id="lm-gl" readonly placeholder="코드" style="width:90px;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px;background:#faf9f8">
-          <button onclick="openGlModal(_lineModalIdx)" style="padding:7px 14px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:12px;cursor:pointer">🔍 GL 검색</button>
+          <button id="lm-gl-search-btn" onclick="openGlModal(_lineModalIdx)" style="padding:7px 14px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:12px;cursor:pointer">🔍 GL 검색</button>
           <span id="lm-glname" style="font-size:12px;color:#323130;font-weight:500"></span>
         </div>
       </div>
@@ -1803,13 +1803,13 @@ function selectGL(code){
   if(document.getElementById('line-modal').classList.contains('open')){
     document.getElementById('lm-gl').value = gl.code;
     document.getElementById('lm-glname').textContent = gl.name;
-    applyPcSubpcAvailability(gl.pcEnabled, gl.subpcEnabled, gl.cctrEnabled);
+    applyPcSubpcAvailability(gl.pcEnabled, gl.subpcEnabled, gl.cctrEnabled, !!lines[currentGlIdx]._lockCC);
   }
   renderLines(); closeGlModal();
 }
 
 // COA 시트 H열/I열/J열 'O' 여부에 따라 Profit Center / Sub_PC / Cost Center select 활성/비활성 처리
-function applyPcSubpcAvailability(pcEnabled, subpcEnabled, cctrEnabled){
+function applyPcSubpcAvailability(pcEnabled, subpcEnabled, cctrEnabled, fullyLocked){
   const pcSel = document.getElementById('lm-pc');
   const subSel = document.getElementById('lm-subpc');
   const ccSel = document.getElementById('lm-cctr');
@@ -1826,6 +1826,20 @@ function applyPcSubpcAvailability(pcEnabled, subpcEnabled, cctrEnabled){
     ccSel.style.background = cctrEnabled ? '' : '#f3f2f1';
     ccSel.style.color = cctrEnabled ? '' : '#a19f9d';
     if(!cctrEnabled){ ccSel.value=''; document.getElementById('lm-cctrname').textContent=''; }
+  }
+  // No.7 확장: BP/VAT 자동 고정 라인(No.1/No.2)은 GL 계정 자체와 설명(Description)도 변경 불가하게 잠금
+  const glBtn = document.getElementById('lm-gl-search-btn');
+  const lineDescEl = document.getElementById('lm-linedesc');
+  if(glBtn){
+    glBtn.disabled = !!fullyLocked;
+    glBtn.style.opacity = fullyLocked ? '.5' : '';
+    glBtn.style.cursor = fullyLocked ? 'not-allowed' : 'pointer';
+    glBtn.title = fullyLocked ? '이 라인은 자동 고정되어 GL을 변경할 수 없습니다.' : '';
+  }
+  if(lineDescEl){
+    lineDescEl.readOnly = !!fullyLocked;
+    lineDescEl.style.background = fullyLocked ? '#f3f2f1' : '';
+    lineDescEl.style.color = fullyLocked ? '#a19f9d' : '';
   }
 }
 
@@ -2110,7 +2124,7 @@ function openLineModal(i) {
   const pcEnabled = l._lockCC ? false : (glInfo ? !!glInfo.pcEnabled : (l.pcEnabled !== false));
   const subpcEnabled = l._lockCC ? false : (glInfo ? !!glInfo.subpcEnabled : (l.subpcEnabled !== false));
   const cctrEnabled = l._lockCC ? false : (glInfo ? !!glInfo.cctrEnabled : (l.cctrEnabled !== false));
-  applyPcSubpcAvailability(pcEnabled, subpcEnabled, cctrEnabled);
+  applyPcSubpcAvailability(pcEnabled, subpcEnabled, cctrEnabled, !!l._lockCC);
   // Line Desc / Amount
   document.getElementById('lm-linedesc').value = l.lineDesc || '';
   const amtVal = l.amount ? parseFloat(l.amount).toLocaleString('en', {minimumFractionDigits:2, maximumFractionDigits:2}) : '';
@@ -2159,8 +2173,10 @@ function saveLineModal() {
   const subCode = document.getElementById('lm-subpc').value;
   lines[i].drcr     = document.getElementById('lm-drcr').value;
   lines[i].currency = document.getElementById('lm-currency').value;
-  lines[i].gl       = document.getElementById('lm-gl').value;
-  lines[i].glName   = document.getElementById('lm-glname').textContent;
+  if(!lines[i]._lockCC){
+    lines[i].gl       = document.getElementById('lm-gl').value;
+    lines[i].glName   = document.getElementById('lm-glname').textContent;
+  }
   lines[i].cctr     = ccCode;
   lines[i].cctrName = COST_CENTERS.find(c=>c.code===ccCode)?.name || '';
   lines[i].pc       = pcCode;
@@ -2170,7 +2186,9 @@ function saveLineModal() {
   lines[i].pcEnabled    = !document.getElementById('lm-pc').disabled;
   lines[i].subpcEnabled = !document.getElementById('lm-subpc').disabled;
   lines[i].cctrEnabled  = !document.getElementById('lm-cctr').disabled;
-  lines[i].lineDesc  = document.getElementById('lm-linedesc').value;
+  if(!lines[i]._lockCC){
+    lines[i].lineDesc  = document.getElementById('lm-linedesc').value;
+  }
   lines[i].unitPrice = '';
   lines[i].qty       = 1;
   lines[i].amount    = parseComma(document.getElementById('lm-amount').value);
