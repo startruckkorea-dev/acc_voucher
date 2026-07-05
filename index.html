@@ -1604,12 +1604,12 @@ function renderLines() {
     const rowBg = isReservedRow ? 'background:#f3f2f1' : '';
     const rowCursor = reservedUnusable ? 'cursor:not-allowed' : 'cursor:pointer';
     const rowClick = reservedUnusable ? `onclick="showAccAlert('이 라인은 사용할 수 없습니다','GL/Fixed Asset 전표에서는 No.1·No.2 라인이 예약되어 있어 사용하지 않습니다.\\n3번 라인부터 입력해주세요.','🔒')"` : `onclick="openLineModal(${i})"`;
-    return `<tr style="${rowCursor};${rowBg}" ${rowClick}>
-      <td style="font-size:11px;color:${reservedUnusable?'#c7c6c4':'#605e5c'}">${reservedUnusable ? '<span style="color:#c7c6c4">🔒 미사용</span>' : glDescTxt}</td>
-      <td style="font-size:12px">${reservedUnusable ? '-' : glTxt}</td>
-      <td style="font-size:11px">${reservedUnusable ? '<span style="color:#c7c6c4">-</span>' : cpTxt}</td>
-      <td style="font-size:11px">${reservedUnusable ? '<span style="color:#c7c6c4">-</span>' : subTxt}</td>
-      <td style="font-size:11px;color:#605e5c">${reservedUnusable ? '-' : (l.lineDesc||'-')}</td>
+    return `<tr style="${rowCursor}" ${rowClick}>
+      <td style="font-size:11px;color:${reservedUnusable?'#c7c6c4':'#605e5c'};${isReservedRow?rowBg:''}">${reservedUnusable ? '<span style="color:#c7c6c4">🔒 미사용</span>' : glDescTxt}</td>
+      <td style="font-size:12px;${isReservedRow?rowBg:''}">${reservedUnusable ? '-' : glTxt}</td>
+      <td style="font-size:11px;${isReservedRow?rowBg:''}">${reservedUnusable ? '<span style="color:#c7c6c4">-</span>' : cpTxt}</td>
+      <td style="font-size:11px;${isReservedRow?rowBg:''}">${reservedUnusable ? '<span style="color:#c7c6c4">-</span>' : subTxt}</td>
+      <td style="font-size:11px;color:#605e5c;${isReservedRow?rowBg:''}">${reservedUnusable ? '-' : (l.lineDesc||'-')}</td>
       <td style="font-size:11px">${l.currency||'EUR'}</td>
       <td style="text-align:right;font-weight:600">${drTxt}</td>
       <td style="text-align:right;font-weight:600">${crTxt}</td>
