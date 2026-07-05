@@ -1615,7 +1615,7 @@ function renderLines() {
       <td style="font-size:12px;white-space:nowrap;${idBg};${restBg}">${reservedUnusable ? '-' : (l.gl ? lockIcon+glTxt : glTxt)}</td>
       <td style="font-size:11px;${idBg};${restBg}">${reservedUnusable ? '<span style="color:#c7c6c4">-</span>' : cpTxt}</td>
       <td style="font-size:11px;${idBg};${restBg}">${reservedUnusable ? '<span style="color:#c7c6c4">-</span>' : subTxt}</td>
-      <td style="font-size:11px;color:#605e5c;${restBg}">${reservedUnusable ? '-' : (l.lineDesc||'-')}</td>
+      <td style="font-size:11px;color:#605e5c;${idBg};${restBg}">${reservedUnusable ? '-' : (l.lineDesc ? lockIcon+l.lineDesc : '-')}</td>
       <td style="font-size:11px;${restBg}">${l.currency||'EUR'}</td>
       <td style="text-align:right;font-weight:600;${restBg}">${drTxt}</td>
       <td style="text-align:right;font-weight:600;${restBg}">${crTxt}</td>
