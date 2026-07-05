@@ -3207,17 +3207,25 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
   const cellB='border:1px solid #000;padding:4px 6px';
   const lblB=cellB+';background:#f0f0f0;font-weight:600;white-space:nowrap;padding:4px 4px;font-size:10.5px';
 
-  const lineRows=(lines_data||[]).map((l,i)=>(
-    '<tr>'+
-      '<td style="'+cellB+'">'+esc(l.glName)+'</td>'+
-      '<td style="'+cellB+'">'+esc(l.gl)+'</td>'+
-      '<td style="'+cellB+'">'+esc(l.cctrName||l.cctr||l.pcName||l.pc)+'</td>'+
-      '<td style="'+cellB+'">'+esc(l.subpcName||l.subpc)+'</td>'+
-      '<td style="'+cellB+'">'+esc(l.lineDesc)+'</td>'+
-      '<td style="'+cellB+';text-align:center">'+esc(l.currency)+'</td>'+
-      '<td style="'+cellB+';text-align:right">'+(l.drcr==='DR'?fmt2(l.amount):'')+'</td>'+
-      '<td style="'+cellB+';text-align:right">'+(l.drcr==='CR'?fmt2(l.amount):'')+'</td>'+
-    '</tr>')).join('');
+  const cellThin='border:1px solid #ddd;padding:4px 6px';
+  const FIXED_BG='#fce4d6';
+  const lineRows=(lines_data||[]).map((l,i)=>{
+    const isFixedRow = (i===0 || i===1); // BP/VAT 자동 고정 라인 — 음영 + 굵게 표시
+    const isVatRow = (i===1);
+    const bg = isFixedRow ? ';background:'+FIXED_BG : '';
+    const bold = isFixedRow ? ';font-weight:700' : '';
+    const bottomThick = isVatRow ? ';border-bottom:2px solid #000' : ''; // VAT 라인 아래 굵은 구분선
+    return '<tr>'+
+      '<td style="'+cellThin+bg+bold+bottomThick+'">'+esc(l.glName)+'</td>'+
+      '<td style="'+cellThin+bg+bold+bottomThick+'">'+esc(l.gl)+'</td>'+
+      '<td style="'+cellThin+bg+bottomThick+'">'+esc(l.cctrName||l.cctr||l.pcName||l.pc)+'</td>'+
+      '<td style="'+cellThin+bg+bottomThick+'">'+esc(l.subpcName||l.subpc)+'</td>'+
+      '<td style="'+cellThin+bg+bottomThick+'">'+esc(l.lineDesc)+'</td>'+
+      '<td style="'+cellThin+bg+bottomThick+';text-align:center">'+esc(l.currency)+'</td>'+
+      '<td style="'+cellThin+bottomThick+';text-align:right">'+(l.drcr==='DR'?fmt2(l.amount):'')+'</td>'+
+      '<td style="'+cellThin+bottomThick+';text-align:right">'+(l.drcr==='CR'?fmt2(l.amount):'')+'</td>'+
+    '</tr>';
+  }).join('');
   const drSum=(lines_data||[]).filter(l=>l.drcr==='DR').reduce((s,l)=>s+(parseFloat(l.amount)||0),0);
   const crSum=(lines_data||[]).filter(l=>l.drcr==='CR').reduce((s,l)=>s+(parseFloat(l.amount)||0),0);
 
