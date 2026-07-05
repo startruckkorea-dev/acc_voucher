@@ -3224,9 +3224,9 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
     return '<tr>'+
       '<td style="'+cellThin+bg+bold+bottomThick+'">'+esc(l.glName)+'</td>'+
       '<td style="'+cellThin+bg+bold+bottomThick+'">'+esc(l.gl)+'</td>'+
-      '<td style="'+cellThin+bg+bottomThick+'">'+esc(l.cctrName||l.cctr||l.pcName||l.pc)+'</td>'+
-      '<td style="'+cellThin+bg+bottomThick+'">'+esc(l.subpcName||l.subpc)+'</td>'+
-      '<td style="'+cellThin+bg+bottomThick+'">'+esc(l.lineDesc)+'</td>'+
+      '<td style="'+cellThin+bottomThick+'">'+esc(l.cctrName||l.cctr||l.pcName||l.pc)+'</td>'+
+      '<td style="'+cellThin+bottomThick+'">'+esc(l.subpcName||l.subpc)+'</td>'+
+      '<td style="'+cellThin+bottomThick+'">'+esc(l.lineDesc)+'</td>'+
       '<td style="'+cellThin+bottomThick+';text-align:center">'+esc(l.currency)+'</td>'+
       '<td style="'+cellThin+bottomThick+';text-align:right">'+(l.drcr==='DR'?fmt2(l.amount):'')+'</td>'+
       '<td style="'+cellThin+bottomThick+';text-align:right">'+(l.drcr==='CR'?fmt2(l.amount):'')+'</td>'+
@@ -3292,7 +3292,7 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
         '<td style="'+cellB+'">'+hdrCurrency+'</td><td style="'+cellB+';text-align:right;font-weight:700">'+hdrTotalAmount+'</td>'+
       '</tr>'+
       '<tr>'+
-        '<td style="'+lblB+'">Exchange rate</td><td style="'+cellB+';font-size:10px">'+exRateDisplay+'</td>'+
+        '<td style="'+lblB+'">Exchange rate</td><td style="'+cellB+';font-size:8.5px;padding:3px 6px;line-height:1.4">'+exRateDisplay+' <span style="color:#c0392b;font-size:8px;white-space:nowrap">◀특정환율 필요시 자동으로 입력됩니다.</span></td>'+
         '<td style="'+lblB+'">KRW TOTAL</td><td style="'+cellB+';text-align:right;font-weight:700">'+fmtK(v.TotalDR_KRW)+'</td>'+
       '</tr>'+
     '</table>'+
