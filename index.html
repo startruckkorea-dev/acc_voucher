@@ -3185,13 +3185,12 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
   const esc = s => stripHtml(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const submittedDate = v.SubmittedDate ? (()=>{const d=new Date(v.SubmittedDate);const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;})() : '-';
   const invoiceDate = v.InvoiceDate ? v.InvoiceDate.slice(0,10) : '-';
-  const exRateParts = v.ExchangeRate ? v.ExchangeRate.split(',').map(s=>{const parts=s.split(':');const c=parts[0];const rv=parseFloat(parts[1]);return rv>0?(c+' '+rv.toLocaleString('ko-KR',{maximumFractionDigits:4})):null;}).filter(Boolean) : [];
-  const exRateDisplay = exRateParts.length ? (
-    exRateParts.slice(0,3).join('  &nbsp;|&nbsp;  ') +
-    (exRateParts.length>3 ? '<br>'+exRateParts.slice(3).join('  &nbsp;|&nbsp;  ') : '')
-  ) : '-';
-
   const lineCurrencies=[...new Set((lines_data||[]).map(l=>l.currency).filter(c=>c&&c!=='KRW'))];
+  const exRateParts = v.ExchangeRate ? v.ExchangeRate.split(',').map(s=>{const parts=s.split(':');const c=parts[0];const rv=parseFloat(parts[1]);return rv>0?{c,txt:c+' '+rv.toLocaleString('ko-KR',{maximumFractionDigits:4})}:null;}).filter(Boolean) : [];
+  // 실제 라인에서 쓰인 통화만 표시 (전체 마스터 환율 목록이 아니라). 전부 KRW면 표시할 환율 자체가 없음(공란)
+  const usedExRateParts = exRateParts.filter(p=>lineCurrencies.includes(p.c)).map(p=>p.txt);
+  const exRateDisplay = usedExRateParts.length ? usedExRateParts.join('  &nbsp;|&nbsp;  ') : '-';
+
   let hdrCurrency='KRW', hdrTotalAmount=fmtK(v.TotalDR_KRW);
   if(lineCurrencies.length===1){
     hdrCurrency=lineCurrencies[0];
@@ -3216,9 +3215,9 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
   const cellThin='border:1px solid #ddd;padding:4px 6px';
   const FIXED_BG='#fce4d6';
   const lineRows=(lines_data||[]).map((l,i)=>{
-    const isFixedRow = (i===0 || i===1); // BP/VAT 자동 고정 라인 — 음영 + 굵게 표시
+    const isFixedRow = (i===0 || i===1); // BP/VAT 자동 고정 라인 — 굵게 + 구분선 표시
     const isVatRow = (i===1);
-    const bg = isFixedRow ? ';background:'+FIXED_BG : '';
+    const bg = ';background:'+FIXED_BG; // 원본 템플릿과 동일하게 G/L Account Description·G/L Acc No. 열 전체에 음영
     const bold = isFixedRow ? ';font-weight:700' : '';
     const bottomThick = isVatRow ? ';border-bottom:2px solid #000' : ''; // VAT 라인 아래 굵은 구분선
     return '<tr>'+
