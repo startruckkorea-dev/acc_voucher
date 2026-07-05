@@ -1601,19 +1601,23 @@ function renderLines() {
     const isReservedRow = (i===0 || i===1);
     const isGlFa = curType==='GL' || curType==='FA';
     const reservedUnusable = isReservedRow && isGlFa; // GL/FA 선택 시엔 이 두 라인 자체를 아예 못 씀
-    const rowBg = isReservedRow ? 'background:#f3f2f1' : '';
+    // 활성 상태(BP/VAT로 실제 쓰이는 경우): G/L Account Description·G/L Acc No. 두 칸만 회색
+    // GL/FA로 미사용 처리된 경우: 라인 전체를 회색으로
+    const idBg = isReservedRow ? 'background:#f3f2f1' : '';
+    const restBg = reservedUnusable ? 'background:#f3f2f1' : '';
+    const lockIcon = (isReservedRow && !reservedUnusable) ? '<span style="color:#e8590c;margin-right:4px">🔒</span>' : '';
     const rowCursor = reservedUnusable ? 'cursor:not-allowed' : 'cursor:pointer';
     const rowClick = reservedUnusable ? `onclick="showAccAlert('이 라인은 사용할 수 없습니다','GL/Fixed Asset 전표에서는 No.1·No.2 라인이 예약되어 있어 사용하지 않습니다.\\n3번 라인부터 입력해주세요.','🔒')"` : `onclick="openLineModal(${i})"`;
     return `<tr style="${rowCursor}" ${rowClick}>
-      <td style="font-size:11px;color:${reservedUnusable?'#c7c6c4':'#605e5c'};${isReservedRow?rowBg:''}">${reservedUnusable ? '<span style="color:#c7c6c4">🔒 미사용</span>' : glDescTxt}</td>
-      <td style="font-size:12px;${isReservedRow?rowBg:''}">${reservedUnusable ? '-' : glTxt}</td>
-      <td style="font-size:11px;${isReservedRow?rowBg:''}">${reservedUnusable ? '<span style="color:#c7c6c4">-</span>' : cpTxt}</td>
-      <td style="font-size:11px;${isReservedRow?rowBg:''}">${reservedUnusable ? '<span style="color:#c7c6c4">-</span>' : subTxt}</td>
-      <td style="font-size:11px;color:#605e5c;${isReservedRow?rowBg:''}">${reservedUnusable ? '-' : (l.lineDesc||'-')}</td>
-      <td style="font-size:11px">${l.currency||'EUR'}</td>
-      <td style="text-align:right;font-weight:600">${drTxt}</td>
-      <td style="text-align:right;font-weight:600">${crTxt}</td>
-      <td style="text-align:right;font-weight:600;color:#323130">${totalTxt}</td>
+      <td style="font-size:11px;color:${reservedUnusable?'#c7c6c4':'#605e5c'};${idBg};${restBg}">${reservedUnusable ? '<span style="color:#c7c6c4">🔒 미사용</span>' : lockIcon+glDescTxt}</td>
+      <td style="font-size:12px;${idBg};${restBg}">${reservedUnusable ? '-' : lockIcon+glTxt}</td>
+      <td style="font-size:11px;${restBg}">${reservedUnusable ? '<span style="color:#c7c6c4">-</span>' : cpTxt}</td>
+      <td style="font-size:11px;${restBg}">${reservedUnusable ? '<span style="color:#c7c6c4">-</span>' : subTxt}</td>
+      <td style="font-size:11px;color:#605e5c;${restBg}">${reservedUnusable ? '-' : (l.lineDesc||'-')}</td>
+      <td style="font-size:11px;${restBg}">${l.currency||'EUR'}</td>
+      <td style="text-align:right;font-weight:600;${restBg}">${drTxt}</td>
+      <td style="text-align:right;font-weight:600;${restBg}">${crTxt}</td>
+      <td style="text-align:right;font-weight:600;color:#323130;${restBg}">${totalTxt}</td>
       <td><button class="btn-del" onclick="event.stopPropagation();deleteLine(${i})">✕</button></td>
     </tr>`;
   }).join('');
