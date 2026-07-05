@@ -451,7 +451,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
           <thead>
             <tr>
               <th style="min-width:160px">G/L Account Description</th>
-              <th style="width:90px">G/L Acc No.</th>
+              <th style="width:120px">G/L Acc No.</th>
               <th style="min-width:140px">Cost/Profit Center</th>
               <th style="min-width:120px">Sub_PC</th>
               <th style="min-width:110px">Description</th>
@@ -1612,7 +1612,7 @@ function renderLines() {
     const rowClick = reservedUnusable ? `onclick="showAccAlert('이 라인은 사용할 수 없습니다','GL/Fixed Asset 전표에서는 No.1·No.2 라인이 예약되어 있어 사용하지 않습니다.\\n3번 라인부터 입력해주세요.','🔒')"` : `onclick="openLineModal(${i})"`;
     return `<tr style="${rowCursor}" ${rowClick}>
       <td style="font-size:11px;color:${reservedUnusable?'#c7c6c4':'#605e5c'};${idBg};${restBg}">${reservedUnusable ? '<span style="color:#c7c6c4">🔒 미사용</span>' : (l.glName ? lockIcon+glDescTxt : glDescTxt)}</td>
-      <td style="font-size:12px;${idBg};${restBg}">${reservedUnusable ? '-' : (l.gl ? lockIcon+glTxt : glTxt)}</td>
+      <td style="font-size:12px;white-space:nowrap;${idBg};${restBg}">${reservedUnusable ? '-' : (l.gl ? lockIcon+glTxt : glTxt)}</td>
       <td style="font-size:11px;${idBg};${restBg}">${reservedUnusable ? '<span style="color:#c7c6c4">-</span>' : cpTxt}</td>
       <td style="font-size:11px;${idBg};${restBg}">${reservedUnusable ? '<span style="color:#c7c6c4">-</span>' : subTxt}</td>
       <td style="font-size:11px;color:#605e5c;${restBg}">${reservedUnusable ? '-' : (l.lineDesc||'-')}</td>
