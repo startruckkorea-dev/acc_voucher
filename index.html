@@ -3217,7 +3217,7 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
   const lineRows=(lines_data||[]).map((l,i)=>{
     const isFixedRow = (i===0 || i===1); // BP/VAT 자동 고정 라인 — 굵게 + 구분선 표시
     const isVatRow = (i===1);
-    const bg = ';background:'+FIXED_BG; // 원본 템플릿과 동일하게 G/L Account Description·G/L Acc No. 열 전체에 음영
+    const bg = ';background-color:'+FIXED_BG; // 원본 템플릿과 동일하게 G/L Account Description·G/L Acc No. 열 전체에 음영 (html2canvas가 background 축약형을 줄바꿈 셀에서 놓치는 이슈 방지 위해 background-color로 명시)
     const bold = isFixedRow ? ';font-weight:700' : '';
     const bottomThick = isVatRow ? ';border-bottom:2px solid #000' : ''; // VAT 라인 아래 굵은 구분선
     return '<tr>'+
