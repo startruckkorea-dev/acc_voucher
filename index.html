@@ -710,7 +710,7 @@ const TEAM_FILE_NAME     = 'acc_voucher_GL_CCTR_COPA.xlsx'; // 구 통합 마스
 
 let msal_g = null, user = null, siteId = null, nasId = null;
 let bpData = []; // SharePoint Excel에서 로드
-let lines  = [];
+let lines  = Array.from({length:6}, () => ({drcr:'',gl:'',glName:'',cctr:'',cctrName:'',pc:'',pcName:'',subpc:'',subpcName:'',lineDesc:'',currency:'KRW',unitPrice:'',qty:1,amount:0}));
 let currentGlIdx = null;
 let voucherStore = JSON.parse(localStorage.getItem('stk_acc_vouchers') || '[]');
 
@@ -1352,6 +1352,7 @@ function onTypeChange() {
   const type = document.getElementById('v-type').value;
   document.getElementById('bp-req-mark').style.display = (type==='GL')?'none':'';
   renderApproval();
+  applyFixedLines();
 
   // No.6: AP/AR 유형일 때 BP/VAT 라인 추가 버튼 표시
   const showBpVat = ['AP','AP_IMS','AP_CR','AR'].includes(type);
@@ -1534,6 +1535,38 @@ function addVATLine() {
 }
 function deleteLine(i) { lines.splice(i,1); renderLines(); }
 
+// No.6 확장: Voucher Type이 GL/FA가 아니면 항상 No.1=BP라인, No.2=VAT라인(GL 110510 고정)으로 자동 구성.
+// 최소 6줄은 Voucher Type/BP 선택 여부와 무관하게 항상 유지.
+function blankLine() {
+  return {drcr:'',gl:'',glName:'',cctr:'',cctrName:'',pc:'',pcName:'',subpc:'',subpcName:'',lineDesc:'',currency:'KRW',unitPrice:'',qty:1,amount:0};
+}
+function applyFixedLines() {
+  const type = document.getElementById('v-type')?.value||'';
+  const isSpecial = !!type && type!=='GL' && type!=='FA';
+  while(lines.length < 6) lines.push(blankLine());
+
+  if(isSpecial) {
+    const bpCode = document.getElementById('v-bp-code')?.value||'';
+    const bpName = document.getElementById('v-bp-name')?.value||'';
+    if(bpCode) {
+      lines[0].gl = bpCode; lines[0].glName = bpName;
+      lines[0].cctr=''; lines[0].cctrName=''; lines[0].pc=''; lines[0].pcName=''; lines[0].subpc=''; lines[0].subpcName='';
+      if(!lines[0].lineDesc) lines[0].lineDesc = 'BP';
+      lines[0]._lockCC = true;
+    }
+    const vatGL = GL_LIST.find(g=>g.code==='110510');
+    lines[1].gl = '110510';
+    lines[1].glName = vatGL ? vatGL.name : 'VAT';
+    lines[1].cctr=''; lines[1].cctrName=''; lines[1].pc=''; lines[1].pcName=''; lines[1].subpc=''; lines[1].subpcName='';
+    if(!lines[1].lineDesc) lines[1].lineDesc = 'VAT';
+    lines[1]._lockCC = true;
+  } else {
+    if(lines[0]) lines[0]._lockCC = false;
+    if(lines[1]) lines[1]._lockCC = false;
+  }
+  renderLines();
+}
+
 function renderLines() {
   const tbody = document.getElementById('lines-body');
   if(!lines.length) {
@@ -1553,8 +1586,8 @@ function renderLines() {
     } else totalTxt = '<span style="color:#a19f9d">0.00</span>';
 
     // Cost Center / Profit Center 병합 표기 (공식 양식과 동일하게 Cost/Profit Center 한 칸으로)
-    const cpTxt = l.cctrName ? `${l.cctr} ${l.cctrName}` : (l.cctr ? l.cctr : (l.pcName ? `${l.pc} ${l.pcName}` : (l.pc || '-')));
-    const subTxt  = l.subpcName ? `${l.subpc} ${l.subpcName}` : (l.subpc ? l.subpc : '-');
+    const cpTxt = l._lockCC ? '<span style="color:#c7c6c4">🔒 비활성화</span>' : (l.cctrName ? `${l.cctr} ${l.cctrName}` : (l.cctr ? l.cctr : (l.pcName ? `${l.pc} ${l.pcName}` : (l.pc || '-'))));
+    const subTxt  = l._lockCC ? '<span style="color:#c7c6c4">🔒</span>' : (l.subpcName ? `${l.subpc} ${l.subpcName}` : (l.subpc ? l.subpc : '-'));
     const glTxt   = l.gl   ? l.gl : '-';
     const drTxt = l.drcr==='DR' && amt ? `<span style="color:#0078d4">${fmt(amt)}</span>` : '<span style="color:#a19f9d">-</span>';
     const crTxt = l.drcr==='CR' && amt ? `<span style="color:#d83b01">${fmt(amt)}</span>` : '<span style="color:#a19f9d">-</span>';
@@ -1727,6 +1760,7 @@ function selectBP(code) {
     wrapper.style.background = '';
     warningEl.style.display = 'none';
   }
+  applyFixedLines();
 }
 
 // ── GL Modal ──
@@ -2073,9 +2107,9 @@ function openLineModal(i) {
   // GL의 COA 등록 정보(H열/I열/J열 'O') 기준으로 PC/Sub_PC/Cost Center 활성화 여부 반영
   // GL이 아직 선택 안 된 새 라인은 기본적으로 전부 활성화 상태로 둠
   const glInfo = l.gl ? GL_LIST.find(g=>g.code===l.gl) : null;
-  const pcEnabled = glInfo ? !!glInfo.pcEnabled : (l.pcEnabled !== false);
-  const subpcEnabled = glInfo ? !!glInfo.subpcEnabled : (l.subpcEnabled !== false);
-  const cctrEnabled = glInfo ? !!glInfo.cctrEnabled : (l.cctrEnabled !== false);
+  const pcEnabled = l._lockCC ? false : (glInfo ? !!glInfo.pcEnabled : (l.pcEnabled !== false));
+  const subpcEnabled = l._lockCC ? false : (glInfo ? !!glInfo.subpcEnabled : (l.subpcEnabled !== false));
+  const cctrEnabled = l._lockCC ? false : (glInfo ? !!glInfo.cctrEnabled : (l.cctrEnabled !== false));
   applyPcSubpcAvailability(pcEnabled, subpcEnabled, cctrEnabled);
   // Line Desc / Amount
   document.getElementById('lm-linedesc').value = l.lineDesc || '';
@@ -2211,7 +2245,7 @@ function resetForm(){
   });
   document.getElementById('voucher-id-badge').textContent='';
   accFiles=[]; renderAccFiles();
-  lines=[];renderLines();renderApproval();
+  lines=Array.from({length:6}, () => blankLine());renderLines();renderApproval();
 }
 
 // ── List ──
