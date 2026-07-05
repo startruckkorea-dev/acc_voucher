@@ -3221,7 +3221,7 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
       '<td style="'+cellThin+bg+bottomThick+'">'+esc(l.cctrName||l.cctr||l.pcName||l.pc)+'</td>'+
       '<td style="'+cellThin+bg+bottomThick+'">'+esc(l.subpcName||l.subpc)+'</td>'+
       '<td style="'+cellThin+bg+bottomThick+'">'+esc(l.lineDesc)+'</td>'+
-      '<td style="'+cellThin+bg+bottomThick+';text-align:center">'+esc(l.currency)+'</td>'+
+      '<td style="'+cellThin+bottomThick+';text-align:center">'+esc(l.currency)+'</td>'+
       '<td style="'+cellThin+bottomThick+';text-align:right">'+(l.drcr==='DR'?fmt2(l.amount):'')+'</td>'+
       '<td style="'+cellThin+bottomThick+';text-align:right">'+(l.drcr==='CR'?fmt2(l.amount):'')+'</td>'+
     '</tr>';
