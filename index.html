@@ -870,7 +870,7 @@ async function boot(account) {
   document.getElementById('v-requester').value = account.name||account.username;
   document.getElementById('v-date').value = new Date().toISOString().slice(0,10);
   renderApproval();
-  renderLines();
+  applyFixedLines();
   switchTab('new');
   loadCCTRMaster(account.name).catch(e=>console.warn('CCTR 로드 실패:', e.message));
   loadEmployees().catch(e=>console.warn('Employee 로드 실패:', e.message));
@@ -1542,26 +1542,30 @@ function blankLine() {
 }
 function applyFixedLines() {
   const type = document.getElementById('v-type')?.value||'';
-  const isSpecial = !!type && type!=='GL' && type!=='FA';
+  // GL/Fixed Asset이 아니면(Type 미선택 상태 포함) No.1/No.2를 항상 시스템 예약 라인으로 잠금 처리
+  // → 직원이 Type/BP 지정 전에 미리 값을 입력해두는 것을 원천 차단
+  const isSpecial = type !== 'GL' && type !== 'FA';
   while(lines.length < 6) lines.push(blankLine());
 
   if(isSpecial) {
     const bpCode = document.getElementById('v-bp-code')?.value||'';
     const bpName = document.getElementById('v-bp-name')?.value||'';
-    if(bpCode) {
-      lines[0].gl = bpCode; lines[0].glName = bpName;
-      lines[0].cctr=''; lines[0].cctrName=''; lines[0].pc=''; lines[0].pcName=''; lines[0].subpc=''; lines[0].subpcName='';
-      if(!lines[0].lineDesc) lines[0].lineDesc = 'BP';
-      lines[0]._lockCC = true;
-    }
+    // No.1: BP 정보가 아직 없으면 빈 상태로 "잠금만" 유지 (내용은 없지만 수정은 불가)
+    lines[0].gl = bpCode || '';
+    lines[0].glName = bpCode ? bpName : '';
+    lines[0].lineDesc = bpCode ? 'BP' : '';
+    lines[0].cctr=''; lines[0].cctrName=''; lines[0].pc=''; lines[0].pcName=''; lines[0].subpc=''; lines[0].subpcName='';
+    lines[0]._lockCC = true;
+
+    // No.2: VAT는 BP 여부와 무관하게 Type이 정해지는 즉시(혹은 Type 미선택 상태에서도) 항상 고정
     const vatGL = GL_LIST.find(g=>g.code==='110510');
     lines[1].gl = '110510';
     lines[1].glName = vatGL ? vatGL.name : 'VAT';
     lines[1].cctr=''; lines[1].cctrName=''; lines[1].pc=''; lines[1].pcName=''; lines[1].subpc=''; lines[1].subpcName='';
-    if(!lines[1].lineDesc) lines[1].lineDesc = 'VAT';
+    lines[1].lineDesc = 'VAT';
     lines[1]._lockCC = true;
   } else {
-    // GL/FA로 전환 시: 이전에 이 기능으로 자동 채워졌던 BP/VAT 라인 내용을 완전히 초기화(빈 라인으로 복원)
+    // GL/Fixed Asset 선택 시에만 자유 입력 라인으로 전환 (이전 자동 채움 내용은 초기화)
     if(lines[0] && lines[0]._lockCC) lines[0] = blankLine();
     if(lines[1] && lines[1]._lockCC) lines[1] = blankLine();
   }
@@ -1592,9 +1596,10 @@ function renderLines() {
     const glTxt   = l.gl   ? l.gl : '-';
     const drTxt = l.drcr==='DR' && amt ? `<span style="color:#0078d4">${fmt(amt)}</span>` : '<span style="color:#a19f9d">-</span>';
     const crTxt = l.drcr==='CR' && amt ? `<span style="color:#d83b01">${fmt(amt)}</span>` : '<span style="color:#a19f9d">-</span>';
+    const glDescTxt = (l._lockCC && !l.glName) ? '<span style="color:#c7c6c4">🔒 BP 선택 대기</span>' : (l.glName||'-');
     return `<tr style="cursor:pointer" onclick="openLineModal(${i})">
       <td style="text-align:center;color:#a19f9d">${i+1}</td>
-      <td style="font-size:11px;color:#605e5c">${l.glName||'-'}</td>
+      <td style="font-size:11px;color:#605e5c">${glDescTxt}</td>
       <td style="font-size:12px">${glTxt}</td>
       <td style="font-size:11px">${cpTxt}</td>
       <td style="font-size:11px">${subTxt}</td>
@@ -2086,6 +2091,11 @@ function buildApprovers() {
 let _lineModalIdx = -1;
 
 function openLineModal(i) {
+  const l0 = lines[i] || {};
+  if(i===0 && l0._lockCC && !l0.gl){
+    alert('이 라인은 BP(Vendor/Customer) 선택 시 자동으로 채워집니다.\n먼저 "2. BP 정보"에서 Vendor/Customer No.를 선택해주세요.');
+    return;
+  }
   _lineModalIdx = i;
   const l = lines[i] || {};
   document.getElementById('line-modal-title').textContent = `라인 ${i+1} 편집`;
@@ -2264,7 +2274,7 @@ function resetForm(){
   });
   document.getElementById('voucher-id-badge').textContent='';
   accFiles=[]; renderAccFiles();
-  lines=Array.from({length:6}, () => blankLine());renderLines();renderApproval();
+  lines=Array.from({length:6}, () => blankLine());renderApproval();applyFixedLines();
 }
 
 // ── List ──
