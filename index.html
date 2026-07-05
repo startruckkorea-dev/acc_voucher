@@ -450,7 +450,6 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         <table class="lines">
           <thead>
             <tr>
-              <th style="width:36px">No</th>
               <th style="min-width:160px">G/L Account Description</th>
               <th style="width:90px">G/L Acc No.</th>
               <th style="min-width:140px">Cost/Profit Center</th>
@@ -1575,10 +1574,11 @@ function applyFixedLines() {
 function renderLines() {
   const tbody = document.getElementById('lines-body');
   if(!lines.length) {
-    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:20px;color:#a19f9d">＋ 라인 추가 버튼을 눌러 회계 라인을 추가하세요</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:20px;color:#a19f9d">＋ 라인 추가 버튼을 눌러 회계 라인을 추가하세요</td></tr>`;
     updateTotals(); return;
   }
   const fmt = n=>(n||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const curType = document.getElementById('v-type')?.value||'';
   tbody.innerHTML = lines.map((l,i)=>{
     const amt = parseFloat(l.amount)||0;
     let totalTxt = '';
@@ -1597,13 +1597,19 @@ function renderLines() {
     const drTxt = l.drcr==='DR' && amt ? `<span style="color:#0078d4">${fmt(amt)}</span>` : '<span style="color:#a19f9d">-</span>';
     const crTxt = l.drcr==='CR' && amt ? `<span style="color:#d83b01">${fmt(amt)}</span>` : '<span style="color:#a19f9d">-</span>';
     const glDescTxt = (l._lockCC && !l.glName) ? '<span style="color:#c7c6c4">🔒 BP 선택 대기</span>' : (l.glName||'-');
-    return `<tr style="cursor:pointer" onclick="openLineModal(${i})">
-      <td style="text-align:center;color:#a19f9d">${i+1}</td>
-      <td style="font-size:11px;color:#605e5c">${glDescTxt}</td>
-      <td style="font-size:12px">${glTxt}</td>
-      <td style="font-size:11px">${cpTxt}</td>
-      <td style="font-size:11px">${subTxt}</td>
-      <td style="font-size:11px;color:#605e5c">${l.lineDesc||'-'}</td>
+    // No.1/No.2는 GL/Fixed Asset 제외 전 Type에서 BP/VAT 전용으로 항상 예약됨 → 회색 배경으로 "고정 라인" 느낌 부여
+    const isReservedRow = (i===0 || i===1);
+    const isGlFa = curType==='GL' || curType==='FA';
+    const reservedUnusable = isReservedRow && isGlFa; // GL/FA 선택 시엔 이 두 라인 자체를 아예 못 씀
+    const rowBg = isReservedRow ? 'background:#f3f2f1' : '';
+    const rowCursor = reservedUnusable ? 'cursor:not-allowed' : 'cursor:pointer';
+    const rowClick = reservedUnusable ? `onclick="showAccAlert('이 라인은 사용할 수 없습니다','GL/Fixed Asset 전표에서는 No.1·No.2 라인이 예약되어 있어 사용하지 않습니다.\\n3번 라인부터 입력해주세요.','🔒')"` : `onclick="openLineModal(${i})"`;
+    return `<tr style="${rowCursor};${rowBg}" ${rowClick}>
+      <td style="font-size:11px;color:${reservedUnusable?'#c7c6c4':'#605e5c'}">${reservedUnusable ? '<span style="color:#c7c6c4">🔒 미사용</span>' : glDescTxt}</td>
+      <td style="font-size:12px">${reservedUnusable ? '-' : glTxt}</td>
+      <td style="font-size:11px">${reservedUnusable ? '<span style="color:#c7c6c4">-</span>' : cpTxt}</td>
+      <td style="font-size:11px">${reservedUnusable ? '<span style="color:#c7c6c4">-</span>' : subTxt}</td>
+      <td style="font-size:11px;color:#605e5c">${reservedUnusable ? '-' : (l.lineDesc||'-')}</td>
       <td style="font-size:11px">${l.currency||'EUR'}</td>
       <td style="text-align:right;font-weight:600">${drTxt}</td>
       <td style="text-align:right;font-weight:600">${crTxt}</td>
@@ -2093,7 +2099,7 @@ let _lineModalIdx = -1;
 function openLineModal(i) {
   const l0 = lines[i] || {};
   if(i===0 && l0._lockCC && !l0.gl){
-    alert('이 라인은 BP(Vendor/Customer) 선택 시 자동으로 채워집니다.\n먼저 "2. BP 정보"에서 Vendor/Customer No.를 선택해주세요.');
+    showAccAlert('BP를 먼저 선택해주세요', '이 라인은 "2. BP 정보"에서 Vendor/Customer No.를 선택하면 자동으로 채워집니다.', '🔒');
     return;
   }
   _lineModalIdx = i;
