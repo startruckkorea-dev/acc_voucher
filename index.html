@@ -442,8 +442,6 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         <span>4. 회계 정보 (Account Information)</span>
         <div style="display:flex;gap:6px;background:#fff;border:1px solid #c7e0f4;border-radius:6px;padding:4px">
           <button class="btn btn-add" onclick="addLine()">＋ 라인 추가</button>
-          <button class="btn btn-add" id="btn-add-bp" onclick="addBPLine()" style="display:none">＋ BP라인 추가</button>
-          <button class="btn btn-add" id="btn-add-vat" onclick="addVATLine()" style="display:none">＋ VAT라인 추가</button>
         </div>
       </div>
       <div class="lines-scroll">
@@ -1352,13 +1350,6 @@ function onTypeChange() {
   document.getElementById('bp-req-mark').style.display = (type==='GL')?'none':'';
   renderApproval();
   applyFixedLines();
-
-  // No.6: AP/AR 유형일 때 BP/VAT 라인 추가 버튼 표시
-  const showBpVat = ['AP','AP_IMS','AP_CR','AR'].includes(type);
-  const btnBp = document.getElementById('btn-add-bp');
-  const btnVat = document.getElementById('btn-add-vat');
-  if(btnBp) btnBp.style.display = showBpVat ? '' : 'none';
-  if(btnVat) btnVat.style.display = showBpVat ? '' : 'none';
 
   // Voucher Type 변경 시 BP Category 경고 재평가
   const bpCatVal = document.getElementById('v-bp-cat').value;
