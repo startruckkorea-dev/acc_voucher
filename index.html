@@ -1557,8 +1557,10 @@ function applyFixedLines() {
     lines[0]._lockCC = true;
 
     // No.2: VAT는 BP 여부와 무관하게 Type이 정해지는 즉시(혹은 Type 미선택 상태에서도) 항상 고정
-    const vatGL = GL_LIST.find(g=>g.code==='110510');
-    lines[1].gl = '110510';
+    // AP_CR(Customer Refund)·AR은 210510(부가세예수금 계열), 그 외는 110510(부가세대급금 계열)
+    const vatCode = (type==='AP_CR' || type==='AR') ? '210510' : '110510';
+    const vatGL = GL_LIST.find(g=>g.code===vatCode);
+    lines[1].gl = vatCode;
     lines[1].glName = vatGL ? vatGL.name : 'VAT';
     lines[1].cctr=''; lines[1].cctrName=''; lines[1].pc=''; lines[1].pcName=''; lines[1].subpc=''; lines[1].subpcName='';
     lines[1].lineDesc = 'VAT';
@@ -1609,10 +1611,10 @@ function renderLines() {
     const rowCursor = reservedUnusable ? 'cursor:not-allowed' : 'cursor:pointer';
     const rowClick = reservedUnusable ? `onclick="showAccAlert('이 라인은 사용할 수 없습니다','GL/Fixed Asset 전표에서는 No.1·No.2 라인이 예약되어 있어 사용하지 않습니다.\\n3번 라인부터 입력해주세요.','🔒')"` : `onclick="openLineModal(${i})"`;
     return `<tr style="${rowCursor}" ${rowClick}>
-      <td style="font-size:11px;color:${reservedUnusable?'#c7c6c4':'#605e5c'};${idBg};${restBg}">${reservedUnusable ? '<span style="color:#c7c6c4">🔒 미사용</span>' : lockIcon+glDescTxt}</td>
-      <td style="font-size:12px;${idBg};${restBg}">${reservedUnusable ? '-' : lockIcon+glTxt}</td>
-      <td style="font-size:11px;${restBg}">${reservedUnusable ? '<span style="color:#c7c6c4">-</span>' : cpTxt}</td>
-      <td style="font-size:11px;${restBg}">${reservedUnusable ? '<span style="color:#c7c6c4">-</span>' : subTxt}</td>
+      <td style="font-size:11px;color:${reservedUnusable?'#c7c6c4':'#605e5c'};${idBg};${restBg}">${reservedUnusable ? '<span style="color:#c7c6c4">🔒 미사용</span>' : (l.glName ? lockIcon+glDescTxt : glDescTxt)}</td>
+      <td style="font-size:12px;${idBg};${restBg}">${reservedUnusable ? '-' : (l.gl ? lockIcon+glTxt : glTxt)}</td>
+      <td style="font-size:11px;${idBg};${restBg}">${reservedUnusable ? '<span style="color:#c7c6c4">-</span>' : cpTxt}</td>
+      <td style="font-size:11px;${idBg};${restBg}">${reservedUnusable ? '<span style="color:#c7c6c4">-</span>' : subTxt}</td>
       <td style="font-size:11px;color:#605e5c;${restBg}">${reservedUnusable ? '-' : (l.lineDesc||'-')}</td>
       <td style="font-size:11px;${restBg}">${l.currency||'EUR'}</td>
       <td style="text-align:right;font-weight:600;${restBg}">${drTxt}</td>
