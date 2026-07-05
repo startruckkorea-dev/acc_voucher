@@ -3217,14 +3217,15 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
   const lineRows=(lines_data||[]).map((l,i)=>{
     const isFixedRow = (i===0 || i===1); // BP/VAT 자동 고정 라인 — 굵게 + 구분선 표시
     const isVatRow = (i===1);
-    const bg = ';background-color:'+FIXED_BG; // 원본 템플릿과 동일하게 G/L Account Description·G/L Acc No. 열 전체에 음영 (html2canvas가 background 축약형을 줄바꿈 셀에서 놓치는 이슈 방지 위해 background-color로 명시)
+    const bg = ';background-color:'+FIXED_BG; // G/L Account Description·G/L Acc No.는 전체 행에 음영 (html2canvas background 축약형 이슈 방지 위해 background-color 명시)
+    const bgFixedOnly = isFixedRow ? ';background-color:'+FIXED_BG : ''; // Cost/Profit Center·Sub_PC는 No.1/No.2(BP/VAT)에만 음영
     const bold = isFixedRow ? ';font-weight:700' : '';
     const bottomThick = isVatRow ? ';border-bottom:2px solid #000' : ''; // VAT 라인 아래 굵은 구분선
     return '<tr>'+
       '<td style="'+cellThin+bg+bold+bottomThick+'">'+esc(l.glName)+'</td>'+
       '<td style="'+cellThin+bg+bold+bottomThick+'">'+esc(l.gl)+'</td>'+
-      '<td style="'+cellThin+bg+bottomThick+'">'+esc(l.cctrName||l.cctr||l.pcName||l.pc)+'</td>'+
-      '<td style="'+cellThin+bg+bottomThick+'">'+esc(l.subpcName||l.subpc)+'</td>'+
+      '<td style="'+cellThin+bgFixedOnly+bottomThick+'">'+esc(l.cctrName||l.cctr||l.pcName||l.pc)+'</td>'+
+      '<td style="'+cellThin+bgFixedOnly+bottomThick+'">'+esc(l.subpcName||l.subpc)+'</td>'+
       '<td style="'+cellThin+bottomThick+'">'+esc(l.lineDesc)+'</td>'+
       '<td style="'+cellThin+bottomThick+';text-align:center">'+esc(l.currency)+'</td>'+
       '<td style="'+cellThin+bottomThick+';text-align:right">'+(l.drcr==='DR'?fmt2(l.amount):'')+'</td>'+
