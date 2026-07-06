@@ -3273,7 +3273,7 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
       '</tr>'+
     '</table>'+
     '<table style="width:100%;border-collapse:collapse;border:1px solid #000;margin-top:8px;table-layout:fixed">'+
-      '<colgroup><col style="width:12%"><col style="width:48%"><col style="width:17%"><col style="width:23%"></colgroup>'+
+      '<colgroup><col style="width:12%"><col style="width:56%"><col style="width:9%"><col style="width:23%"></colgroup>'+
       '<tr>'+
         '<td colspan="2" style="'+lblB+';text-align:left">Purpose</td>'+
         '<td style="'+lblB+'">Currency</td><td style="'+lblB+'">Total Amount</td>'+
@@ -3319,11 +3319,20 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
         '<th style="'+cellB+'">Curr</th><th style="'+cellB+'">DEBIT</th><th style="'+cellB+'">CREDIT</th>'+
       '</tr></thead>'+
       '<tbody>'+(lineRows||('<tr><td colspan="8" style="'+cellB+';text-align:center;color:#888">라인 없음</td></tr>'))+'</tbody>'+
-      '<tfoot><tr style="font-weight:700;background:#f9f9f9">'+
-        '<td colspan="6" style="'+cellB+';text-align:right">Total</td>'+
-        '<td style="'+cellB+';text-align:right">'+fmt2(drSum)+'</td>'+
-        '<td style="'+cellB+';text-align:right">'+fmt2(crSum)+'</td>'+
-      '</tr></tfoot>'+
+      '<tfoot>'+
+        (lineCurrencies.length ? (
+          '<tr style="font-weight:700;background:#f9f9f9">'+
+            '<td colspan="6" style="'+cellB+';text-align:right">'+esc(lineCurrencies.join('/'))+' Total</td>'+
+            '<td style="'+cellB+';text-align:right">'+fmt2(drSum)+'</td>'+
+            '<td style="'+cellB+';text-align:right">'+fmt2(crSum)+'</td>'+
+          '</tr>'
+        ) : '')+
+        '<tr style="font-weight:700;background:#f9f9f9">'+
+          '<td colspan="6" style="'+cellB+';text-align:right">KRW Total</td>'+
+          '<td style="'+cellB+';text-align:right">'+fmtK(v.TotalDR_KRW)+'</td>'+
+          '<td style="'+cellB+';text-align:right">'+fmtK(v.TotalCR_KRW)+'</td>'+
+        '</tr>'+
+      '</tfoot>'+
     '</table>'+
     '<div style="font-size:8.5px;color:#666;margin-top:2px">* DEBIT/CREDIT 합계는 각 라인 원 통화 기준 단순 합산입니다. KRW 환산 합계는 상단 KRW TOTAL을 참고하세요.</div>'+
 
@@ -3335,7 +3344,7 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
       '</tr>'+
       '<tr><td style="'+lblB+'">(E) Signature<br>&amp; Date</td>'+apprRow('sig')+'</tr>'+
       '<tr><td style="'+lblB+'">Name</td>'+apprRow('name')+'</tr>'+
-      '<tr><td style="'+lblB+'">Amount range</td>'+
+      '<tr style="line-height:1.1"><td style="'+lblB+';font-size:8.5px;line-height:1.1;padding:2px 4px">Approval Conditions</td>'+
         roleCols.map(rc=>{
           const role=rc[0];
           const rules = APPROVAL_RULES[v.VoucherType]||{};
@@ -3348,7 +3357,7 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
             else if(rv==='필요시') ruleText='If necessary';
             else ruleText=rv; // 예: '>= 1,000,000', '> 50,000,000' 등 실제 임계값 그대로 표기
           }
-          return '<td style="'+cellB+';font-size:8.5px">'+esc(ruleText)+'</td>';
+          return '<td style="'+cellB+';font-size:7.5px;line-height:1.1;padding:2px 4px">'+esc(ruleText)+'</td>';
         }).join('')+
       '</tr>'+
     '</table>'+
