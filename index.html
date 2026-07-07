@@ -3572,10 +3572,15 @@ async function exportVoucherPdf() {
 
     const now=new Date(new Date().getTime()+9*3600*1000);
     const ds=now.getUTCFullYear()+'-'+String(now.getUTCMonth()+1).padStart(2,'0')+'-'+String(now.getUTCDate()).padStart(2,'0');
-    await canvasToPdfAndDownload(
-      [{cvs, headerText:'STK Accounting Voucher · 공식 전표 양식', orientation:'portrait'}],
-      'ACC-Voucher_'+(v.Title||'detail')+'_공식양식_'+ds+'.pdf'
-    );
+    const { mainDoc, dataUrlToUint8, makeHeaderBytes } = await buildPdfDocFromSegments([
+      {cvs, headerText:'STK Accounting Voucher · 공식 전표 양식', orientation:'portrait'}
+    ]);
+    // 실제 첨부파일(세금계산서/Invoice 등) 내용을 뒤에 페이지로 병합 (GW·상세화면 PDF와 동일 방식)
+    // 첨부파일 링크는 공식 양식 캡처본이 아니라 화면에 열려있는 상세 모달(voucher-detail-content)에서 읽어옴
+    const detailEl = document.getElementById('voucher-detail-content');
+    if(detailEl) await appendAttachmentPagesToDoc(mainDoc, dataUrlToUint8, makeHeaderBytes, detailEl, btn);
+    btn.innerHTML = '⏳ 생성 중...';
+    await downloadPdfDoc(mainDoc, 'ACC-Voucher_'+(v.Title||'detail')+'_공식양식_'+ds+'.pdf');
   } catch(e){alert('PDF 생성 오류: '+e.message);console.error(e);}
   finally{if(printHost&&printHost.parentNode)printHost.parentNode.removeChild(printHost);btn.innerHTML=orig;btn.disabled=false;}
 }
