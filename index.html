@@ -3444,10 +3444,10 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
   const cellThin='border:1px solid #ddd;padding:4px 6px';
   const FIXED_BG='#fce4d6';
   const lineRows=(lines_data||[]).map((l,i)=>{
-    const isFixedRow = (i===0 || i===1); // BP/VAT 자동 고정 라인 — 굵게 + 구분선 표시
-    const isVatRow = (i===1);
+    const isFixedRow = !!l._lockCC; // BP/VAT 자동 고정 라인(주BP·추가BP·VAT 전부) — 굵게 + 음영 표시
+    const isVatRow = isFixedRow && (l.gl==='110510' || l.gl==='210510');
     const bg = ';background-color:'+FIXED_BG; // G/L Account Description·G/L Acc No.는 전체 행에 음영 (html2canvas background 축약형 이슈 방지 위해 background-color 명시)
-    const bgFixedOnly = isFixedRow ? ';background-color:'+FIXED_BG : ''; // Cost/Profit Center·Sub_PC는 No.1/No.2(BP/VAT)에만 음영
+    const bgFixedOnly = isFixedRow ? ';background-color:'+FIXED_BG : ''; // Cost/Profit Center·Sub_PC도 잠금 라인(주BP·추가BP·VAT) 전체에 동일하게 음영
     const bold = isFixedRow ? ';font-weight:700' : '';
     const bottomThick = isVatRow ? ';border-bottom:2px solid #000' : ''; // VAT 라인 아래 굵은 구분선
     return '<tr>'+
