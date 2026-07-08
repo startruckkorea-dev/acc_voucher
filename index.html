@@ -2341,6 +2341,7 @@ function saveLineModal() {
   const ccCode  = document.getElementById('lm-cctr').value;
   const pcCode  = document.getElementById('lm-pc').value;
   const subCode = document.getElementById('lm-subpc').value;
+  const newCurrency = document.getElementById('lm-currency').value;
 
   // COST CENTER / PROFIT CENTER / SUB_PC — GL의 COA 등록 정보(H/I/J열 'O')에 따라 활성화된 항목은 필수 입력
   if(!lines[i]._lockCC){
@@ -2354,8 +2355,17 @@ function saveLineModal() {
     }
   }
 
+  // BP/VAT 자동라인(주BP·추가BP·VAT)은 전부 동일 통화를 써야 함 — 이미 다른 통화로 지정된 라인이 있으면 저장 차단
+  if(lines[i]._lockCC){
+    const mismatched = lines.find((l,idx)=>idx!==i && l._lockCC && l.currency && l.currency!==newCurrency);
+    if(mismatched){
+      showAccAlert('통화(환율)가 통일되지 않았습니다', 'BP/VAT 자동 라인은 모두 같은 통화를 써야 합니다. 이미 '+mismatched.currency+'로 지정되어 있습니다. Currency를 '+mismatched.currency+'로 맞춰주세요.', '⚠️');
+      return;
+    }
+  }
+
   lines[i].drcr     = document.getElementById('lm-drcr').value;
-  lines[i].currency = document.getElementById('lm-currency').value;
+  lines[i].currency = newCurrency;
   if(!lines[i]._lockCC){
     lines[i].gl       = document.getElementById('lm-gl').value;
     lines[i].glName   = document.getElementById('lm-glname').textContent;
@@ -2375,6 +2385,20 @@ function saveLineModal() {
   lines[i].unitPrice = '';
   lines[i].qty       = 1;
   lines[i].amount    = parseComma(document.getElementById('lm-amount').value);
+
+  if(lines[i]._lockCC){
+    // BP/VAT 라인 저장 시: 통화를 모든 잠금 라인에 동일하게 맞추고, VAT 금액을 (BP 합계 / 11)로 자동 계산
+    const isVatLine = (l) => l._lockCC && (l.gl==='110510' || l.gl==='210510');
+    lines.forEach(l => { if(l._lockCC) l.currency = newCurrency; });
+    const vatLine = lines.find(isVatLine);
+    if(vatLine && vatLine !== lines[i]){
+      const bpSum = lines.filter(l=>l._lockCC && !isVatLine(l)).reduce((s,l)=>s+(parseFloat(l.amount)||0),0);
+      vatLine.amount = Math.round((bpSum/11)*100)/100;
+    } else if(vatLine === lines[i]){
+      // VAT 라인 자체를 직접 수정한 경우는 사용자가 입력한 값을 그대로 존중(자동계산 덮어쓰지 않음)
+    }
+  }
+
   closeLineModal();
   renderLines();
 }
