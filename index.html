@@ -1570,9 +1570,15 @@ function applyFixedLines() {
   // → 직원이 Type/BP 지정 전에 미리 값을 입력해두는 것을 원천 차단
   const isSpecial = type !== 'GL' && type !== 'FA';
 
-  // 라인 수가 바뀌어도(추가 BP 늘고 줄때) 이미 입력해둔 금액이 사라지지 않도록 GL코드 기준으로 보존
+  // 라인 수가 바뀌어도(추가 BP 늘고 줄때) 이미 입력해둔 금액·통화가 사라지지 않도록 보존
+  // (BP가 전부 없어진 경우는 완전 초기화 — 이후 새 BP를 다른 통화로 넣을 때 이전 통화와 충돌하지 않도록)
   const prevAmountByGl = {};
-  lines.forEach(l => { if(l._lockCC && l.gl && l.amount) prevAmountByGl[l.gl] = l.amount; });
+  let prevCurrency = null;
+  lines.forEach(l => {
+    if(!l._lockCC) return;
+    if(l.gl && l.amount) prevAmountByGl[l.gl] = l.amount;
+    if(l.currency && !prevCurrency) prevCurrency = l.currency;
+  });
   // 사용자가 직접 추가한(잠기지 않은) 라인은 그대로 뒤에 유지
   const nonReserved = lines.filter(l => !l._lockCC);
 
@@ -1580,6 +1586,9 @@ function applyFixedLines() {
   if(isSpecial) {
     const bpCode = document.getElementById('v-bp-code')?.value||'';
     const bpName = document.getElementById('v-bp-name')?.value||'';
+    const hasAnyBp = !!bpCode || extraBPs.length > 0;
+    // BP가 하나도 없으면 이전 통화/금액을 이어받지 않고 KRW·0으로 완전히 초기화
+    const lineCurrency = hasAnyBp ? (prevCurrency || 'KRW') : 'KRW';
     // 부가세 코드 규칙: "1"로 시작 = 자산(예: 110510 VAT recoverable) → 차변(DR)
     //                   "2"로 시작 = 부채(예: 210510 VAT payable 계열) → 대변(CR)
     // BP 라인들은 VAT 라인과 반대편(자산이면 BP는 대변, 부채면 BP는 차변)으로 자동 고정
@@ -1593,7 +1602,7 @@ function applyFixedLines() {
     const mkBpLine = (code, name) => ({
       drcr: bpDrcr, gl: code||'', glName: code?name:'', lineDesc: '',
       cctr:'', cctrName:'', pc:'', pcName:'', subpc:'', subpcName:'',
-      currency:'KRW', unitPrice:'', qty:1,
+      currency: lineCurrency, unitPrice:'', qty:1,
       amount: code ? (prevAmountByGl[code]||0) : 0,
       _lockCC: true
     });
@@ -1608,8 +1617,8 @@ function applyFixedLines() {
       drcr: vatDrcr, gl: vatCode, glName: vatGL ? vatGL.name : 'VAT',
       lineDesc: allBpCodes.length ? allBpCodes.join('|') : 'VAT',
       cctr:'', cctrName:'', pc:'', pcName:'', subpc:'', subpcName:'',
-      currency:'KRW', unitPrice:'', qty:1,
-      amount: prevAmountByGl[vatCode]||0,
+      currency: lineCurrency, unitPrice:'', qty:1,
+      amount: hasAnyBp ? (prevAmountByGl[vatCode]||0) : 0,
       _lockCC: true
     });
   }
