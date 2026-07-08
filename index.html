@@ -444,7 +444,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         <div style="display:flex;gap:6px;background:#fff;border:1px solid #c7e0f4;border-radius:6px;padding:4px">
           <button class="btn btn-add" onclick="addLine()">＋ 라인 추가</button>
           <button class="btn btn-add" id="btn-add-bp" onclick="openBpModalExtra()" title="추가 BP를 선택하면 2.BP정보 아래에 표시되고, VAT 라인 Description에 코드가 |로 이어져 표시됩니다">＋ BP 추가</button>
-          <button class="btn btn-add" id="btn-paste-line" onclick="pasteLine()" style="display:none" title="복사한 라인을 새 라인으로 붙여넣기">📋 붙여넣기</button>
+          <button class="btn btn-add" id="btn-paste-line" onclick="pasteLine()" style="display:none" title="복사한 라인을 새 라인으로 붙여넣기">📥 붙여넣기</button>
         </div>
       </div>
       <div class="lines-scroll">
@@ -1605,7 +1605,7 @@ function copyLine(i) {
   _lineClipboard = {drcr:l.drcr, gl:l.gl, glName:l.glName, cctr:l.cctr, cctrName:l.cctrName, pc:l.pc, pcName:l.pcName, subpc:l.subpc, subpcName:l.subpcName, lineDesc:l.lineDesc, currency:l.currency, amount:l.amount};
   const btn = document.getElementById('btn-paste-line');
   if(btn) btn.style.display = 'inline-block';
-  showAccAlert('라인을 복사했습니다', '"📋 붙여넣기" 버튼으로 새 라인에 붙여넣을 수 있습니다.', '📋');
+  showAccAlert('라인을 복사했습니다', '"📥 붙여넣기" 버튼으로 새 라인에 붙여넣을 수 있습니다.', '📤');
 }
 function pasteLine() {
   if(!_lineClipboard) return;
@@ -1661,7 +1661,7 @@ function renderLines() {
       <td style="text-align:right;font-weight:600;${restBg}">${drTxt}</td>
       <td style="text-align:right;font-weight:600;${restBg}">${crTxt}</td>
       <td style="text-align:right;font-weight:600;color:#323130;${restBg}">${totalTxt}</td>
-      <td style="white-space:nowrap">${reservedUnusable||isReservedRow ? '' : `<button class="btn-del" onclick="event.stopPropagation();copyLine(${i})" title="라인 복사">📋</button>`}<button class="btn-del" onclick="event.stopPropagation();deleteLine(${i})">✕</button></td>
+      <td style="white-space:nowrap">${reservedUnusable||isReservedRow ? '' : `<button class="btn-del" onclick="event.stopPropagation();copyLine(${i})" title="라인 복사">📤</button>`}<button class="btn-del" onclick="event.stopPropagation();deleteLine(${i})">✕</button></td>
     </tr>`;
   }).join('');
   updateTotals();
