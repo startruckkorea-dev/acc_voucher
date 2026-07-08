@@ -1534,6 +1534,10 @@ function deleteLine(i) {
   const l = lines[i];
   if (l && l._lockCC) {
     const isVat = l.gl==='110510' || l.gl==='210510';
+    if (isVat) {
+      showAccAlert('VAT 라인은 삭제할 수 없습니다', 'VAT는 BP 금액을 기준으로 자동 계산되는 고정 라인입니다. BP를 전부 제거하면 VAT 라인도 함께 사라집니다.', '🔒');
+      return;
+    }
     if (!isVat) {
       const bpCode = document.getElementById('v-bp-code')?.value||'';
       if (l.gl && l.gl===bpCode) {
@@ -1697,6 +1701,7 @@ function renderLines() {
     // 주BP/추가BP/VAT 라인은 _lockCC 플래그로 예약 표시 → 회색 배경의 "고정 라인" 느낌 부여
     // (GL/Fixed Asset 선택 시에는 애초에 예약 라인 자체가 생성되지 않으므로 이 로직이 적용되지 않음)
     const isReservedRow = !!l._lockCC;
+    const isVatRow = isReservedRow && (l.gl==='110510' || l.gl==='210510');
     const idBg = isReservedRow ? 'background:#f3f2f1' : '';
     const restBg = '';
     const lockIcon = isReservedRow ? '<span style="color:#e8590c;margin-right:4px">🔒</span>' : '';
@@ -1712,7 +1717,7 @@ function renderLines() {
       <td style="text-align:right;font-weight:600;${restBg}">${drTxt}</td>
       <td style="text-align:right;font-weight:600;${restBg}">${crTxt}</td>
       <td style="text-align:right;font-weight:600;color:#323130;${restBg}">${totalTxt}</td>
-      <td style="white-space:nowrap">${isReservedRow ? '' : `<button class="btn-del" onclick="event.stopPropagation();copyLine(${i})" title="라인 복사">📤</button>`}<button class="btn-del" onclick="event.stopPropagation();deleteLine(${i})">✕</button></td>
+      <td style="white-space:nowrap">${isReservedRow ? '' : `<button class="btn-del" onclick="event.stopPropagation();copyLine(${i})" title="라인 복사">📤</button>`}${isVatRow ? '' : `<button class="btn-del" onclick="event.stopPropagation();deleteLine(${i})">✕</button>`}</td>
     </tr>`;
   }).join('');
   updateTotals();
