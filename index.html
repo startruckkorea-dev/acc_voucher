@@ -597,6 +597,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
           <button id="lm-gl-search-btn" onclick="openGlModal(_lineModalIdx)" style="padding:7px 14px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:12px;cursor:pointer">🔍 GL 검색</button>
           <span id="lm-glname" style="font-size:12px;color:#323130;font-weight:500"></span>
         </div>
+        <div id="lm-gl-hint" style="font-size:11px;color:#e8590c;margin-top:5px;display:none">🔒 GL Account를 먼저 선택하면 그 아래 Cost Center/Profit Center/Sub_PC가 조건에 맞게 활성화됩니다.</div>
       </div>
 
       <div style="border-top:1px solid #f3f2f1;padding-top:14px">
@@ -1951,6 +1952,8 @@ function selectGL(code){
     document.getElementById('lm-gl').value = gl.code;
     document.getElementById('lm-glname').textContent = gl.name;
     applyPcSubpcAvailability(gl.pcEnabled, gl.subpcEnabled, gl.cctrEnabled, !!lines[currentGlIdx]._lockCC);
+    const glHint = document.getElementById('lm-gl-hint');
+    if(glHint) glHint.style.display = 'none';
   }
   renderLines(); closeGlModal();
 }
@@ -2319,12 +2322,15 @@ function openLineModal(i) {
     getSubPCs().map(s=>`<option value="${s.code}" ${l.subpc===s.code?'selected':''}>${s.code} ${s.name}</option>`).join('');
   document.getElementById('lm-subpcname').textContent = l.subpcName || '';
   // GL의 COA 등록 정보(H열/I열/J열 'O') 기준으로 PC/Sub_PC/Cost Center 활성화 여부 반영
-  // GL이 아직 선택 안 된 새 라인은 기본적으로 전부 활성화 상태로 둠
+  // GL을 아직 선택하지 않은 새 라인은 혼란 방지를 위해 GL 선택 전까지 전부 비활성화
   const glInfo = l.gl ? GL_LIST.find(g=>g.code===l.gl) : null;
-  const pcEnabled = l._lockCC ? false : (glInfo ? !!glInfo.pcEnabled : (l.pcEnabled !== false));
-  const subpcEnabled = l._lockCC ? false : (glInfo ? !!glInfo.subpcEnabled : (l.subpcEnabled !== false));
-  const cctrEnabled = l._lockCC ? false : (glInfo ? !!glInfo.cctrEnabled : (l.cctrEnabled !== false));
+  const noGlYet = !l.gl;
+  const pcEnabled = l._lockCC ? false : (noGlYet ? false : (glInfo ? !!glInfo.pcEnabled : (l.pcEnabled !== false)));
+  const subpcEnabled = l._lockCC ? false : (noGlYet ? false : (glInfo ? !!glInfo.subpcEnabled : (l.subpcEnabled !== false)));
+  const cctrEnabled = l._lockCC ? false : (noGlYet ? false : (glInfo ? !!glInfo.cctrEnabled : (l.cctrEnabled !== false)));
   applyPcSubpcAvailability(pcEnabled, subpcEnabled, cctrEnabled, !!l._lockCC);
+  const glHint = document.getElementById('lm-gl-hint');
+  if(glHint) glHint.style.display = (noGlYet && !l._lockCC) ? 'block' : 'none';
   // Line Desc / Amount
   document.getElementById('lm-linedesc').value = l.lineDesc || '';
   const amtVal = l.amount ? parseFloat(l.amount).toLocaleString('en', {minimumFractionDigits:2, maximumFractionDigits:2}) : '';
