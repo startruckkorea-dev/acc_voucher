@@ -1698,22 +1698,24 @@ function renderLines() {
 function updateTotals() {
   let drKrw=0, crKrw=0;
   const fmtK = n=>Math.round(n).toLocaleString('ko-KR');
-  // 통화별 DR/CR 합계 집계
+  // 통화별 원본(raw) 합계를 먼저 집계 — 반올림은 아직 하지 않음
   const drByCur={}, crByCur={};
   lines.forEach(l=>{
     const a = parseFloat(l.amount)||0;
     if(!a) return;
     const cur = l.currency||'KRW';
+    if(l.drcr==='DR') drByCur[cur]=(drByCur[cur]||0)+a;
+    if(l.drcr==='CR') crByCur[cur]=(crByCur[cur]||0)+a;
+  });
+  // 통화별 원본 합계를 낸 다음, 마지막에 한 번만 반올림해서 KRW로 환산 (라인별로 먼저 반올림하지 않음)
+  // → 원본 통화 합계(DR/CR)가 서로 같으면 KRW 환산 합계도 항상 같아짐 (라인별 반올림 오차 누적 방지)
+  Object.keys(drByCur).forEach(cur=>{
     const rate = cur==='KRW' ? 1 : (getExchangeRate(cur)||0);
-    const krw = cur==='KRW' ? a : (rate ? Math.round(a*rate) : 0);
-    if(l.drcr==='DR'){
-      drKrw+=krw;
-      drByCur[cur]=(drByCur[cur]||0)+a;
-    }
-    if(l.drcr==='CR'){
-      crKrw+=krw;
-      crByCur[cur]=(crByCur[cur]||0)+a;
-    }
+    drKrw += cur==='KRW' ? drByCur[cur] : Math.round(drByCur[cur]*rate);
+  });
+  Object.keys(crByCur).forEach(cur=>{
+    const rate = cur==='KRW' ? 1 : (getExchangeRate(cur)||0);
+    crKrw += cur==='KRW' ? crByCur[cur] : Math.round(crByCur[cur]*rate);
   });
   const totalKrw = drKrw || crKrw || 0;
   document.getElementById('total-amt').textContent = 'KRW '+fmtK(totalKrw);
