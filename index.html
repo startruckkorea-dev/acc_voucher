@@ -428,6 +428,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         </div>
       </div>
       <div id="bp-cat-warning" style="display:none;margin-top:6px;background:#fff4ce;border:1px solid #f7c948;border-radius:4px;padding:8px 12px;font-size:.78rem;color:#7d5700;font-weight:600"></div>
+      <div id="extra-bp-list" style="margin-top:10px"></div>
       </div>
 
       <div class="section-title">3. Purpose / Description</div>
@@ -442,6 +443,8 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         <span>4. 회계 정보 (Account Information)</span>
         <div style="display:flex;gap:6px;background:#fff;border:1px solid #c7e0f4;border-radius:6px;padding:4px">
           <button class="btn btn-add" onclick="addLine()">＋ 라인 추가</button>
+          <button class="btn btn-add" id="btn-add-bp" onclick="openBpModalExtra()" title="추가 BP를 선택하면 2.BP정보 아래에 표시되고, VAT 라인 Description에 코드가 |로 이어져 표시됩니다">＋ BP 추가</button>
+          <button class="btn btn-add" id="btn-paste-line" onclick="pasteLine()" style="display:none" title="복사한 라인을 새 라인으로 붙여넣기">📋 붙여넣기</button>
         </div>
       </div>
       <div class="lines-scroll">
@@ -709,6 +712,9 @@ let msal_g = null, user = null, siteId = null, nasId = null;
 let bpData = []; // SharePoint Excel에서 로드
 let lines  = Array.from({length:6}, () => ({drcr:'',gl:'',glName:'',cctr:'',cctrName:'',pc:'',pcName:'',subpc:'',subpcName:'',lineDesc:'',currency:'KRW',unitPrice:'',qty:1,amount:0}));
 let currentGlIdx = null;
+let extraBPs = []; // "+BP 추가"로 넣은 추가 BP 목록 [{code,name,bizNo,category}]
+let bpModalMode = 'primary'; // 'primary' = 2.BP정보 선택, 'extra' = 회계정보 +BP추가
+let _lineClipboard = null; // 회계 정보 라인 복사/붙여넣기용
 let voucherStore = JSON.parse(localStorage.getItem('stk_acc_vouchers') || '[]');
 
 // ── System Config (system_config_final.xlsx) ──
@@ -1541,28 +1547,72 @@ function applyFixedLines() {
     const bpCode = document.getElementById('v-bp-code')?.value||'';
     const bpName = document.getElementById('v-bp-name')?.value||'';
     // No.1: BP 정보가 아직 없으면 빈 상태로 "잠금만" 유지 (내용은 없지만 수정은 불가)
+    // Description은 항상 비워둠(자물쇠 표시만) — "BP" 고정 텍스트는 더 이상 넣지 않음
     lines[0].gl = bpCode || '';
     lines[0].glName = bpCode ? bpName : '';
-    lines[0].lineDesc = bpCode ? 'BP' : '';
+    lines[0].lineDesc = '';
     lines[0].cctr=''; lines[0].cctrName=''; lines[0].pc=''; lines[0].pcName=''; lines[0].subpc=''; lines[0].subpcName='';
     lines[0]._lockCC = true;
 
     // No.2: VAT는 BP 여부와 무관하게 Type이 정해지는 즉시(혹은 Type 미선택 상태에서도) 항상 고정
+    // 부가세 코드 규칙: "1"로 시작 = 자산(예: 110510 VAT recoverable) → 차변(DR)
+    //                   "2"로 시작 = 부채(예: 210510 VAT payable 계열) → 대변(CR)
+    // BP 라인(No.1)은 VAT 라인과 반대편(자산이면 BP는 대변, 부채면 BP는 차변)으로 자동 고정
     // AP_CR(Customer Refund)·AR은 210510(부가세예수금 계열), 그 외는 110510(부가세대급금 계열)
     const vatCode = (type==='AP_CR' || type==='AR') ? '210510' : '110510';
     const vatGL = GL_LIST.find(g=>g.code===vatCode);
+    const vatIsAsset = vatCode.startsWith('1');
     lines[1].gl = vatCode;
     lines[1].glName = vatGL ? vatGL.name : 'VAT';
     lines[1].cctr=''; lines[1].cctrName=''; lines[1].pc=''; lines[1].pcName=''; lines[1].subpc=''; lines[1].subpcName='';
-    lines[1].lineDesc = 'VAT';
+    // Description: BP 코드(주 BP + 추가 BP)를 |로 이어서 표시. BP가 하나도 없으면 'VAT'로 대체 표시.
+    const allBpCodes = [bpCode, ...extraBPs.map(b=>b.code)].filter(Boolean);
+    lines[1].lineDesc = allBpCodes.length ? allBpCodes.join('|') : 'VAT';
     lines[1]._lockCC = true;
+    // DR/CR 자동 고정 (VAT 코드 성격 기준) — line-modal에서도 수정 불가 처리됨
+    lines[1].drcr = vatIsAsset ? 'DR' : 'CR';
+    lines[0].drcr = vatIsAsset ? 'CR' : 'DR';
   } else {
     // GL/Fixed Asset 선택 시에만 자유 입력 라인으로 전환 (이전 자동 채움 내용은 초기화)
     if(lines[0] && lines[0]._lockCC) lines[0] = blankLine();
     if(lines[1] && lines[1]._lockCC) lines[1] = blankLine();
   }
   renderLines();
+  renderExtraBPs();
 }
+
+// ── 추가 BP 목록 ("+BP 추가"로 넣은 BP들) ──
+function renderExtraBPs() {
+  const el = document.getElementById('extra-bp-list');
+  if(!el) return;
+  const type = document.getElementById('v-type')?.value||'';
+  if((type==='GL'||type==='FA') || !extraBPs.length) { el.innerHTML=''; return; }
+  el.innerHTML = '<div style="font-size:11px;color:#605e5c;margin-bottom:4px">추가 BP (VAT 라인 Description에 |로 함께 표시됨)</div>' +
+    extraBPs.map((b,i)=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;background:#f0f6ff;border:1px solid #c7e0f4;border-radius:4px;padding:6px 10px;margin-bottom:4px;font-size:12px">
+        <span><b>${b.code}</b> · ${b.name} ${b.bizNo?('· '+b.bizNo):''}</span>
+        <button class="btn-del" onclick="removeExtraBP(${i})" title="제거">✕</button>
+      </div>`).join('');
+}
+function removeExtraBP(i) {
+  extraBPs.splice(i,1);
+  applyFixedLines(); // renderLines + renderExtraBPs 포함
+}
+
+// ── 회계 정보 라인 복사/붙여넣기 (No.15 편의기능) ──
+function copyLine(i) {
+  const l = lines[i]; if(!l) return;
+  _lineClipboard = {drcr:l.drcr, gl:l.gl, glName:l.glName, cctr:l.cctr, cctrName:l.cctrName, pc:l.pc, pcName:l.pcName, subpc:l.subpc, subpcName:l.subpcName, lineDesc:l.lineDesc, currency:l.currency, amount:l.amount};
+  const btn = document.getElementById('btn-paste-line');
+  if(btn) btn.style.display = 'inline-block';
+  showAccAlert('라인을 복사했습니다', '"📋 붙여넣기" 버튼으로 새 라인에 붙여넣을 수 있습니다.', '📋');
+}
+function pasteLine() {
+  if(!_lineClipboard) return;
+  lines.push({...(_lineClipboard), _lockCC:false});
+  renderLines();
+}
+
 
 function renderLines() {
   const tbody = document.getElementById('lines-body');
@@ -1611,7 +1661,7 @@ function renderLines() {
       <td style="text-align:right;font-weight:600;${restBg}">${drTxt}</td>
       <td style="text-align:right;font-weight:600;${restBg}">${crTxt}</td>
       <td style="text-align:right;font-weight:600;color:#323130;${restBg}">${totalTxt}</td>
-      <td><button class="btn-del" onclick="event.stopPropagation();deleteLine(${i})">✕</button></td>
+      <td style="white-space:nowrap">${reservedUnusable||isReservedRow ? '' : `<button class="btn-del" onclick="event.stopPropagation();copyLine(${i})" title="라인 복사">📋</button>`}<button class="btn-del" onclick="event.stopPropagation();deleteLine(${i})">✕</button></td>
     </tr>`;
   }).join('');
   updateTotals();
@@ -1689,7 +1739,26 @@ function updateTotals() {
 }
 
 // ── BP Modal ──
+function openBpModalExtra() {
+  const type = document.getElementById('v-type')?.value||'';
+  if(type==='GL' || type==='FA'){
+    showAccAlert('사용할 수 없습니다', 'GL/Fixed Asset 전표에는 BP 추가 기능을 사용하지 않습니다.', '🔒');
+    return;
+  }
+  bpModalMode = 'extra';
+  document.getElementById('bp-modal').classList.add('open');
+  document.getElementById('bp-search-input').value='';
+  if(bpData.length === 0) {
+    document.getElementById('bp-search-results').innerHTML = '<div style="text-align:center;padding:24px;color:#a19f9d">데이터 로딩 중...</div>';
+    document.getElementById('bp-search-input').disabled = true;
+  } else {
+    document.getElementById('bp-search-input').disabled = false;
+    renderBpResults(bpData.slice(0,10));
+    setTimeout(()=>document.getElementById('bp-search-input').focus(),100);
+  }
+}
 function openBpModal() {
+  bpModalMode = 'primary';
   document.getElementById('bp-modal').classList.add('open');
   document.getElementById('bp-search-input').value='';
   if(bpData.length === 0) {
@@ -1733,6 +1802,18 @@ function renderBpResults(list) {
 }
 function selectBP(code) {
   const bp=bpData.find(b=>b.code===code); if(!bp) return;
+  if(bpModalMode==='extra') {
+    if(document.getElementById('v-bp-code').value===code || extraBPs.some(b=>b.code===code)) {
+      showAccAlert('이미 추가된 BP입니다', code+'는 이미 선택되어 있습니다.', '⚠️');
+      return;
+    }
+    const bpCatVal = (bp.type==='Vendor'||bp.type==='S') ? 'S (Vendor)' : 'C (Customer)';
+    extraBPs.push({code:bp.code, name:bp.name, bizNo:bp.bizNo||'', category:bpCatVal});
+    closeBpModal();
+    renderExtraBPs();
+    applyFixedLines();
+    return;
+  }
   document.getElementById('v-bp-code').value=bp.code;
   document.getElementById('v-bp-name').value=bp.name;
   document.getElementById('v-bp-bizno').value = bp.bizNo||'Master data 미기재';
@@ -1954,6 +2035,7 @@ async function saveVoucher(status) {
         BPName: document.getElementById('v-bp-name').value||'',
         BPBizNo: document.getElementById('v-bp-bizno').value||'',
         BPCategory: document.getElementById('v-bp-cat').value||'',
+        AdditionalBPsJSON: JSON.stringify(extraBPs),
         InvoiceDate: document.getElementById('v-inv-date').value||null,
         ExchangeRate: [
           'EUR:' + (parseFloat(document.getElementById('v-exrate')?.value)||0),
@@ -2103,8 +2185,27 @@ function openLineModal(i) {
   const l = lines[i] || {};
   document.getElementById('line-modal-title').textContent = `라인 ${i+1} 편집`;
 
-  // DR/CR
-  document.getElementById('lm-drcr').value = l.drcr || '';
+  // DR/CR — No.1(BP)/No.2(VAT) 라인은 부가세 코드 성격에 따라 자동 고정되므로 수정 불가
+  const drcrSel = document.getElementById('lm-drcr');
+  const descInput = document.getElementById('lm-linedesc');
+  const isBpVatRow = (i===0 || i===1) && l._lockCC;
+  drcrSel.value = l.drcr || '';
+  drcrSel.disabled = isBpVatRow;
+  descInput.disabled = isBpVatRow;
+  const lockHintId = 'lm-drcr-lock-hint';
+  let lockHint = document.getElementById(lockHintId);
+  if(isBpVatRow) {
+    if(!lockHint) {
+      lockHint = document.createElement('div');
+      lockHint.id = lockHintId;
+      lockHint.style.cssText = 'font-size:11px;color:#e8590c;margin-top:4px';
+      lockHint.textContent = '🔒 이 라인은 VAT 코드 성격에 따라 차/대변이 자동 고정됩니다.';
+      drcrSel.parentElement.appendChild(lockHint);
+    }
+    lockHint.style.display = '';
+  } else if(lockHint) {
+    lockHint.style.display = 'none';
+  }
   // Currency
   document.getElementById('lm-currency').value = l.currency || 'KRW';
   // GL
@@ -2255,6 +2356,8 @@ async function loadExistingVoucher() {
     document.getElementById('v-bp-name').value = f.BPName||'';
     document.getElementById('v-bp-bizno').value = f.BPBizNo||'';
     document.getElementById('v-bp-cat').value = f.BPCategory||'';
+    try { extraBPs = JSON.parse(f.AdditionalBPsJSON||'[]'); } catch(e){ extraBPs=[]; }
+    renderExtraBPs();
     // Purpose — HTML 태그 제거
     const rawPurpose = f.Purpose||'';
     document.getElementById('v-purpose').value = rawPurpose.replace(/<[^>]*>/g,'').trim();
@@ -2277,6 +2380,8 @@ function resetForm(){
   });
   document.getElementById('voucher-id-badge').textContent='';
   accFiles=[]; renderAccFiles();
+  extraBPs=[]; _lineClipboard=null;
+  const pasteBtn=document.getElementById('btn-paste-line'); if(pasteBtn) pasteBtn.style.display='none';
   lines=Array.from({length:6}, () => blankLine());renderApproval();applyFixedLines();
 }
 
@@ -2893,6 +2998,11 @@ async function openVoucherSP(spId, fromTab){
     ${row('BP Name', v.BPName)}
     ${row('Vendor Business No.', v.BPBizNo||'Master data 미기재')}
     ${row('BP Category', v.BPCategory)}
+    ${(()=>{
+      let extras=[]; try{ extras=JSON.parse(v.AdditionalBPsJSON||'[]'); }catch(e){ extras=[]; }
+      if(!extras.length) return '';
+      return extras.map((b,i)=>row('추가 BP '+(i+1), `${b.code||'-'} · ${b.name||'-'}${b.bizNo?(' · '+b.bizNo):''}`)).join('');
+    })()}
 
     <div class="det-sec">Purpose / Description</div>
     ${row('Purpose', `<span style="white-space:pre-wrap">${v.Purpose||'-'}</span>`)}
@@ -3268,7 +3378,8 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
         '<td style="'+lblB+'">Vendor/Customer Name</td><td style="'+cellB+'">'+(esc(v.BPName)||'-')+'</td>'+
       '</tr>'+
       '<tr>'+
-        '<td style="'+lblB+'"></td><td style="'+cellB+'"></td>'+
+        '<td style="'+lblB+'">'+(()=>{ let ex=[]; try{ex=JSON.parse(v.AdditionalBPsJSON||'[]');}catch(e){} return ex.length?'Additional BP(s)':''; })()+'</td>'+
+        '<td style="'+cellB+'">'+(()=>{ let ex=[]; try{ex=JSON.parse(v.AdditionalBPsJSON||'[]');}catch(e){} return ex.length?esc(ex.map(b=>b.code).join(' | ')):''; })()+'</td>'+
         '<td style="'+lblB+'">Vendor Business No.</td><td style="'+cellB+'">'+(esc(v.BPBizNo)||'Master data 미기재')+'</td>'+
       '</tr>'+
     '</table>'+
