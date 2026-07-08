@@ -1529,7 +1529,30 @@ function addVATLine() {
   lines.push({drcr:'',gl:'',glName:'VAT',cctr:'',cctrName:'',pc:'',pcName:'',subpc:'',subpcName:'',lineDesc:'VAT',currency:'KRW',unitPrice:'',qty:1,amount:0});
   renderLines(); openLineModal(lines.length-1);
 }
-function deleteLine(i) { lines.splice(i,1); renderLines(); }
+function deleteLine(i) {
+  const l = lines[i];
+  if (l && l._lockCC) {
+    const isVat = l.gl==='110510' || l.gl==='210510';
+    if (!isVat) {
+      const bpCode = document.getElementById('v-bp-code')?.value||'';
+      if (l.gl && l.gl===bpCode) {
+        // 주 BP 라인을 지우면 "2. BP 정보"의 주 BP 선택도 함께 초기화
+        document.getElementById('v-bp-code').value='';
+        document.getElementById('v-bp-name').value='';
+        document.getElementById('v-bp-bizno').value='';
+        document.getElementById('v-bp-cat').value='';
+      } else if (l.gl) {
+        // 추가 BP 라인을 지우면 extraBPs 목록에서도 함께 제거
+        const idx = extraBPs.findIndex(b=>b.code===l.gl);
+        if (idx>=0) extraBPs.splice(idx,1);
+      }
+      applyFixedLines(); // "2. BP 정보" 반영 + 라인 재구성(VAT 라인 Description도 함께 갱신)
+      return;
+    }
+  }
+  lines.splice(i,1);
+  renderLines();
+}
 
 // No.6 확장: Voucher Type이 GL/FA가 아니면 항상 No.1=BP라인, No.2=VAT라인(GL 110510 고정)으로 자동 구성.
 // 최소 6줄은 Voucher Type/BP 선택 여부와 무관하게 항상 유지.
