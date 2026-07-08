@@ -573,7 +573,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
     <!-- 바디 (스크롤 가능) -->
     <div style="padding:20px 24px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:14px">
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div id="lm-drcr-row" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
         <div>
           <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">DR/CR <span style="color:#d83b01">*</span></div>
           <select id="lm-drcr" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px">
@@ -600,7 +600,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
       </div>
 
       <div style="border-top:1px solid #f3f2f1;padding-top:14px">
-        <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">COST CENTER</div>
+        <div id="lm-cctr-label" style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">COST CENTER</div>
         <select id="lm-cctr" onchange="document.getElementById('lm-cctrname').textContent=COST_CENTERS.find(c=>c.code===this.value)?.name||''" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px">
           <option value="">-</option>
         </select>
@@ -609,14 +609,14 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
         <div>
-          <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">PROFIT CENTER</div>
+          <div id="lm-pc-label" style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">PROFIT CENTER</div>
           <select id="lm-pc" onchange="document.getElementById('lm-pcname').textContent=PROFIT_CENTERS.find(p=>p.code===this.value)?.name||''" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px">
             <option value="">-</option>
           </select>
           <div id="lm-pcname" style="font-size:11px;color:#0078d4;margin-top:3px;min-height:15px"></div>
         </div>
         <div>
-          <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">SUB_PC</div>
+          <div id="lm-subpc-label" style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">SUB_PC</div>
           <select id="lm-subpc" onchange="document.getElementById('lm-subpcname').textContent=getSubPCs().find(s=>s.code===this.value)?.name||''" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px">
             <option value="">-</option>
           </select>
@@ -1931,18 +1931,26 @@ function applyPcSubpcAvailability(pcEnabled, subpcEnabled, cctrEnabled, fullyLoc
   const pcSel = document.getElementById('lm-pc');
   const subSel = document.getElementById('lm-subpc');
   const ccSel = document.getElementById('lm-cctr');
+  const reqMark = ' <span style="color:#d83b01">*</span>';
+  const setLabel = (id, base, required) => {
+    const el = document.getElementById(id);
+    if(el) el.innerHTML = base + (required ? reqMark : '');
+  };
   pcSel.disabled = !pcEnabled;
   subSel.disabled = !subpcEnabled;
   pcSel.style.background = pcEnabled ? '' : '#f3f2f1';
   pcSel.style.color = pcEnabled ? '' : '#a19f9d';
   subSel.style.background = subpcEnabled ? '' : '#f3f2f1';
   subSel.style.color = subpcEnabled ? '' : '#a19f9d';
+  setLabel('lm-pc-label', 'PROFIT CENTER', pcEnabled && !fullyLocked);
+  setLabel('lm-subpc-label', 'SUB_PC', subpcEnabled && !fullyLocked);
   if(!pcEnabled){ pcSel.value=''; document.getElementById('lm-pcname').textContent=''; }
   if(!subpcEnabled){ subSel.value=''; document.getElementById('lm-subpcname').textContent=''; }
   if(ccSel){
     ccSel.disabled = !cctrEnabled;
     ccSel.style.background = cctrEnabled ? '' : '#f3f2f1';
     ccSel.style.color = cctrEnabled ? '' : '#a19f9d';
+    setLabel('lm-cctr-label', 'COST CENTER', cctrEnabled && !fullyLocked);
     if(!cctrEnabled){ ccSel.value=''; document.getElementById('lm-cctrname').textContent=''; }
   }
   // No.7 확장: BP/VAT 자동 고정 라인(No.1/No.2)은 GL 계정 자체와 설명(Description)도 변경 불가하게 잠금
@@ -1997,6 +2005,26 @@ async function saveVoucher(status) {
   const purpose=document.getElementById('v-purpose').value.trim();
   if(!purpose){alert('Purpose를 입력하세요.');return;}
   if(!lines.length){alert('회계 라인을 1개 이상 추가하세요.');return;}
+
+  // COST CENTER / PROFIT CENTER / SUB_PC — GL의 COA 등록 정보(H/I/J열 'O') 기준으로 활성화된 항목은 필수 입력
+  if(status==='대기') {
+    const missingLines = [];
+    lines.forEach((l,idx)=>{
+      if(l._lockCC || !l.gl) return; // BP/VAT 자동라인, GL 미선택 빈 라인은 제외
+      const glInfo = GL_LIST.find(g=>g.code===l.gl);
+      if(!glInfo) return;
+      const need = [];
+      if(glInfo.cctrEnabled && !l.cctr) need.push('Cost Center');
+      if(glInfo.pcEnabled && !l.pc) need.push('Profit Center');
+      if(glInfo.subpcEnabled && !l.subpc) need.push('Sub_PC');
+      if(need.length) missingLines.push('라인 '+(idx+1)+': '+need.join(', '));
+    });
+    if(missingLines.length){
+      alert('다음 라인에 필수 입력값이 비어있습니다:\n\n'+missingLines.join('\n')+'\n\n라인을 열어 값을 입력해주세요.');
+      return;
+    }
+  }
+
   const blocks = document.getElementById('dr-cr-blocks');
   if(status==='대기' && !blocks.querySelector('.eq-block')){
     alert('DR/CR 합계가 일치하지 않습니다.\n결재 요청을 진행할 수 없습니다.\n\n라인 항목을 확인하고 DR/CR 합계를 맞춰주세요.');
@@ -2226,9 +2254,9 @@ function openLineModal(i) {
     if(!lockHint) {
       lockHint = document.createElement('div');
       lockHint.id = lockHintId;
-      lockHint.style.cssText = 'font-size:11px;color:#e8590c;margin-top:4px';
+      lockHint.style.cssText = 'font-size:11px;color:#e8590c;margin-top:2px;white-space:nowrap';
       lockHint.textContent = '🔒 이 라인은 VAT 코드 성격에 따라 차/대변이 자동 고정됩니다.';
-      drcrSel.parentElement.appendChild(lockHint);
+      document.getElementById('lm-drcr-row').insertAdjacentElement('afterend', lockHint);
     }
     lockHint.style.display = '';
   } else if(lockHint) {
@@ -2314,6 +2342,19 @@ function saveLineModal() {
   const ccCode  = document.getElementById('lm-cctr').value;
   const pcCode  = document.getElementById('lm-pc').value;
   const subCode = document.getElementById('lm-subpc').value;
+
+  // COST CENTER / PROFIT CENTER / SUB_PC — GL의 COA 등록 정보(H/I/J열 'O')에 따라 활성화된 항목은 필수 입력
+  if(!lines[i]._lockCC){
+    const missing = [];
+    if(!document.getElementById('lm-cctr').disabled && !ccCode) missing.push('COST CENTER');
+    if(!document.getElementById('lm-pc').disabled && !pcCode) missing.push('PROFIT CENTER');
+    if(!document.getElementById('lm-subpc').disabled && !subCode) missing.push('SUB_PC');
+    if(missing.length){
+      showAccAlert('필수 입력값이 비어있습니다', missing.join(', ')+' 값을 선택해주세요.', '⚠️');
+      return;
+    }
+  }
+
   lines[i].drcr     = document.getElementById('lm-drcr').value;
   lines[i].currency = document.getElementById('lm-currency').value;
   if(!lines[i]._lockCC){
