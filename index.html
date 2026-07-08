@@ -2357,7 +2357,7 @@ function saveLineModal() {
 
   // BP/VAT 자동라인(주BP·추가BP·VAT)은 전부 동일 통화를 써야 함 — 이미 다른 통화로 지정된 라인이 있으면 저장 차단
   if(lines[i]._lockCC){
-    const mismatched = lines.find((l,idx)=>idx!==i && l._lockCC && l.currency && l.currency!==newCurrency);
+    const mismatched = lines.find((l,idx)=>idx!==i && l._lockCC && l.currency && (parseFloat(l.amount)||0)!==0 && l.currency!==newCurrency);
     if(mismatched){
       showAccAlert('통화(환율)가 통일되지 않았습니다', 'BP/VAT 자동 라인은 모두 같은 통화를 써야 합니다. 이미 '+mismatched.currency+'로 지정되어 있습니다. Currency를 '+mismatched.currency+'로 맞춰주세요.', '⚠️');
       return;
