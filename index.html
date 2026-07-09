@@ -2409,7 +2409,7 @@ function saveLineModal() {
   if(lines[i]._lockCC){
     const mismatched = lines.find((l,idx)=>idx!==i && l._lockCC && l.currency && (parseFloat(l.amount)||0)!==0 && l.currency!==newCurrency);
     if(mismatched){
-      showAccAlert('통화(환율)가 통일되지 않았습니다', 'BP/VAT 자동 라인은 모두 같은 통화를 써야 합니다. 이미 '+mismatched.currency+'로 지정되어 있습니다. Currency를 '+mismatched.currency+'로 맞춰주세요.', '⚠️');
+      showAccAlert('통화(환율)가 통일되지 않았습니다', 'BP/VAT 자동 라인은 모두 같은 통화를 써야 합니다. 이미 '+mismatched.currency+'로 지정되어 있습니다. Currency를 '+mismatched.currency+'로 맞춰주세요.\n\n기존에 다른 통화로 입력된 금액이 있다면, 해당 라인들의 금액을 먼저 모두 0으로 변경한 뒤 통화를 바꿔서 다시 입력해주세요.', '⚠️');
       return;
     }
   }
