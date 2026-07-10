@@ -3520,8 +3520,8 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
         '<td style="'+lblB+'">Vendor/Customer Name</td><td style="'+cellB+'">'+(esc(v.BPName)||'-')+'</td>'+
       '</tr>'+
       '<tr>'+
-        '<td style="'+lblB+'">'+(()=>{ let ex=[]; try{ex=JSON.parse(v.AdditionalBPsJSON||'[]');}catch(e){} return ex.length?'Additional BP(s)':''; })()+'</td>'+
-        '<td style="'+cellB+'">'+(()=>{ let ex=[]; try{ex=JSON.parse(v.AdditionalBPsJSON||'[]');}catch(e){} return ex.length?esc(ex.map(b=>b.code).join(' | ')):''; })()+'</td>'+
+        '<td style="'+lblB+'">Additional BP(s)</td>'+
+        '<td style="'+cellB+'">'+(()=>{ let ex=[]; try{ex=JSON.parse(v.AdditionalBPsJSON||'[]');}catch(e){} return ex.length?esc(ex.map(b=>b.code).join(' | ')):'-'; })()+'</td>'+
         '<td style="'+lblB+'">Vendor Business No.</td><td style="'+cellB+'">'+(esc(v.BPBizNo)||'Master data 미기재')+'</td>'+
       '</tr>'+
     '</table>'+
