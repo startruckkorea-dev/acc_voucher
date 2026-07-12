@@ -163,9 +163,9 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 /* ── List ── */
 .list-filters { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
 .list-filters select, .list-filters input { border: 1px solid #d2d0ce; border-radius: 4px; padding: 6px 10px; font-size: 13px; font-family: inherit; }
-.voucher-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.voucher-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 900px; }
 .voucher-table th { background: #f3f2f1; padding: 9px 10px; text-align: left; border-bottom: 2px solid #edebe9; font-size: 12px; font-weight: 600; color: #605e5c; white-space: nowrap; }
-.voucher-table td { padding: 10px 10px; border-bottom: 1px solid #edebe9; vertical-align: middle; }
+.voucher-table td { padding: 10px 10px; border-bottom: 1px solid #edebe9; vertical-align: middle; white-space: nowrap; }
 .voucher-table tr:hover td { background: #f0f6ff; cursor: pointer; }
 .type-badge { padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
 .t-AP { background: #e1f0ff; color: #004578; }
@@ -309,10 +309,12 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         </select>
         <input type="text" id="f-kw" placeholder="검색..." oninput="renderList()" style="min-width:160px">
       </div>
+      <div style="overflow-x:auto">
       <table class="voucher-table">
         <thead><tr><th style="width:40px">번호</th><th>신청자</th><th>Title</th><th>유형</th><th>BP명</th><th>Purpose</th><th style="text-align:right">DR(KRW Total)</th><th style="text-align:right">CR(KRW Total)</th><th>상태</th><th>신청일</th><th style="width:90px;text-align:center">Withdraw</th></tr></thead>
         <tbody id="list-body"></tbody>
       </table>
+      </div>
     </div>
   </div>
 
