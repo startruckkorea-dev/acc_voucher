@@ -1582,6 +1582,7 @@ function addVatLineSmart(){
 
   const newLine = {drcr:'',gl:vatCode,glName:vatGL?vatGL.name:'VAT',cctr:'',cctrName:'',pc:'',pcName:'',subpc:'',subpcName:'',lineDesc:'VAT',currency:'KRW',unitPrice:'',qty:1,amount:0};
   lines.splice(insertAt,0,newLine);
+  _pendingNewLineIdx = insertAt;
   renderLines(); openLineModal(insertAt);
 }
 function deleteLine(i) {
@@ -2314,6 +2315,9 @@ function buildApprovers() {
 
 // ── 라인 편집 모달 ──
 let _lineModalIdx = -1;
+// "+VAT 라인 추가"로 방금 만든(아직 확인 안 한) 라인의 인덱스. 이 라인의 모달을 확인 없이 취소(X/취소)로 닫으면
+// 빈 채로 표에 남지 않도록 자동으로 삭제한다.
+let _pendingNewLineIdx = -1;
 
 function openLineModal(i) {
   const l0 = lines[i] || {};
@@ -2412,6 +2416,15 @@ function calcLmAmount() {
 }
 
 function closeLineModal() {
+  // "+VAT 라인 추가"로 막 생성했는데 확인 없이 취소(X/취소)한 경우, 빈 라인이 표에 남지 않도록 함께 삭제
+  if(_pendingNewLineIdx >= 0 && _pendingNewLineIdx === _lineModalIdx){
+    lines.splice(_pendingNewLineIdx, 1);
+    _pendingNewLineIdx = -1;
+    document.getElementById('line-modal').classList.remove('open');
+    _lineModalIdx = -1;
+    renderLines();
+    return;
+  }
   document.getElementById('line-modal').classList.remove('open');
   _lineModalIdx = -1;
 }
@@ -2419,6 +2432,7 @@ function closeLineModal() {
 function deleteLineFromModal(){
   if(_lineModalIdx < 0) return;
   const idx = _lineModalIdx;
+  _pendingNewLineIdx = -1; // 명시적으로 삭제를 요청한 것이므로 closeLineModal의 자동삭제 로직과 중복 동작하지 않도록 해제
   closeLineModal();
   deleteLine(idx);
 }
@@ -2512,11 +2526,10 @@ function saveLineModal() {
     }
   }
 
+  _pendingNewLineIdx = -1; // 정상적으로 확인(저장)했으므로 취소 시 자동삭제 대상에서 제외
   closeLineModal();
   renderLines();
 }
-
-// GL 모달에서 선택 시 라인 모달에도 반영
 const _origSelectGL = window.selectGL;
 
 
