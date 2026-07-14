@@ -1748,8 +1748,11 @@ function renderLines() {
     } else totalTxt = '<span style="color:#a19f9d">0.00</span>';
 
     // Cost Center / Profit Center 병합 표기 (공식 양식과 동일하게 Cost/Profit Center 한 칸으로)
-    const cpTxt = l._lockCC ? '<span style="color:#c7c6c4">🔒 비활성화</span>' : (l.cctrName ? `${l.cctr} ${l.cctrName}` : (l.cctr ? l.cctr : (l.pcName ? `${l.pc} ${l.pcName}` : (l.pc || '-'))));
-    const subTxt  = l._lockCC ? '<span style="color:#c7c6c4">🔒</span>' : (l.subpcName ? `${l.subpc} ${l.subpcName}` : (l.subpc ? l.subpc : '-'));
+    // Advance Payment(ADV)/Settlement(SET)의 BP 라인은 Cost/Profit Center가 잠겨있지 않고 실제 값(하드코딩 기본값 포함)을 편집할 수 있으므로
+    // "🔒 비활성화"로 가리지 않고 실제 값을 보여준다.
+    const ccIsLocked = l._lockCC && curType!=='ADV' && curType!=='SET';
+    const cpTxt = ccIsLocked ? '<span style="color:#c7c6c4">🔒 비활성화</span>' : (l.cctrName ? `${l.cctr} ${l.cctrName}` : (l.cctr ? l.cctr : (l.pcName ? `${l.pc} ${l.pcName}` : (l.pc || '-'))));
+    const subTxt  = ccIsLocked ? '<span style="color:#c7c6c4">🔒</span>' : (l.subpcName ? `${l.subpc} ${l.subpcName}` : (l.subpc ? l.subpc : '-'));
     const glTxt   = l.gl   ? l.gl : '-';
     const drTxt = l.drcr==='DR' && amt ? `<span style="color:#0078d4">${fmt(amt)}</span>` : '<span style="color:#a19f9d">-</span>';
     const crTxt = l.drcr==='CR' && amt ? `<span style="color:#d83b01">${fmt(amt)}</span>` : '<span style="color:#a19f9d">-</span>';
