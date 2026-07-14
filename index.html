@@ -1550,16 +1550,33 @@ function addVatLineSmart(){
   const type = document.getElementById('v-type')?.value||'';
   const vatCode = (type==='AP_CR' || type==='AR') ? '210510' : '110510';
   const vatGL = GL_LIST.find(g=>g.code===vatCode);
+
+  // 1) 이미 VAT 라인이 있으면 맨 마지막 VAT 라인 바로 아래에 이어서 쌓는다.
   let lastVatIdx = -1;
   for(let i=lines.length-1;i>=0;i--){ if(_isVatLine(lines[i])){ lastVatIdx=i; break; } }
-  let insertAt;
-  if(lastVatIdx>=0){
-    insertAt = lastVatIdx+1;
-  } else {
-    let lastBpIdx = -1;
-    for(let i=lines.length-1;i>=0;i--){ if(_isBpCodeLine(lines[i])){ lastBpIdx=i; break; } }
-    insertAt = lastBpIdx>=0 ? lastBpIdx+1 : 0;
+  // 2) BP 예약(잠금) 라인은 값이 아직 비어있는 "BP 선택 대기" 상태라도 자리 자체는 BP 라인으로 취급 —
+  //    VAT는 항상 이 BP 예약 라인들(주BP+추가BP) 전부보다 아래에 위치해야 함.
+  let lastLockIdx = -1;
+  for(let i=lines.length-1;i>=0;i--){ if(lines[i]._lockCC){ lastLockIdx=i; break; } }
+  // 3) BP도 VAT도 전혀 없는 경우(GL/FA 등) — 기존에 입력되어 있는 마지막 라인 바로 아래에 이어서 쌓고,
+  //    맨 위 빈 줄로 튀지 않게 한다.
+  let lastFilledIdx = -1;
+  for(let i=lines.length-1;i>=0;i--){
+    const l = lines[i];
+    if(l.gl || l.glName || l.cctr || l.pc || l.subpc || (l.lineDesc||'').trim() || (parseFloat(l.amount)||0)!==0){ lastFilledIdx=i; break; }
   }
+
+  let insertAt;
+  if(lastVatIdx>=0 && lastVatIdx > lastLockIdx){
+    insertAt = lastVatIdx+1;
+  } else if(lastLockIdx>=0){
+    insertAt = lastLockIdx+1;
+  } else if(lastFilledIdx>=0){
+    insertAt = lastFilledIdx+1;
+  } else {
+    insertAt = 0;
+  }
+
   const newLine = {drcr:'',gl:vatCode,glName:vatGL?vatGL.name:'VAT',cctr:'',cctrName:'',pc:'',pcName:'',subpc:'',subpcName:'',lineDesc:'VAT',currency:'KRW',unitPrice:'',qty:1,amount:0};
   lines.splice(insertAt,0,newLine);
   renderLines(); openLineModal(insertAt);
