@@ -1904,10 +1904,6 @@ function renderBpResults(list) {
 function selectBP(code) {
   const bp=bpData.find(b=>b.code===code); if(!bp) return;
   if(bpModalMode==='extra') {
-    if(document.getElementById('v-bp-code').value===code || extraBPs.some(b=>b.code===code)) {
-      showAccAlert('이미 추가된 BP입니다', code+'는 이미 선택되어 있습니다.', '⚠️');
-      return;
-    }
     const bpCatVal = (bp.type==='Vendor'||bp.type==='S') ? 'S (Vendor)' : 'C (Customer)';
     extraBPs.push({code:bp.code, name:bp.name, bizNo:bp.bizNo||'', category:bpCatVal});
     closeBpModal();
