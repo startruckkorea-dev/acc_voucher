@@ -445,7 +445,8 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
         <span>4. 회계 정보 (Account Information)</span>
         <div style="display:flex;gap:6px;background:#fff;border:1px solid #c7e0f4;border-radius:6px;padding:4px">
           <button class="btn btn-add" onclick="addLine()">＋ 라인 추가</button>
-          <button class="btn btn-add" id="btn-add-bp" onclick="openBpModalExtra()" title="추가 BP를 선택하면 2.BP정보 아래에 표시되고, VAT 라인 Description에 코드가 |로 이어져 표시됩니다">＋ BP 추가</button>
+          <button class="btn btn-add" id="btn-add-bp" onclick="openBpModalExtra()" title="추가 BP를 선택하면 2.BP정보 아래와 회계 라인에 표시됩니다">＋ BP 추가</button>
+          <button class="btn btn-add" id="btn-add-vat" onclick="addVatLineSmart()" title="VAT 라인을 추가합니다. 이미 VAT 라인이 있으면 그 아래에, 없으면 BP 라인 아래에 추가됩니다.">＋ VAT 라인 추가</button>
           <button class="btn btn-add" id="btn-paste-line" onclick="pasteLine()" style="display:none" title="복사한 라인을 새 라인으로 붙여넣기">📥 붙여넣기</button>
         </div>
       </div>
@@ -1527,53 +1528,76 @@ function addBPLine() {
   lines.push({drcr:'',gl:bpCode,glName:bpName,cctr:'',cctrName:'',pc:'',pcName:'',subpc:'',subpcName:'',lineDesc:'BP',currency:'KRW',unitPrice:'',qty:1,amount:0});
   renderLines(); openLineModal(lines.length-1);
 }
-// No.6: VAT 라인
+// VAT 라인이 현재 라인 목록에 있는지 판별 (일반 VAT GL 코드 또는 Description이 VAT인 경우 모두 포함)
+function _isVatLine(l){
+  return !!l && (l.gl==='110510' || l.gl==='210510' || (l.lineDesc||'').toUpperCase()==='VAT');
+}
+// BP 라인인지 판별: "2.BP 정보"에 등록된 주BP/추가BP 코드와 gl이 일치하는 경우
+function _isBpCodeLine(l){
+  if(!l || !l.gl) return false;
+  const bpCode = document.getElementById('v-bp-code')?.value||'';
+  const extraCodes = extraBPs.map(b=>b.code);
+  return l.gl===bpCode || extraCodes.includes(l.gl);
+}
+// No.6: VAT 라인 — 더 이상 DR/CR을 강제로 고정하지 않고, 직접 선택하도록 비워둠. 일반 라인처럼 X로 삭제 가능.
 function addVATLine() {
   lines.push({drcr:'',gl:'',glName:'VAT',cctr:'',cctrName:'',pc:'',pcName:'',subpc:'',subpcName:'',lineDesc:'VAT',currency:'KRW',unitPrice:'',qty:1,amount:0});
   renderLines(); openLineModal(lines.length-1);
 }
+// "+ VAT 라인 추가" 버튼: 이미 VAT 라인이 있으면 그 아래, 없으면 마지막 BP 라인 아래, 그것도 없으면 맨 위에 삽입
+function addVatLineSmart(){
+  const type = document.getElementById('v-type')?.value||'';
+  const vatCode = (type==='AP_CR' || type==='AR') ? '210510' : '110510';
+  const vatGL = GL_LIST.find(g=>g.code===vatCode);
+  let lastVatIdx = -1;
+  for(let i=lines.length-1;i>=0;i--){ if(_isVatLine(lines[i])){ lastVatIdx=i; break; } }
+  let insertAt;
+  if(lastVatIdx>=0){
+    insertAt = lastVatIdx+1;
+  } else {
+    let lastBpIdx = -1;
+    for(let i=lines.length-1;i>=0;i--){ if(_isBpCodeLine(lines[i])){ lastBpIdx=i; break; } }
+    insertAt = lastBpIdx>=0 ? lastBpIdx+1 : 0;
+  }
+  const newLine = {drcr:'',gl:vatCode,glName:vatGL?vatGL.name:'VAT',cctr:'',cctrName:'',pc:'',pcName:'',subpc:'',subpcName:'',lineDesc:'VAT',currency:'KRW',unitPrice:'',qty:1,amount:0};
+  lines.splice(insertAt,0,newLine);
+  renderLines(); openLineModal(insertAt);
+}
 function deleteLine(i) {
   const l = lines[i];
   if (l && l._lockCC) {
-    const isVat = l.gl==='110510' || l.gl==='210510';
-    if (isVat) {
-      showAccAlert('VAT 라인은 삭제할 수 없습니다', 'VAT는 BP 금액을 기준으로 자동 계산되는 고정 라인입니다. BP를 전부 제거하면 VAT 라인도 함께 사라집니다.', '🔒');
-      return;
+    // VAT 라인은 더 이상 특별 보호 없이 다른 라인처럼 그냥 삭제 가능
+    if (_isVatLine(l)) { lines.splice(i,1); renderLines(); return; }
+    const bpCode = document.getElementById('v-bp-code')?.value||'';
+    if (l.gl && l.gl===bpCode) {
+      // 주 BP 라인을 지우면 "2. BP 정보"의 주 BP 선택도 함께 초기화
+      document.getElementById('v-bp-code').value='';
+      document.getElementById('v-bp-name').value='';
+      document.getElementById('v-bp-bizno').value='';
+      document.getElementById('v-bp-cat').value='';
+    } else if (l.gl) {
+      // 추가 BP 라인을 지우면 extraBPs 목록에서도 함께 제거
+      const idx = extraBPs.findIndex(b=>b.code===l.gl);
+      if (idx>=0) extraBPs.splice(idx,1);
     }
-    if (!isVat) {
-      const bpCode = document.getElementById('v-bp-code')?.value||'';
-      if (l.gl && l.gl===bpCode) {
-        // 주 BP 라인을 지우면 "2. BP 정보"의 주 BP 선택도 함께 초기화
-        document.getElementById('v-bp-code').value='';
-        document.getElementById('v-bp-name').value='';
-        document.getElementById('v-bp-bizno').value='';
-        document.getElementById('v-bp-cat').value='';
-      } else if (l.gl) {
-        // 추가 BP 라인을 지우면 extraBPs 목록에서도 함께 제거
-        const idx = extraBPs.findIndex(b=>b.code===l.gl);
-        if (idx>=0) extraBPs.splice(idx,1);
-      }
-      applyFixedLines(); // "2. BP 정보" 반영 + 라인 재구성(VAT 라인 Description도 함께 갱신)
-      return;
-    }
+    applyFixedLines(); // "2. BP 정보" 반영 + 라인 재구성
+    return;
   }
   lines.splice(i,1);
   renderLines();
 }
 
-// No.6 확장: Voucher Type이 GL/FA가 아니면 항상 No.1=BP라인, No.2=VAT라인(GL 110510 고정)으로 자동 구성.
+// No.6 확장: Voucher Type이 GL/FA가 아니면 주BP/추가BP 라인을 항상 시스템 예약 라인으로 잠금 처리.
+// VAT 라인은 더 이상 자동으로 고정 예약되지 않음 — AP/AP_IMS는 BP 최초 저장 시 1회만 자동 삽입(saveLineModal 참고),
+// 그 외 타입은 "+VAT 라인 추가" 버튼으로 직접 추가해야 함 (2번, 4번의 "VAT 고정 제거" 요청 반영).
 // 최소 6줄은 Voucher Type/BP 선택 여부와 무관하게 항상 유지.
 function blankLine() {
   return {drcr:'',gl:'',glName:'',cctr:'',cctrName:'',pc:'',pcName:'',subpc:'',subpcName:'',lineDesc:'',currency:'KRW',unitPrice:'',qty:1,amount:0};
 }
 function applyFixedLines() {
   const type = document.getElementById('v-type')?.value||'';
-  // GL/Fixed Asset이 아니면(Type 미선택 상태 포함) 주BP/추가BP/VAT 라인을 항상 시스템 예약 라인으로 잠금 처리
-  // → 직원이 Type/BP 지정 전에 미리 값을 입력해두는 것을 원천 차단
   const isSpecial = type !== 'GL' && type !== 'FA';
 
-  // 라인 수가 바뀌어도(추가 BP 늘고 줄때) 이미 입력해둔 금액·통화가 사라지지 않도록 보존
-  // (BP가 전부 없어진 경우는 완전 초기화 — 이후 새 BP를 다른 통화로 넣을 때 이전 통화와 충돌하지 않도록)
   const prevAmountByGl = {};
   let prevCurrency = null;
   lines.forEach(l => {
@@ -1581,7 +1605,7 @@ function applyFixedLines() {
     if(l.gl && l.amount) prevAmountByGl[l.gl] = l.amount;
     if(l.currency && !prevCurrency) prevCurrency = l.currency;
   });
-  // 사용자가 직접 추가한(잠기지 않은) 라인은 그대로 뒤에 유지
+  // 사용자가 직접 추가한(잠기지 않은) 라인은 그대로 뒤에 유지 — VAT 라인도 이제 여기 포함됨
   const nonReserved = lines.filter(l => !l._lockCC);
 
   let reservedLines = [];
@@ -1589,21 +1613,15 @@ function applyFixedLines() {
     const bpCode = document.getElementById('v-bp-code')?.value||'';
     const bpName = document.getElementById('v-bp-name')?.value||'';
     const hasAnyBp = !!bpCode || extraBPs.length > 0;
-    // BP가 하나도 없으면 이전 통화/금액을 이어받지 않고 KRW·0으로 완전히 초기화
     const lineCurrency = hasAnyBp ? (prevCurrency || 'KRW') : 'KRW';
-    // 부가세 코드 규칙: "1"로 시작 = 자산(예: 110510 VAT recoverable) → 차변(DR)
-    //                   "2"로 시작 = 부채(예: 210510 VAT payable 계열) → 대변(CR)
-    // BP 라인들은 VAT 라인과 반대편(자산이면 BP는 대변, 부채면 BP는 차변)으로 자동 고정
-    // AP_CR(Customer Refund)·AR은 210510(부가세예수금 계열), 그 외는 110510(부가세대급금 계열)
-    const vatCode = (type==='AP_CR' || type==='AR') ? '210510' : '110510';
-    const vatGL = GL_LIST.find(g=>g.code===vatCode);
-    const vatIsAsset = vatCode.startsWith('1');
-    const bpDrcr = vatIsAsset ? 'CR' : 'DR';
-    const vatDrcr = vatIsAsset ? 'DR' : 'CR';
+    // Advance payment(ADV)/Settlement(SET)은 Cost/Profit Center를 하드코딩 기본값으로 자동 채우되 사용자가 지울 수 있음
+    const isAdvOrSet = (type==='ADV' || type==='SET');
 
+    // DR/CR은 더 이상 자동 고정하지 않음 — 사용자가 라인 모달에서 직접 선택
     const mkBpLine = (code, name) => ({
-      drcr: bpDrcr, gl: code||'', glName: code?name:'', lineDesc: '',
-      cctr:'', cctrName:'', pc:'', pcName:'', subpc:'', subpcName:'',
+      drcr: '', gl: code||'', glName: code?name:'', lineDesc: '',
+      cctr: isAdvOrSet ? '110401' : '', cctrName: isAdvOrSet ? (type==='ADV'?'Advance payment':'Settlement of Advance') : '',
+      pc:'', pcName:'', subpc:'', subpcName:'',
       currency: lineCurrency, unitPrice:'', qty:1,
       amount: code ? (prevAmountByGl[code]||0) : 0,
       _lockCC: true
@@ -1611,18 +1629,9 @@ function applyFixedLines() {
 
     // No.1: 주 BP (BP 정보가 아직 없으면 빈 상태로 "잠금만" 유지)
     reservedLines.push(mkBpLine(bpCode, bpName));
-    // No.2~: "+BP 추가"로 넣은 추가 BP — 각각 한 줄씩 새 라인으로 추가되고 VAT는 그만큼 뒤로 밀림
+    // No.2~: "+BP 추가"로 넣은 추가 BP
     extraBPs.forEach(b => reservedLines.push(mkBpLine(b.code, b.name)));
-    // 마지막: VAT 라인 — Description에 주 BP + 추가 BP 코드를 |로 이어서 표시
-    const allBpCodes = [bpCode, ...extraBPs.map(b=>b.code)].filter(Boolean);
-    reservedLines.push({
-      drcr: vatDrcr, gl: vatCode, glName: vatGL ? vatGL.name : 'VAT',
-      lineDesc: allBpCodes.length ? allBpCodes.join('|') : 'VAT',
-      cctr:'', cctrName:'', pc:'', pcName:'', subpc:'', subpcName:'',
-      currency: lineCurrency, unitPrice:'', qty:1,
-      amount: hasAnyBp ? (prevAmountByGl[vatCode]||0) : 0,
-      _lockCC: true
-    });
+    // VAT 라인은 더 이상 여기서 자동 생성하지 않음 (AP/AP_IMS는 saveLineModal에서 BP 최초 저장 시 1회 삽입)
   }
 
   lines = [...reservedLines, ...nonReserved];
@@ -1640,7 +1649,7 @@ function renderExtraBPs() {
   if((type==='GL'||type==='FA') || !extraBPs.length) { el.innerHTML=''; return; }
   const cellStyle = 'padding:8px 10px;font-size:12.5px;color:#323130;border-bottom:1px solid #edebe9';
   const hdrStyle = 'padding:6px 10px;font-size:11px;font-weight:600;color:#605e5c;background:#f3f2f1;text-align:left;white-space:nowrap';
-  el.innerHTML = '<div style="font-size:12px;color:#605e5c;margin-bottom:6px">추가 BP <span style="color:#0078d4">(VAT 라인 Description에 | 구분자로 나뉘어져 함께 표시됨)</span></div>' +
+  el.innerHTML = '<div style="font-size:12px;color:#605e5c;margin-bottom:6px">추가 BP <span style="color:#0078d4">(각 BP마다 회계 라인이 하나씩 자동으로 추가됩니다)</span></div>' +
     '<div style="border:1px solid #edebe9;border-radius:4px;overflow:hidden">' +
     '<table style="width:100%;border-collapse:collapse">' +
       '<thead><tr>' +
@@ -2341,10 +2350,14 @@ function openLineModal(i) {
   // GL을 아직 선택하지 않은 새 라인은 혼란 방지를 위해 GL 선택 전까지 전부 비활성화
   const glInfo = l.gl ? GL_LIST.find(g=>g.code===l.gl) : null;
   const noGlYet = !l.gl;
-  const pcEnabled = l._lockCC ? false : (noGlYet ? false : (glInfo ? !!glInfo.pcEnabled : (l.pcEnabled !== false)));
-  const subpcEnabled = l._lockCC ? false : (noGlYet ? false : (glInfo ? !!glInfo.subpcEnabled : (l.subpcEnabled !== false)));
-  const cctrEnabled = l._lockCC ? false : (noGlYet ? false : (glInfo ? !!glInfo.cctrEnabled : (l.cctrEnabled !== false)));
-  applyPcSubpcAvailability(pcEnabled, subpcEnabled, cctrEnabled, !!l._lockCC);
+  // Advance payment(ADV)/Settlement(SET)의 BP 라인은 Cost/Profit Center에 하드코딩 기본값(110401_...)이 자동으로
+  // 들어가지만, 사용자가 직접 지우거나 바꿀 수 있어야 하므로 이 두 타입은 Cost Center 잠금에서 제외한다.
+  const _curType = document.getElementById('v-type')?.value||'';
+  const ccLocked = l._lockCC && _curType!=='ADV' && _curType!=='SET';
+  const pcEnabled = ccLocked ? false : (noGlYet ? false : (glInfo ? !!glInfo.pcEnabled : (l.pcEnabled !== false)));
+  const subpcEnabled = ccLocked ? false : (noGlYet ? false : (glInfo ? !!glInfo.subpcEnabled : (l.subpcEnabled !== false)));
+  const cctrEnabled = ccLocked ? false : (noGlYet ? false : (glInfo ? !!glInfo.cctrEnabled : (l.cctrEnabled !== false)));
+  applyPcSubpcAvailability(pcEnabled, subpcEnabled, cctrEnabled, ccLocked);
   const glHint = document.getElementById('lm-gl-hint');
   if(glHint) glHint.style.display = (noGlYet && !l._lockCC) ? 'block' : 'none';
   // Line Desc / Amount
@@ -2394,9 +2407,12 @@ function saveLineModal() {
   const pcCode  = document.getElementById('lm-pc').value;
   const subCode = document.getElementById('lm-subpc').value;
   const newCurrency = document.getElementById('lm-currency').value;
+  const type = document.getElementById('v-type')?.value||'';
+  const _curType = type;
+  const ccLocked = lines[i]._lockCC && _curType!=='ADV' && _curType!=='SET';
 
   // COST CENTER / PROFIT CENTER / SUB_PC — GL의 COA 등록 정보(H/I/J열 'O')에 따라 활성화된 항목은 필수 입력
-  if(!lines[i]._lockCC){
+  if(!ccLocked){
     const missing = [];
     if(!document.getElementById('lm-cctr').disabled && !ccCode) missing.push('COST CENTER');
     if(!document.getElementById('lm-pc').disabled && !pcCode) missing.push('PROFIT CENTER');
@@ -2407,11 +2423,18 @@ function saveLineModal() {
     }
   }
 
-  // BP/VAT 자동라인(주BP·추가BP·VAT)은 전부 동일 통화를 써야 함 — 이미 다른 통화로 지정된 라인이 있으면 저장 차단
+  // 금액은 0 이상만 허용 (음수 입력 방지)
+  const amountVal = parseComma(document.getElementById('lm-amount').value);
+  if(amountVal < 0){
+    showAccAlert('금액을 확인해주세요', '금액은 0 이상만 입력할 수 있습니다.', '⚠️');
+    return;
+  }
+
+  // BP 자동라인(주BP·추가BP)은 전부 동일 통화를 써야 함 — 이미 다른 통화로 지정된 라인이 있으면 저장 차단
   if(lines[i]._lockCC){
     const mismatched = lines.find((l,idx)=>idx!==i && l._lockCC && l.currency && (parseFloat(l.amount)||0)!==0 && l.currency!==newCurrency);
     if(mismatched){
-      showAccAlert('통화(환율)가 통일되지 않았습니다', 'BP/VAT 자동 라인은 모두 같은 통화를 써야 합니다. 이미 '+mismatched.currency+'로 지정되어 있습니다. Currency를 '+mismatched.currency+'로 맞춰주세요.\n\n기존에 다른 통화로 입력된 금액이 있다면, 해당 라인들의 금액을 먼저 모두 0으로 변경한 뒤 통화를 바꿔서 다시 입력해주세요.', '⚠️');
+      showAccAlert('통화(환율)가 통일되지 않았습니다', 'BP 자동 라인은 모두 같은 통화를 써야 합니다. 이미 '+mismatched.currency+'로 지정되어 있습니다. Currency를 '+mismatched.currency+'로 맞춰주세요.\n\n기존에 다른 통화로 입력된 금액이 있다면, 해당 라인들의 금액을 먼저 모두 0으로 변경한 뒤 통화를 바꿔서 다시 입력해주세요.', '⚠️');
       return;
     }
   }
@@ -2423,7 +2446,7 @@ function saveLineModal() {
     lines[i].glName   = document.getElementById('lm-glname').textContent;
   }
   lines[i].cctr     = ccCode;
-  lines[i].cctrName = COST_CENTERS.find(c=>c.code===ccCode)?.name || '';
+  lines[i].cctrName = ccCode ? (COST_CENTERS.find(c=>c.code===ccCode)?.name || lines[i].cctrName || '') : '';
   lines[i].pc       = pcCode;
   lines[i].pcName   = PROFIT_CENTERS.find(p=>p.code===pcCode)?.name || '';
   lines[i].subpc    = subCode;
@@ -2436,18 +2459,25 @@ function saveLineModal() {
   }
   lines[i].unitPrice = '';
   lines[i].qty       = 1;
-  lines[i].amount    = parseComma(document.getElementById('lm-amount').value);
+  lines[i].amount    = amountVal;
 
   if(lines[i]._lockCC){
-    // BP/VAT 라인 저장 시: 통화를 모든 잠금 라인에 동일하게 맞추고, VAT 금액을 (BP 합계 / 11)로 자동 계산
-    const isVatLine = (l) => l._lockCC && (l.gl==='110510' || l.gl==='210510');
     lines.forEach(l => { if(l._lockCC) l.currency = newCurrency; });
-    const vatLine = lines.find(isVatLine);
-    if(vatLine && vatLine !== lines[i]){
-      const bpSum = lines.filter(l=>l._lockCC && !isVatLine(l)).reduce((s,l)=>s+(parseFloat(l.amount)||0),0);
-      vatLine.amount = Math.round((bpSum/11)*100)/100;
-    } else if(vatLine === lines[i]){
-      // VAT 라인 자체를 직접 수정한 경우는 사용자가 입력한 값을 그대로 존중(자동계산 덮어쓰지 않음)
+    // AP / AP_IMS(부품)만: BP 라인에 최초로 금액이 저장되는 시점에 VAT 라인이 아직 없으면 1회만 자동 삽입.
+    // AP_IMS는 원화(KRW)일 때만 자동 삽입(외화는 부가세가 없으므로 자동 삽입하지 않음).
+    // 이후에는 자동 재계산하지 않으므로 사용자가 VAT 금액을 자유롭게 수정 가능.
+    const isApOrIms = (type==='AP' || type==='AP_IMS');
+    const alreadyHasVat = lines.some(_isVatLine);
+    if(isApOrIms && !alreadyHasVat && amountVal>0 && (type!=='AP_IMS' || newCurrency==='KRW')){
+      const vatCode = '110510';
+      const vatGL = GL_LIST.find(g=>g.code===vatCode);
+      const vatAmount = Math.round((amountVal/11)*100)/100;
+      // 방금 저장한 BP 라인 바로 아래에 삽입
+      lines.splice(i+1, 0, {
+        drcr:'', gl:vatCode, glName: vatGL?vatGL.name:'VAT', lineDesc:'VAT',
+        cctr:'', cctrName:'', pc:'', pcName:'', subpc:'', subpcName:'',
+        currency: newCurrency, unitPrice:'', qty:1, amount: vatAmount
+      });
     }
   }
 
