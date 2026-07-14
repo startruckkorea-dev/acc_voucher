@@ -646,9 +646,12 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
     </div>
 
     <!-- 푸터 (항상 고정) -->
-    <div style="padding:12px 24px;background:#f3f2f1;border-top:1px solid #edebe9;display:flex;justify-content:flex-end;gap:8px;flex-shrink:0">
-      <button onclick="closeLineModal()" style="padding:8px 22px;border:1px solid #8a8886;background:#fff;border-radius:4px;font-size:13px;cursor:pointer;color:#323130">취소</button>
-      <button onclick="saveLineModal()" style="padding:8px 22px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer">✔ 확인</button>
+    <div style="padding:12px 24px;background:#f3f2f1;border-top:1px solid #edebe9;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-shrink:0">
+      <button onclick="deleteLineFromModal()" style="padding:8px 18px;border:1px solid #a4262c;background:#fff;color:#a4262c;border-radius:4px;font-size:13px;cursor:pointer">🗑 삭제</button>
+      <div style="display:flex;gap:8px">
+        <button onclick="closeLineModal()" style="padding:8px 22px;border:1px solid #8a8886;background:#fff;border-radius:4px;font-size:13px;cursor:pointer;color:#323130">취소</button>
+        <button onclick="saveLineModal()" style="padding:8px 22px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer">✔ 확인</button>
+      </div>
     </div>
 
   </div>
@@ -2410,6 +2413,13 @@ function calcLmAmount() {
 function closeLineModal() {
   document.getElementById('line-modal').classList.remove('open');
   _lineModalIdx = -1;
+}
+// 라인 편집 모달의 "삭제" 버튼 — deleteLine()과 동일한 규칙(주BP/추가BP 삭제 시 부수 처리 포함)을 그대로 따르되, 모달을 닫는다.
+function deleteLineFromModal(){
+  if(_lineModalIdx < 0) return;
+  const idx = _lineModalIdx;
+  closeLineModal();
+  deleteLine(idx);
 }
 
 function saveLineModal() {
