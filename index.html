@@ -678,6 +678,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
       <button class="modal-close" onclick="closeGlModal()">✕</button>
     </div>
     <div class="modal-body">
+      <div id="gl-vat-only-hint" style="display:none;background:#fff4ce;color:#5d4037;border-left:3px solid #ffb900;border-radius:4px;padding:8px 12px;font-size:12px;margin-bottom:10px">VAT 라인은 VAT 관련 GL 코드(110510 / 210510)만 선택할 수 있습니다.</div>
       <div class="search-bar">
         <input type="text" id="gl-search-input" placeholder="코드 또는 계정명 검색..." oninput="searchGL(this.value)">
       </div>
@@ -1937,17 +1938,26 @@ function selectBP(code) {
 }
 
 // ── GL Modal ──
+let _glModalVatOnly = false;
+const VAT_GL_CODES = ['110510','210510'];
 function openGlModal(idx) {
   currentGlIdx=idx;
+  // VAT 라인에서 GL을 검색할 때는 "vat"으로 검색해도 상관없는 결과(Derivatives 등)가 섞여 나오지 않도록
+  // VAT 전용 GL 코드(110510 VAT recoverable / 210510 VAT payable) 2개로만 결과를 제한한다.
+  const l = lines[idx];
+  _glModalVatOnly = !!(l && (l.lineDesc||'').toUpperCase()==='VAT');
   document.getElementById('gl-modal').classList.add('open');
   document.getElementById('gl-search-input').value='';
-  renderGlResults(GL_LIST);
+  const hintEl = document.getElementById('gl-vat-only-hint');
+  if(hintEl) hintEl.style.display = _glModalVatOnly ? 'block' : 'none';
+  renderGlResults(_glModalVatOnly ? GL_LIST.filter(g=>VAT_GL_CODES.includes(g.code)) : GL_LIST);
   setTimeout(()=>document.getElementById('gl-search-input').focus(),100);
 }
 function closeGlModal(){document.getElementById('gl-modal').classList.remove('open');}
 function searchGL(q){
   const kw=q.toLowerCase().trim();
-  renderGlResults(kw?GL_LIST.filter(g=>g.code.includes(kw)||(g.altCode&&g.altCode.includes(kw))||g.name.toLowerCase().includes(kw)):GL_LIST.slice(0,50));
+  const base = _glModalVatOnly ? GL_LIST.filter(g=>VAT_GL_CODES.includes(g.code)) : GL_LIST;
+  renderGlResults(kw?base.filter(g=>g.code.includes(kw)||(g.altCode&&g.altCode.includes(kw))||g.name.toLowerCase().includes(kw)):(_glModalVatOnly?base:base.slice(0,50)));
 }
 function renderGlResults(list){
   const header = `<div style="display:grid;grid-template-columns:90px 90px 1fr;gap:12px;padding:6px 12px;background:#f3f2f1;border-bottom:2px solid #edebe9;margin-bottom:4px">
