@@ -2321,27 +2321,16 @@ function openLineModal(i) {
   const l = lines[i] || {};
   document.getElementById('line-modal-title').textContent = `라인 ${i+1} 편집`;
 
-  // DR/CR — No.1(BP)/No.2(VAT) 라인은 부가세 코드 성격에 따라 자동 고정되므로 수정 불가
+  // DR/CR — 더 이상 자동 고정되지 않음. BP/VAT 라인이라도 직접 선택 가능.
   const drcrSel = document.getElementById('lm-drcr');
   const descInput = document.getElementById('lm-linedesc');
   const isBpVatRow = !!l._lockCC;
   drcrSel.value = l.drcr || '';
-  drcrSel.disabled = isBpVatRow;
+  drcrSel.disabled = false;
   descInput.disabled = isBpVatRow;
   const lockHintId = 'lm-drcr-lock-hint';
   let lockHint = document.getElementById(lockHintId);
-  if(isBpVatRow) {
-    if(!lockHint) {
-      lockHint = document.createElement('div');
-      lockHint.id = lockHintId;
-      lockHint.style.cssText = 'font-size:11px;color:#e8590c;margin-top:2px;white-space:nowrap';
-      lockHint.textContent = '🔒 이 라인은 VAT 코드 성격에 따라 차/대변이 자동 고정됩니다.';
-      document.getElementById('lm-drcr-row').insertAdjacentElement('afterend', lockHint);
-    }
-    lockHint.style.display = '';
-  } else if(lockHint) {
-    lockHint.style.display = 'none';
-  }
+  if(lockHint) lockHint.style.display = 'none';
   // Currency
   document.getElementById('lm-currency').value = l.currency || 'KRW';
   // GL
@@ -2430,9 +2419,16 @@ function saveLineModal() {
   const pcCode  = document.getElementById('lm-pc').value;
   const subCode = document.getElementById('lm-subpc').value;
   const newCurrency = document.getElementById('lm-currency').value;
+  const drcrVal = document.getElementById('lm-drcr').value;
   const type = document.getElementById('v-type')?.value||'';
   const _curType = type;
   const ccLocked = lines[i]._lockCC && _curType!=='ADV' && _curType!=='SET';
+
+  // DR/CR은 더 이상 자동 고정되지 않으므로 반드시 직접 선택해야 함
+  if(!drcrVal){
+    showAccAlert('DR/CR을 선택해주세요', '이 라인의 차변(DEBIT)/대변(CREDIT)을 선택해야 저장할 수 있습니다.', '⚠️');
+    return;
+  }
 
   // COST CENTER / PROFIT CENTER / SUB_PC — GL의 COA 등록 정보(H/I/J열 'O')에 따라 활성화된 항목은 필수 입력
   if(!ccLocked){
