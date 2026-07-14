@@ -813,8 +813,8 @@ const APPROVAL_RULES = {
   AP_IMS:{TL:'필수',MC:'>= 1,000,000',CEO:'> 50,000,000',RD:'> 50,000,000',CFO:'필수'},
   AP_CR: {TL:'필수',MC:'필수',CEO:'> 10,000,000',RD:'> 10,000,000',CFO:'필수'},
   AR:    {TL:'필수',MC:'필수',CEO:'-',RD:'-',CFO:'>= 20,000,000'},
-  GL:    {TL:'필수',MC:'필수',CEO:'필요시',RD:'필요시',CFO:'필수'},
-  FA:    {TL:'필수',MC:'필수',CEO:'필요시',RD:'필요시',CFO:'필수'},
+  GL:    {TL:'필수',MC:'필수',CEO:'>= 20,000,000',RD:'>= 20,000,000',CFO:'필수'},
+  FA:    {TL:'필수',MC:'필수',CEO:'>= 20,000,000',RD:'>= 20,000,000',CFO:'필수'},
   ADV:   {TL:'필수',MC:'>= 1,000,000',CEO:'>= 20,000,000',RD:'>= 20,000,000',CFO:'필수'},
   SET:   {TL:'필수',MC:'필수',CEO:'-',RD:'-',CFO:'필수'},
 };
@@ -1581,7 +1581,8 @@ function addVatLineSmart(){
     insertAt = 0;
   }
 
-  const newLine = {drcr:'',gl:vatCode,glName:vatGL?vatGL.name:'VAT',cctr:'',cctrName:'',pc:'',pcName:'',subpc:'',subpcName:'',lineDesc:'VAT',currency:'KRW',unitPrice:'',qty:1,amount:0};
+  const vatDrcr = vatCode.startsWith('110') ? 'DR' : 'CR';
+  const newLine = {drcr:vatDrcr,gl:vatCode,glName:vatGL?vatGL.name:'VAT',cctr:'',cctrName:'',pc:'',pcName:'',subpc:'',subpcName:'',lineDesc:'VAT',currency:'KRW',unitPrice:'',qty:1,amount:0};
   lines.splice(insertAt,0,newLine);
   _pendingNewLineIdx = insertAt;
   renderLines(); openLineModal(insertAt);
@@ -2558,18 +2559,20 @@ function saveLineModal() {
   if(lines[i]._lockCC){
     lines.forEach(l => { if(l._lockCC) l.currency = newCurrency; });
     // AP_IMS(부품)만: 원화(KRW)일 때, BP 라인 금액이 저장될 때마다 VAT 라인을 자동 계산.
-    // VAT 라인의 DR/CR은 BP 라인과 동일한 편으로 설정(BP가 DR이면 VAT도 DR, BP가 CR이면 VAT도 CR).
+    // VAT 라인의 DR/CR은 BP 라인과 무관하게, VAT 코드 성격에 따라 고정: 110으로 시작(자산성, VAT recoverable)이면 차변(DR),
+    // 210으로 시작(부채성, VAT payable)이면 대변(CR).
     // VAT 금액은 "현재 BP 라인들의 금액 합계 / 11"로 계산되며, BP를 추가하거나 금액을 바꿀 때마다 다시 계산됨.
     // 단, 사용자가 VAT 라인 자체를 직접 열어서 수정하면(_autoCalc=false) 그 이후로는 더 이상 자동 갱신하지 않음.
     // 외화(KRW 아님)는 부가세가 없으므로 자동 계산하지 않음. AP(플레인)는 자동 계산 대상이 아님 — 필요하면 "+VAT 라인 추가"로 직접 추가.
     if(type==='AP_IMS' && newCurrency==='KRW'){
       const vatCode = '110510';
       const vatGL = GL_LIST.find(g=>g.code===vatCode);
+      const vatDrcr = vatCode.startsWith('110') ? 'DR' : 'CR';
       let vatLine = lines.find(_isVatLine);
       if(!vatLine && amountVal>0 && lines[i].drcr){
         // VAT 라인이 아직 없으면 방금 저장한 BP 라인 바로 아래에 새로 만든다.
         vatLine = {
-          drcr: lines[i].drcr, gl:vatCode, glName: vatGL?vatGL.name:'VAT', lineDesc:'VAT',
+          drcr: vatDrcr, gl:vatCode, glName: vatGL?vatGL.name:'VAT', lineDesc:'VAT',
           cctr:'', cctrName:'', pc:'', pcName:'', subpc:'', subpcName:'',
           currency: newCurrency, unitPrice:'', qty:1, amount: 0, _autoCalc: true
         };
@@ -2578,7 +2581,7 @@ function saveLineModal() {
       if(vatLine && vatLine._autoCalc !== false){
         const bpTotal = lines.filter(l=>l._lockCC).reduce((s,l)=>s+(parseFloat(l.amount)||0),0);
         vatLine.amount = Math.round((bpTotal/11)*100)/100;
-        vatLine.drcr = lines[i].drcr; // 최근 저장한 BP 라인과 동일한 편으로 맞춤
+        vatLine.drcr = vatDrcr; // VAT 코드 성격에 따른 고정값 (BP 쪽 DR/CR과 무관)
       }
     }
   }
