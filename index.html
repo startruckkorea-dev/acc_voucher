@@ -579,7 +579,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
       <div id="lm-drcr-row" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
         <div>
           <div style="font-size:11px;font-weight:600;color:#605e5c;margin-bottom:5px">DR/CR <span style="color:#d83b01">*</span></div>
-          <select id="lm-drcr" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px">
+          <select id="lm-drcr" onchange="onLmDrcrChange()" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:13px">
             <option value="">-- 선택 --</option>
             <option value="DR">DR 차변 (Debit)</option>
             <option value="CR">CR 대변 (Credit)</option>
@@ -1645,13 +1645,15 @@ function applyFixedLines() {
 
     // uid로 이전 라인 상태를 찾아 DR/CR·금액·Cost/Profit Center 등을 그대로 이어받는다.
     // 이전 라인이 없으면(새로 추가된 BP) 기본값으로 새로 만든다.
+    // ADV/SET의 110401 하드코딩은 여기서 미리 채우지 않는다 — BP만 선택해도 곧바로 채워지는 문제가 있었음.
+    // 대신 라인 편집 모달에서 DR/CR을 실제로 선택할 때 반응형으로 채워진다 (openLineModal 쪽 로직 참고).
     const mkBpLine = (code, name, uid) => {
       const prev = (code && uid) ? oldByUid[uid] : null;
       return {
         drcr: prev ? (prev.drcr||'') : '',
         gl: code||'', glName: code?name:'', lineDesc: '',
-        cctr: prev ? (prev.cctr||'') : (isAdvOrSet ? '110401' : ''),
-        cctrName: prev ? (prev.cctrName||'') : (isAdvOrSet ? (type==='ADV'?'Advance payment':'Settlement of Advance') : ''),
+        cctr: prev ? (prev.cctr||'') : '',
+        cctrName: prev ? (prev.cctrName||'') : '',
         pc: prev ? (prev.pc||'') : '', pcName: prev ? (prev.pcName||'') : '',
         subpc: prev ? (prev.subpc||'') : '', subpcName: prev ? (prev.subpcName||'') : '',
         pcEnabled: prev ? prev.pcEnabled : undefined,
@@ -2451,6 +2453,36 @@ function deleteLineFromModal(){
   _pendingNewLineIdx = -1; // 명시적으로 삭제를 요청한 것이므로 closeLineModal의 자동삭제 로직과 중복 동작하지 않도록 해제
   closeLineModal();
   deleteLine(idx);
+}
+
+// DR/CR을 선택/변경할 때마다 호출됨. Advance Payment(ADV)/Settlement(SET)의 BP 라인이면
+// 요청하신 규칙대로 Cost/Profit Center를 그때그때 반응형으로 채우거나 비운다.
+// (BP만 선택해도 미리 채워지던 문제, DR↔CR을 왔다갔다 해도 다시 안 채워지던 문제를 함께 해결)
+function onLmDrcrChange(){
+  if(_lineModalIdx < 0) return;
+  const l = lines[_lineModalIdx];
+  if(!l || !l._lockCC) return;
+  const type = document.getElementById('v-type')?.value||'';
+  if(type!=='ADV' && type!=='SET') return;
+  const drcrVal = document.getElementById('lm-drcr').value;
+  const shouldFill = (type==='ADV' && drcrVal==='DR') || (type==='SET' && drcrVal==='CR');
+  const ccSel = document.getElementById('lm-cctr');
+  const ccNameEl = document.getElementById('lm-cctrname');
+  if(shouldFill){
+    const ccName = type==='ADV' ? 'Advance payment' : 'Settlement of Advance';
+    // 마스터 데이터에 110401 옵션이 아직 없으면(로딩 지연 등) 임시로 추가해서 값이 확실히 반영되게 함
+    if(!Array.from(ccSel.options).some(o=>o.value==='110401')){
+      const opt = document.createElement('option');
+      opt.value = '110401';
+      opt.textContent = '110401 ' + ccName;
+      ccSel.appendChild(opt);
+    }
+    ccSel.value = '110401';
+    ccNameEl.textContent = ccName;
+  } else {
+    ccSel.value = '';
+    ccNameEl.textContent = '';
+  }
 }
 
 function saveLineModal() {
