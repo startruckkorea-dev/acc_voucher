@@ -1589,17 +1589,18 @@ function deleteLine(i) {
   if (l && l._lockCC) {
     // VAT 라인은 더 이상 특별 보호 없이 다른 라인처럼 그냥 삭제 가능
     if (_isVatLine(l)) { lines.splice(i,1); renderLines(); return; }
-    const bpCode = document.getElementById('v-bp-code')?.value||'';
-    if (l.gl && l.gl===bpCode) {
+    // BP 예약 라인은 applyFixedLines()가 항상 [주BP, 추가BP1, 추가BP2, ...] 순서로 맨 앞에 재구성하므로,
+    // gl 코드 값이 아니라 "몇 번째 예약 라인인가(index)"로 역할을 판별한다.
+    // (동일 BP 코드를 중복 추가할 수 있게 되면서, gl 값만으로는 주BP인지 추가BP인지 구분이 안 되는 문제가 있었음)
+    if (i === 0) {
       // 주 BP 라인을 지우면 "2. BP 정보"의 주 BP 선택도 함께 초기화
       document.getElementById('v-bp-code').value='';
       document.getElementById('v-bp-name').value='';
       document.getElementById('v-bp-bizno').value='';
       document.getElementById('v-bp-cat').value='';
-    } else if (l.gl) {
-      // 추가 BP 라인을 지우면 extraBPs 목록에서도 함께 제거
-      const idx = extraBPs.findIndex(b=>b.code===l.gl);
-      if (idx>=0) extraBPs.splice(idx,1);
+    } else if (i-1 < extraBPs.length) {
+      // 추가 BP 라인을 지우면 extraBPs 목록에서도 같은 위치의 항목을 함께 제거
+      extraBPs.splice(i-1, 1);
     }
     applyFixedLines(); // "2. BP 정보" 반영 + 라인 재구성
     return;
