@@ -720,7 +720,8 @@ let msal_g = null, user = null, siteId = null, nasId = null;
 let bpData = []; // SharePoint Excel에서 로드
 let lines  = Array.from({length:6}, () => ({drcr:'',gl:'',glName:'',cctr:'',cctrName:'',pc:'',pcName:'',subpc:'',subpcName:'',lineDesc:'',currency:'KRW',unitPrice:'',qty:1,amount:0}));
 let currentGlIdx = null;
-let extraBPs = []; // "+BP 추가"로 넣은 추가 BP 목록 [{code,name,bizNo,category}]
+let extraBPs = []; // "+BP 추가"로 넣은 추가 BP 목록 [{code,name,bizNo,category,_uid}]
+let _bpUidSeq = 0; // 추가 BP 항목마다 고유 id를 부여 — 동일 BP 코드가 중복 추가돼도 라인 재구성 시 정확히 같은 항목끼리 상태(DR/CR·금액 등)를 이어붙이기 위함
 let bpModalMode = 'primary'; // 'primary' = 2.BP정보 선택, 'extra' = 회계정보 +BP추가
 let _lineClipboard = null; // 회계 정보 라인 복사/붙여넣기용
 let voucherStore = JSON.parse(localStorage.getItem('stk_acc_vouchers') || '[]');
@@ -1621,11 +1622,13 @@ function applyFixedLines() {
   const type = document.getElementById('v-type')?.value||'';
   const isSpecial = type !== 'GL' && type !== 'FA';
 
-  const prevAmountByGl = {};
+  // 기존 BP 예약 라인들을 uid로 찾을 수 있도록 맵으로 보존해둔다.
+  // (코드 값으로 매칭하면 동일 BP 코드가 중복 추가된 경우 서로 뒤섞여서 DR/CR·금액이 엉뚱하게 섞이는 문제가 있었음)
+  const oldByUid = {};
   let prevCurrency = null;
   lines.forEach(l => {
     if(!l._lockCC) return;
-    if(l.gl && l.amount) prevAmountByGl[l.gl] = l.amount;
+    if(l._uid) oldByUid[l._uid] = l;
     if(l.currency && !prevCurrency) prevCurrency = l.currency;
   });
   // 사용자가 직접 추가한(잠기지 않은) 라인은 그대로 뒤에 유지 — VAT 라인도 이제 여기 포함됨
@@ -1640,20 +1643,30 @@ function applyFixedLines() {
     // Advance payment(ADV)/Settlement(SET)은 Cost/Profit Center를 하드코딩 기본값으로 자동 채우되 사용자가 지울 수 있음
     const isAdvOrSet = (type==='ADV' || type==='SET');
 
-    // DR/CR은 더 이상 자동 고정하지 않음 — 사용자가 라인 모달에서 직접 선택
-    const mkBpLine = (code, name) => ({
-      drcr: '', gl: code||'', glName: code?name:'', lineDesc: '',
-      cctr: isAdvOrSet ? '110401' : '', cctrName: isAdvOrSet ? (type==='ADV'?'Advance payment':'Settlement of Advance') : '',
-      pc:'', pcName:'', subpc:'', subpcName:'',
-      currency: lineCurrency, unitPrice:'', qty:1,
-      amount: code ? (prevAmountByGl[code]||0) : 0,
-      _lockCC: true
-    });
+    // uid로 이전 라인 상태를 찾아 DR/CR·금액·Cost/Profit Center 등을 그대로 이어받는다.
+    // 이전 라인이 없으면(새로 추가된 BP) 기본값으로 새로 만든다.
+    const mkBpLine = (code, name, uid) => {
+      const prev = (code && uid) ? oldByUid[uid] : null;
+      return {
+        drcr: prev ? (prev.drcr||'') : '',
+        gl: code||'', glName: code?name:'', lineDesc: '',
+        cctr: prev ? (prev.cctr||'') : (isAdvOrSet ? '110401' : ''),
+        cctrName: prev ? (prev.cctrName||'') : (isAdvOrSet ? (type==='ADV'?'Advance payment':'Settlement of Advance') : ''),
+        pc: prev ? (prev.pc||'') : '', pcName: prev ? (prev.pcName||'') : '',
+        subpc: prev ? (prev.subpc||'') : '', subpcName: prev ? (prev.subpcName||'') : '',
+        pcEnabled: prev ? prev.pcEnabled : undefined,
+        subpcEnabled: prev ? prev.subpcEnabled : undefined,
+        cctrEnabled: prev ? prev.cctrEnabled : undefined,
+        currency: lineCurrency, unitPrice:'', qty:1,
+        amount: prev ? (prev.amount||0) : 0,
+        _lockCC: true, _uid: uid
+      };
+    };
 
-    // No.1: 주 BP (BP 정보가 아직 없으면 빈 상태로 "잠금만" 유지)
-    reservedLines.push(mkBpLine(bpCode, bpName));
-    // No.2~: "+BP 추가"로 넣은 추가 BP
-    extraBPs.forEach(b => reservedLines.push(mkBpLine(b.code, b.name)));
+    // No.1: 주 BP (BP 정보가 아직 없으면 빈 상태로 "잠금만" 유지) — 주 BP는 uid가 항상 고정('__primary__')
+    reservedLines.push(mkBpLine(bpCode, bpName, '__primary__'));
+    // No.2~: "+BP 추가"로 넣은 추가 BP — 각 항목 고유 uid로 상태를 정확히 이어받음
+    extraBPs.forEach(b => reservedLines.push(mkBpLine(b.code, b.name, b._uid)));
     // VAT 라인은 더 이상 여기서 자동 생성하지 않음 (AP/AP_IMS는 saveLineModal에서 BP 최초 저장 시 1회 삽입)
   }
 
@@ -1910,7 +1923,7 @@ function selectBP(code) {
   const bp=bpData.find(b=>b.code===code); if(!bp) return;
   if(bpModalMode==='extra') {
     const bpCatVal = (bp.type==='Vendor'||bp.type==='S') ? 'S (Vendor)' : 'C (Customer)';
-    extraBPs.push({code:bp.code, name:bp.name, bizNo:bp.bizNo||'', category:bpCatVal});
+    extraBPs.push({code:bp.code, name:bp.name, bizNo:bp.bizNo||'', category:bpCatVal, _uid:'bp_'+(_bpUidSeq++)});
     closeBpModal();
     renderExtraBPs();
     applyFixedLines();
@@ -2582,6 +2595,7 @@ async function loadExistingVoucher() {
     document.getElementById('v-bp-bizno').value = f.BPBizNo||'';
     document.getElementById('v-bp-cat').value = f.BPCategory||'';
     try { extraBPs = JSON.parse(f.AdditionalBPsJSON||'[]'); } catch(e){ extraBPs=[]; }
+    extraBPs.forEach(b=>{ if(!b._uid) b._uid = 'bp_'+(_bpUidSeq++); });
     renderExtraBPs();
     // Purpose — HTML 태그 제거
     const rawPurpose = f.Purpose||'';
