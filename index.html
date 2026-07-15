@@ -2021,6 +2021,11 @@ function selectGL(code){
   if(!gl.pcEnabled){ lines[currentGlIdx].pc=''; lines[currentGlIdx].pcName=''; }
   if(!gl.subpcEnabled){ lines[currentGlIdx].subpc=''; lines[currentGlIdx].subpcName=''; }
   if(!gl.cctrEnabled){ lines[currentGlIdx].cctr=''; lines[currentGlIdx].cctrName=''; }
+  // VAT 성격 코드(110xxx=자산성/VAT recoverable, 210xxx=부채성/VAT payable)를 선택하면
+  // DR/CR 기본값을 코드 성격에 맞게 자동 반영 (110→차변, 210→대변). 이후 드롭다운에서 직접 변경 가능.
+  if(_isVatLine({gl:gl.code, lineDesc: lines[currentGlIdx].lineDesc})){
+    lines[currentGlIdx].drcr = gl.code.startsWith('110') ? 'DR' : 'CR';
+  }
   // 라인 모달이 열려있으면 lm 필드도 업데이트
   if(document.getElementById('line-modal').classList.contains('open')){
     document.getElementById('lm-gl').value = gl.code;
@@ -2028,6 +2033,8 @@ function selectGL(code){
     applyPcSubpcAvailability(gl.pcEnabled, gl.subpcEnabled, gl.cctrEnabled, !!lines[currentGlIdx]._lockCC);
     const glHint = document.getElementById('lm-gl-hint');
     if(glHint) glHint.style.display = 'none';
+    const drcrSel = document.getElementById('lm-drcr');
+    if(drcrSel && lines[currentGlIdx].drcr) drcrSel.value = lines[currentGlIdx].drcr;
   }
   renderLines(); closeGlModal();
 }
@@ -2567,14 +2574,13 @@ function saveLineModal() {
     // 단, 사용자가 VAT 라인 자체를 직접 열어서 수정하면(_autoCalc=false) 그 이후로는 더 이상 자동 갱신하지 않음.
     // 외화(KRW 아님)는 부가세가 없으므로 자동 계산하지 않음. AP(플레인)는 자동 계산 대상이 아님 — 필요하면 "+VAT 라인 추가"로 직접 추가.
     if(type==='AP_IMS' && newCurrency==='KRW'){
-      const vatCode = '110510';
-      const vatGL = GL_LIST.find(g=>g.code===vatCode);
-      const vatDrcr = vatCode.startsWith('110') ? 'DR' : 'CR';
+      const defaultVatCode = '110510';
       let vatLine = lines.find(_isVatLine);
       if(!vatLine && amountVal>0 && lines[i].drcr){
         // VAT 라인이 아직 없으면 방금 저장한 BP 라인 바로 아래에 새로 만든다.
+        const vatGL = GL_LIST.find(g=>g.code===defaultVatCode);
         vatLine = {
-          drcr: vatDrcr, gl:vatCode, glName: vatGL?vatGL.name:'VAT', lineDesc:'VAT',
+          drcr: 'DR', gl:defaultVatCode, glName: vatGL?vatGL.name:'VAT', lineDesc:'VAT',
           cctr:'', cctrName:'', pc:'', pcName:'', subpc:'', subpcName:'',
           currency: newCurrency, unitPrice:'', qty:1, amount: 0, _autoCalc: true
         };
@@ -2583,7 +2589,8 @@ function saveLineModal() {
       if(vatLine && vatLine._autoCalc !== false){
         const bpTotal = lines.filter(l=>l._lockCC).reduce((s,l)=>s+(parseFloat(l.amount)||0),0);
         vatLine.amount = Math.round((bpTotal/11)*100)/100;
-        vatLine.drcr = vatDrcr; // VAT 코드 성격에 따른 고정값 (BP 쪽 DR/CR과 무관)
+        // DR/CR은 이 VAT 라인에 실제로 설정된 GL 코드 기준으로 매번 다시 계산 (110→차변, 210→대변)
+        vatLine.drcr = (vatLine.gl||defaultVatCode).startsWith('110') ? 'DR' : 'CR';
       }
     }
   }
