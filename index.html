@@ -1409,7 +1409,7 @@ function renderApproval() {
   const CTRL = cfgVal(cfg,'ACC-Voucher_CONTROLLING',{name:'', email:''});
   const AMGR = cfgVal(cfg,'ACC-Voucher_ACCOUNTING', {name:'', email:''});
   const CFO  = cfgVal(cfg,'ACC-Voucher_CFO',  {name:'', email:''});
-  const ACC_MAP={AP:'ACC-Voucher_AP',AP_IMS:'ACC-Voucher_AP',AP_CR:'ACC-Voucher_AP',
+  const ACC_MAP={AP:'ACC-Voucher_AP',AP_IMS:'ACC-Voucher_GL',AP_CR:'ACC-Voucher_AP',
     AR:'ACC-Voucher_AR',GL:'ACC-Voucher_GL',FA:'ACC-Voucher_GL',
     ADV:'ACC-Voucher_AP',SET:'ACC-Voucher_AP'};
   const ACC = cfgVal(cfg, ACC_MAP[type]||'ACC-Voucher_GL',{name:'-',email:''});
@@ -1651,7 +1651,9 @@ function applyFixedLines() {
     const mkBpLine = (code, name, uid) => {
       const prev = (code && uid) ? oldByUid[uid] : null;
       return {
-        drcr: prev ? (prev.drcr||'') : '',
+        // Vendor Code(BP) 라인의 DR/CR 기본값은 Credit — 실무상 대부분 대변이라 기본값으로 채우되,
+        // 라인 편집 모달에서 사용자가 직접 Debit으로 변경할 수 있음 (막혀있지 않음)
+        drcr: prev ? (prev.drcr||'CR') : 'CR',
         gl: code||'', glName: code?name:'', lineDesc: '',
         cctr: prev ? (prev.cctr||'') : '',
         cctrName: prev ? (prev.cctrName||'') : '',
@@ -2285,7 +2287,7 @@ function buildApprovers() {
   const CTRL = cfgVal(cfg,'ACC-Voucher_CONTROLLING',{name:'', email:''});
   const AMGR = cfgVal(cfg,'ACC-Voucher_ACCOUNTING', {name:'', email:''});
   const CFO  = cfgVal(cfg,'ACC-Voucher_CFO',  {name:'', email:''});
-  const ACC_MAP={AP:'ACC-Voucher_AP',AP_IMS:'ACC-Voucher_AP',AP_CR:'ACC-Voucher_AP',
+  const ACC_MAP={AP:'ACC-Voucher_AP',AP_IMS:'ACC-Voucher_GL',AP_CR:'ACC-Voucher_AP',
     AR:'ACC-Voucher_AR',GL:'ACC-Voucher_GL',FA:'ACC-Voucher_GL',
     ADV:'ACC-Voucher_AP',SET:'ACC-Voucher_AP'};
   const ACC = cfgVal(cfg, ACC_MAP[type]||'ACC-Voucher_GL', {name:'-',email:''});
@@ -3461,7 +3463,7 @@ async function loadApprovalHistory(spId){
       return;
     }
     // ACC 역할은 Voucher Type에 따라 AP/AR/GL 담당자로 표시
-    const accLabelByType = {AP:'AP 담당자',AP_IMS:'AP 담당자',AP_CR:'AP 담당자',AR:'AR 담당자',GL:'GL 담당자',FA:'GL 담당자',ADV:'AP 담당자',SET:'AP 담당자'};
+    const accLabelByType = {AP:'AP 담당자',AP_IMS:'GL 담당자',AP_CR:'AP 담당자',AR:'AR 담당자',GL:'GL 담당자',FA:'GL 담당자',ADV:'AP 담당자',SET:'AP 담당자'};
     const html = list.map(af=>{
       const cls = stClsMap[af.Status] || 'status-대기잠김';
       const stText = stLabelMap[af.Status] || af.Status || '대기(잠김)';
