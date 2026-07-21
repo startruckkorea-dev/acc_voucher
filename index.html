@@ -2433,18 +2433,13 @@ function openLineModal(i) {
   const subpcEnabled = ccLocked ? false : (noGlYet ? false : (glInfo ? !!glInfo.subpcEnabled : (l.subpcEnabled !== false)));
   const cctrEnabled = ccLocked ? false : (noGlYet ? false : (glInfo ? !!glInfo.cctrEnabled : (l.cctrEnabled !== false)));
   applyPcSubpcAvailability(pcEnabled, subpcEnabled, cctrEnabled, l._lockCC);
-  // ADV/SET BP 라인의 자동채움 방향(ADV+DR 또는 SET+CR)이면 열자마자 CCTR/PC/Sub_PC 잠금 상태 + 회색 표시 동기화
+  // ADV/SET BP 라인은 DR/CR 방향과 무관하게 열자마자 CCTR/PC/Sub_PC 항상 잠금 + 회색 표시
   if(l._lockCC && (_curType==='ADV' || _curType==='SET')){
-    const _drcrNow = document.getElementById('lm-drcr').value;
-    const _shouldFillNow = (_curType==='ADV' && _drcrNow==='DR') || (_curType==='SET' && _drcrNow==='CR');
     const _grayOn = { background: '#f3f2f1', color: '#a19f9d' };
-    const _grayOff = { background: '', color: '' };
-    const _setDisabled = (sel, on) => { sel.disabled = on; sel.style.background = (on?_grayOn:_grayOff).background; sel.style.color = (on?_grayOn:_grayOff).color; };
-    _setDisabled(ccSel, _shouldFillNow);
-    if(_shouldFillNow){
-      pcSel.value = ''; document.getElementById('lm-pcname').textContent = ''; _setDisabled(pcSel, true);
-      subSel.value = ''; document.getElementById('lm-subpcname').textContent = ''; _setDisabled(subSel, true);
-    }
+    const _setDisabled = (sel, on) => { sel.disabled = on; sel.style.background = on?_grayOn.background:''; sel.style.color = on?_grayOn.color:''; };
+    _setDisabled(ccSel, true);
+    pcSel.value = ''; document.getElementById('lm-pcname').textContent = ''; _setDisabled(pcSel, true);
+    subSel.value = ''; document.getElementById('lm-subpcname').textContent = ''; _setDisabled(subSel, true);
   }
   const glHint = document.getElementById('lm-gl-hint');
   if(glHint) glHint.style.display = (noGlYet && !l._lockCC) ? 'block' : 'none';
@@ -2536,17 +2531,15 @@ function onLmDrcrChange(){
     }
     ccSel.value = '110401';
     ccNameEl.textContent = ccName;
-    setDisabled(ccSel, true); // 자동 채워진 값은 사용자가 임의로 바꾸지 못하도록 잠금 + 회색 표시
-    // 이 라인은 Advance Payment 전용 계정으로 고정되므로 Profit Center/Sub_PC도 함께 회색 처리(입력 불가)
-    pcSel.value = ''; pcNameEl.textContent = ''; setDisabled(pcSel, true);
-    subSel.value = ''; subNameEl.textContent = ''; setDisabled(subSel, true);
   } else {
     ccSel.value = '';
     ccNameEl.textContent = '';
-    setDisabled(ccSel, false);
-    setDisabled(pcSel, false);
-    setDisabled(subSel, false);
   }
+  // ADV/SET의 BP 라인은 DR/CR 방향과 무관하게 CCTR/PC/Sub_PC를 항상 잠금 + 회색 표시
+  // (Cost Center 값 자체는 방향에 따라 자동으로 채워지거나 비워짐, 위 로직 참고)
+  setDisabled(ccSel, true);
+  pcSel.value = ''; pcNameEl.textContent = ''; setDisabled(pcSel, true);
+  subSel.value = ''; subNameEl.textContent = ''; setDisabled(subSel, true);
 }
 
 function saveLineModal() {
