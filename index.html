@@ -2436,7 +2436,15 @@ function openLineModal(i) {
   // ADV/SET BP 라인은 DR/CR 방향과 무관하게 열자마자 CCTR/PC/Sub_PC 항상 잠금 + 회색 표시
   if(l._lockCC && (_curType==='ADV' || _curType==='SET')){
     const _grayOn = { background: '#f3f2f1', color: '#605e5c' };
-    const _setDisabled = (sel, on) => { sel.disabled = on; sel.style.background = on?_grayOn.background:''; sel.style.color = on?_grayOn.color:''; };
+    // Chrome 등 일부 브라우저는 disabled select의 텍스트색을 CSS로 지정해도 무시하고 시스템 회색으로
+    // 강제 렌더링함 — disabled 속성 대신 pointer-events/tabIndex로 상호작용만 막아서 지정 색상이 실제로 보이게 함
+    const _setDisabled = (sel, on) => {
+      sel.disabled = false;
+      sel.style.pointerEvents = on ? 'none' : '';
+      sel.tabIndex = on ? -1 : 0;
+      sel.style.background = on ? _grayOn.background : '';
+      sel.style.color = on ? _grayOn.color : '';
+    };
     _setDisabled(ccSel, true);
     pcSel.value = ''; document.getElementById('lm-pcname').textContent = ''; _setDisabled(pcSel, true);
     subSel.value = ''; document.getElementById('lm-subpcname').textContent = ''; _setDisabled(subSel, true);
@@ -2519,7 +2527,15 @@ function onLmDrcrChange(){
   const subNameEl = document.getElementById('lm-subpcname');
   const grayOn  = { background: '#f3f2f1', color: '#605e5c' };
   const grayOff = { background: '', color: '' };
-  const setDisabled = (sel, on) => { sel.disabled = on; sel.style.background = (on?grayOn:grayOff).background; sel.style.color = (on?grayOn:grayOff).color; };
+  // Chrome 등 일부 브라우저는 disabled select의 텍스트색을 CSS로 지정해도 무시하고 시스템 회색으로
+  // 강제 렌더링함 — disabled 속성 대신 pointer-events/tabIndex로 상호작용만 막아서 지정 색상이 실제로 보이게 함
+  const setDisabled = (sel, on) => {
+    sel.disabled = false;
+    sel.style.pointerEvents = on ? 'none' : '';
+    sel.tabIndex = on ? -1 : 0;
+    sel.style.background = on ? grayOn.background : grayOff.background;
+    sel.style.color = on ? grayOn.color : grayOff.color;
+  };
   if(shouldFill){
     const ccName = type==='ADV' ? 'Advance payment' : 'Settlement of Advance';
     // 마스터 데이터에 110401 옵션이 아직 없으면(로딩 지연 등) 임시로 추가해서 값이 확실히 반영되게 함
