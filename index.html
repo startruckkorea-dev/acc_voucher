@@ -2435,7 +2435,7 @@ function openLineModal(i) {
   applyPcSubpcAvailability(pcEnabled, subpcEnabled, cctrEnabled, l._lockCC);
   // ADV/SET BP 라인은 DR/CR 방향과 무관하게 열자마자 CCTR/PC/Sub_PC 항상 잠금 + 회색 표시
   if(l._lockCC && (_curType==='ADV' || _curType==='SET')){
-    const _grayOn = { background: '#f3f2f1', color: '#a19f9d' };
+    const _grayOn = { background: '#f3f2f1', color: '#605e5c' };
     const _setDisabled = (sel, on) => { sel.disabled = on; sel.style.background = on?_grayOn.background:''; sel.style.color = on?_grayOn.color:''; };
     _setDisabled(ccSel, true);
     pcSel.value = ''; document.getElementById('lm-pcname').textContent = ''; _setDisabled(pcSel, true);
@@ -2517,7 +2517,7 @@ function onLmDrcrChange(){
   const pcNameEl = document.getElementById('lm-pcname');
   const subSel = document.getElementById('lm-subpc');
   const subNameEl = document.getElementById('lm-subpcname');
-  const grayOn  = { background: '#f3f2f1', color: '#a19f9d' };
+  const grayOn  = { background: '#f3f2f1', color: '#605e5c' };
   const grayOff = { background: '', color: '' };
   const setDisabled = (sel, on) => { sel.disabled = on; sel.style.background = (on?grayOn:grayOff).background; sel.style.color = (on?grayOn:grayOff).color; };
   if(shouldFill){
