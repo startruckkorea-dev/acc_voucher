@@ -2432,7 +2432,13 @@ function openLineModal(i) {
   const pcEnabled = ccLocked ? false : (noGlYet ? false : (glInfo ? !!glInfo.pcEnabled : (l.pcEnabled !== false)));
   const subpcEnabled = ccLocked ? false : (noGlYet ? false : (glInfo ? !!glInfo.subpcEnabled : (l.subpcEnabled !== false)));
   const cctrEnabled = ccLocked ? false : (noGlYet ? false : (glInfo ? !!glInfo.cctrEnabled : (l.cctrEnabled !== false)));
-  applyPcSubpcAvailability(pcEnabled, subpcEnabled, cctrEnabled, ccLocked);
+  applyPcSubpcAvailability(pcEnabled, subpcEnabled, cctrEnabled, l._lockCC);
+  // ADV/SET BP 라인의 자동채움 방향(ADV+DR 또는 SET+CR)이면 열자마자 CCTR 잠금 상태 동기화
+  if(l._lockCC && (_curType==='ADV' || _curType==='SET')){
+    const _drcrNow = document.getElementById('lm-drcr').value;
+    const _shouldFillNow = (_curType==='ADV' && _drcrNow==='DR') || (_curType==='SET' && _drcrNow==='CR');
+    ccSel.disabled = _shouldFillNow;
+  }
   const glHint = document.getElementById('lm-gl-hint');
   if(glHint) glHint.style.display = (noGlYet && !l._lockCC) ? 'block' : 'none';
   // Line Desc / Amount
@@ -2516,9 +2522,11 @@ function onLmDrcrChange(){
     }
     ccSel.value = '110401';
     ccNameEl.textContent = ccName;
+    ccSel.disabled = true; // 자동 채워진 값은 사용자가 임의로 바꾸지 못하도록 잠금
   } else {
     ccSel.value = '';
     ccNameEl.textContent = '';
+    ccSel.disabled = false;
   }
 }
 
@@ -2531,8 +2539,9 @@ function saveLineModal() {
   const newCurrency = document.getElementById('lm-currency').value;
   const drcrVal = document.getElementById('lm-drcr').value;
   const type = document.getElementById('v-type')?.value||'';
-  const _curType = type;
-  const ccLocked = lines[i]._lockCC && _curType!=='ADV' && _curType!=='SET';
+  // BP/벤더 자동 라인(_lockCC)은 Voucher Type과 무관하게 항상 COST CENTER/PROFIT CENTER/SUB_PC를 필수값에서 제외
+  // (ADV/SET에서 DR-CR 방향에 따라 자동 채워지는 CCTR을 제외하면, BP 라인 자체에 이 값들이 꼭 필요한 경우가 아니기 때문)
+  const ccLocked = lines[i]._lockCC;
 
   // DR/CR은 더 이상 자동 고정되지 않으므로 반드시 직접 선택해야 함
   if(!drcrVal){
