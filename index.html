@@ -2433,14 +2433,17 @@ function openLineModal(i) {
   const subpcEnabled = ccLocked ? false : (noGlYet ? false : (glInfo ? !!glInfo.subpcEnabled : (l.subpcEnabled !== false)));
   const cctrEnabled = ccLocked ? false : (noGlYet ? false : (glInfo ? !!glInfo.cctrEnabled : (l.cctrEnabled !== false)));
   applyPcSubpcAvailability(pcEnabled, subpcEnabled, cctrEnabled, l._lockCC);
-  // ADV/SET BP 라인의 자동채움 방향(ADV+DR 또는 SET+CR)이면 열자마자 CCTR/PC/Sub_PC 잠금 상태 동기화
+  // ADV/SET BP 라인의 자동채움 방향(ADV+DR 또는 SET+CR)이면 열자마자 CCTR/PC/Sub_PC 잠금 상태 + 회색 표시 동기화
   if(l._lockCC && (_curType==='ADV' || _curType==='SET')){
     const _drcrNow = document.getElementById('lm-drcr').value;
     const _shouldFillNow = (_curType==='ADV' && _drcrNow==='DR') || (_curType==='SET' && _drcrNow==='CR');
-    ccSel.disabled = _shouldFillNow;
+    const _grayOn = { background: '#f3f2f1', color: '#a19f9d' };
+    const _grayOff = { background: '', color: '' };
+    const _setDisabled = (sel, on) => { sel.disabled = on; sel.style.background = (on?_grayOn:_grayOff).background; sel.style.color = (on?_grayOn:_grayOff).color; };
+    _setDisabled(ccSel, _shouldFillNow);
     if(_shouldFillNow){
-      pcSel.value = ''; document.getElementById('lm-pcname').textContent = ''; pcSel.disabled = true;
-      subSel.value = ''; document.getElementById('lm-subpcname').textContent = ''; subSel.disabled = true;
+      pcSel.value = ''; document.getElementById('lm-pcname').textContent = ''; _setDisabled(pcSel, true);
+      subSel.value = ''; document.getElementById('lm-subpcname').textContent = ''; _setDisabled(subSel, true);
     }
   }
   const glHint = document.getElementById('lm-gl-hint');
@@ -2519,6 +2522,9 @@ function onLmDrcrChange(){
   const pcNameEl = document.getElementById('lm-pcname');
   const subSel = document.getElementById('lm-subpc');
   const subNameEl = document.getElementById('lm-subpcname');
+  const grayOn  = { background: '#f3f2f1', color: '#a19f9d' };
+  const grayOff = { background: '', color: '' };
+  const setDisabled = (sel, on) => { sel.disabled = on; sel.style.background = (on?grayOn:grayOff).background; sel.style.color = (on?grayOn:grayOff).color; };
   if(shouldFill){
     const ccName = type==='ADV' ? 'Advance payment' : 'Settlement of Advance';
     // 마스터 데이터에 110401 옵션이 아직 없으면(로딩 지연 등) 임시로 추가해서 값이 확실히 반영되게 함
@@ -2530,16 +2536,16 @@ function onLmDrcrChange(){
     }
     ccSel.value = '110401';
     ccNameEl.textContent = ccName;
-    ccSel.disabled = true; // 자동 채워진 값은 사용자가 임의로 바꾸지 못하도록 잠금
+    setDisabled(ccSel, true); // 자동 채워진 값은 사용자가 임의로 바꾸지 못하도록 잠금 + 회색 표시
     // 이 라인은 Advance Payment 전용 계정으로 고정되므로 Profit Center/Sub_PC도 함께 회색 처리(입력 불가)
-    pcSel.value = ''; pcNameEl.textContent = ''; pcSel.disabled = true;
-    subSel.value = ''; subNameEl.textContent = ''; subSel.disabled = true;
+    pcSel.value = ''; pcNameEl.textContent = ''; setDisabled(pcSel, true);
+    subSel.value = ''; subNameEl.textContent = ''; setDisabled(subSel, true);
   } else {
     ccSel.value = '';
     ccNameEl.textContent = '';
-    ccSel.disabled = false;
-    pcSel.disabled = false;
-    subSel.disabled = false;
+    setDisabled(ccSel, false);
+    setDisabled(pcSel, false);
+    setDisabled(subSel, false);
   }
 }
 
