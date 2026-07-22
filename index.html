@@ -762,6 +762,13 @@ let bpData = []; // SharePoint Excel에서 로드
 let lines  = Array.from({length:6}, () => ({drcr:'',gl:'',glName:'',cctr:'',cctrName:'',pc:'',pcName:'',subpc:'',subpcName:'',lineDesc:'',currency:'KRW',unitPrice:'',qty:1,amount:0}));
 let currentGlIdx = null;
 let extraBPs = []; // "+BP 추가"로 넣은 추가 BP 목록 [{code,name,bizNo,category,_uid}]
+// 날짜전용 필드(InvoiceDate 등)를 KST 보정 후 YYYY-MM-DD로 표시 — SharePoint가 순수 날짜를 UTC 자정으로 해석해 저장하는 경우
+// 단순 slice(0,10)만 하면 하루 당겨져 보일 수 있어(SSC에서 동일 버그 발견/수정 이력 있음), 항상 이 함수를 통해 표시
+function fmtDateOnly(iso){
+  if(!iso) return '';
+  const d = new Date(new Date(iso).getTime() + 9*3600*1000);
+  return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0');
+}
 let _bpUidSeq = 0; // 추가 BP 항목마다 고유 id를 부여 — 동일 BP 코드가 중복 추가돼도 라인 재구성 시 정확히 같은 항목끼리 상태(DR/CR·금액 등)를 이어붙이기 위함
 let bpModalMode = 'primary'; // 'primary' = 2.BP정보 선택, 'extra' = 회계정보 +BP추가
 let _lineClipboard = null; // 회계 정보 라인 복사/붙여넣기용
@@ -2890,7 +2897,7 @@ async function loadExistingVoucher() {
     document.getElementById('v-type').value = f.VoucherType||'';
     onTypeChange();
     // Invoice Date 불러오기 (기존 전표 날짜 그대로)
-    document.getElementById('v-inv-date').value = f.InvoiceDate ? f.InvoiceDate.slice(0,10) : '';
+    document.getElementById('v-inv-date').value = fmtDateOnly(f.InvoiceDate);
     // Exchange Rate: 불러오지 않음 — 오늘 환율 그대로 유지 (applyTodayExchangeRate가 이미 적용돼있음)
     // BP 정보
     document.getElementById('v-bp-code').value = f.BPCode||'';
@@ -3590,7 +3597,7 @@ async function openVoucherSP(spId, fromTab){
     const p = n => String(n).padStart(2,'0');
     return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
   })() : '-';
-  const invoiceDate = v.InvoiceDate ? v.InvoiceDate.slice(0,10) : '-';
+  const invoiceDate = fmtDateOnly(v.InvoiceDate) || '-';
   const exchangeRateDisplay = v.ExchangeRate
     ? v.ExchangeRate.split(',').map(s=>s.replace(':',': ')).join(' &nbsp;|&nbsp; ')
     : '-';
@@ -3960,7 +3967,7 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
   const stripHtml = s => String(s==null?'':s).replace(/<[^>]*>/g,'').replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>').trim();
   const esc = s => stripHtml(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const submittedDate = v.SubmittedDate ? (()=>{const d=new Date(v.SubmittedDate);const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;})() : '-';
-  const invoiceDate = v.InvoiceDate ? v.InvoiceDate.slice(0,10) : '-';
+  const invoiceDate = fmtDateOnly(v.InvoiceDate) || '-';
   const lineCurrencies=[...new Set((lines_data||[]).map(l=>l.currency).filter(c=>c&&c!=='KRW'))];
   const exRateParts = v.ExchangeRate ? v.ExchangeRate.split(',').map(s=>{const parts=s.split(':');const c=parts[0];const rv=parseFloat(parts[1]);return rv>0?{c,txt:c+' '+rv.toLocaleString('ko-KR',{maximumFractionDigits:4})}:null;}).filter(Boolean) : [];
   // 실제 라인에서 쓰인 통화만 표시 (전체 마스터 환율 목록이 아니라). 전부 KRW면 표시할 환율 자체가 없음(공란)
