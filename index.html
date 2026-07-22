@@ -820,15 +820,17 @@ async function useVolumeOf(item) {
     if (vol) { LIST_APPROVALS = vol.id; return vol; }
   }
   if (item && item._spId) {
-    for (const vol of (VOL_CONFIG.aprVolumes||[])) {
+    const checks = await Promise.all((VOL_CONFIG.aprVolumes||[]).map(async vol => {
       try {
         const res = await api(`/sites/${siteId}/lists/${vol.id}/items?$expand=fields&$filter=fields/RequestID eq ${parseInt(item._spId)}&$top=1`);
-        if (res.value && res.value.length) {
-          item._aprCode = vol.code;
-          LIST_APPROVALS = vol.id;
-          return vol;
-        }
-      } catch(e) { /* 이 세대에 없거나 조회 실패 - 다음 세대 계속 탐색 */ }
+        return (res.value && res.value.length) ? vol : null;
+      } catch(e) { return null; } // 이 세대에 없거나 조회 실패
+    }));
+    const found = checks.find(Boolean);
+    if (found) {
+      item._aprCode = found.code;
+      LIST_APPROVALS = found.id;
+      return found;
     }
   }
   const cur = getCurrentAprVolume(); // 못 찾으면 현재 활성 세대로 폴백
@@ -836,19 +838,19 @@ async function useVolumeOf(item) {
   return cur;
 }
 // 등록된 모든 Approvals 세대를 순회하며 콜백을 실행하고 결과를 합침 (각 결과엔 _aprCode가 자동 태깅됨)
+// 등록된 모든 Approvals 세대를 "동시에" 조회하고 결과를 합침 (세대가 여러 개여도 왕복은 가장 느린 것 하나만큼만 걸림)
+// 콜백은 전역변수가 아니라 vol.id를 직접 참조해야 함 — 병렬 실행 중에는 전역 LIST_APPROVALS를 신뢰할 수 없기 때문
 async function _forEachAprVolume(fn) {
   await loadVolumeConfig();
-  let merged = [];
-  for (const vol of (VOL_CONFIG.aprVolumes||[])) {
-    LIST_APPROVALS = vol.id;
+  const results = await Promise.all((VOL_CONFIG.aprVolumes||[]).map(async vol => {
     try {
       const arr = await fn(vol);
       (arr||[]).forEach(item => { item._aprCode = vol.code; });
-      merged = merged.concat(arr||[]);
-    } catch(e) { console.warn('[Volume] '+vol.code+' 조회 실패:', e.message); }
-  }
-  applyCurrentVolume();
-  return merged;
+      return arr || [];
+    } catch(e) { console.warn('[Volume] '+vol.code+' 조회 실패:', e.message); return []; }
+  }));
+  applyCurrentVolume(); // 다음 단일 작업(신규 작성 등)에 영향 없도록 현재 활성 세대로 복귀
+  return results.flat();
 }
 
 // ── System Config (system_config_final.xlsx) ──
@@ -2952,8 +2954,8 @@ let adminListCache = [];
 async function checkApprovalBadge(){
   if(!siteId) return;
   try{
-    const merged = await _forEachAprVolume(async () => {
-      const data = await apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_APPROVALS}/items?$expand=fields&$top=999`);
+    const merged = await _forEachAprVolume(async (vol) => {
+      const data = await apiAll(`${GRAPH}/sites/${siteId}/lists/${vol.id}/items?$expand=fields&$top=999`);
       return data.value;
     });
     const mine = merged.filter(i=>isMe(i.fields.ApproverEmail) && i.fields.Status==='대기');
@@ -2979,7 +2981,7 @@ async function loadApprovalQueue() {
 
     // 등록된 모든 Approvals 세대를 순회하며 Requests와 매칭한 뒤 합침 (nextLink 자동순회)
     const merged = await _forEachAprVolume(async (vol) => {
-      const apprData = await apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_APPROVALS}/items?$expand=fields&$top=999`);
+      const apprData = await apiAll(`${GRAPH}/sites/${siteId}/lists/${vol.id}/items?$expand=fields&$top=999`);
       // 내 이메일(email/username 둘 다)이 결재자이고 Status가 '대기'인 항목만
       const myPending = apprData.value.filter(i=>isMe(i.fields.ApproverEmail) && i.fields.Status === '대기');
       return myPending.map(item=>{
@@ -3272,7 +3274,7 @@ async function exportAdminExcel(){
     // 등록된 모든 Approvals 세대를 순회하며 결재자 맵 구성 (reqId → 결재자 배열 + 어느 세대인지)
     const apprMap = {};
     await _forEachAprVolume(async (vol) => {
-      const apprData = await apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_APPROVALS}/items?$expand=fields&$top=999`);
+      const apprData = await apiAll(`${GRAPH}/sites/${siteId}/lists/${vol.id}/items?$expand=fields&$top=999`);
       (apprData.value||[]).forEach(a=>{
         const rid = String(a.fields.RequestID);
         if(!apprMap[rid]) apprMap[rid]=[];
