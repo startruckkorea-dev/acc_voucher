@@ -518,7 +518,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 <div id="tab-admin" style="display:none">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
     <div id="apr-vol-status" style="font-size:.76rem;color:#605e5c;background:#f3f2f1;border-radius:4px;padding:6px 12px;display:flex;align-items:center;gap:8px">📦 결재이력 세대: 불러오는 중...</div>
-    <button onclick="openVolumeModal()" style="padding:6px 14px;background:#5c2d91;color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer;white-space:nowrap">📦 Approvals 세대 관리</button>
+    <button id="btn-vol-manage" onclick="openVolumeModal()" style="display:none;padding:6px 14px;background:#5c2d91;color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer;white-space:nowrap">📦 Approvals 세대 관리</button>
   </div>
   <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
     <select id="admin-status" onchange="applyAdminFilters()" style="border:1px solid #d2d0ce;border-radius:4px;padding:6px 10px;font-size:.72rem;font-family:inherit">
@@ -902,6 +902,7 @@ function cfgEmails(cfg, keys) {
   return [...new Set(expanded)].map(k => (cfg && cfg[k] ? cfg[k].email : '')).filter(Boolean);
 }
 const ADMIN_EMAILS = [];
+const IT_EMAILS = []; // ACC-Voucher_IT — Approvals 세대 관리 등 인프라 전환 기능 노출 대상
 let _configLoaded = false;
 
 
@@ -1092,6 +1093,14 @@ async function boot(account) {
     // 관리자 권한: ACC-Voucher_ADMIN_1~N 모두 읽기
     const adminList = cfgEmails(cfg, ['ACC-Voucher_ADMIN_1']); // ADMIN_N 패턴 자동 확장
     if(adminList.length) ADMIN_EMAILS.splice(0, ADMIN_EMAILS.length, ...adminList);
+    // IT 담당자(ACC-Voucher_IT) — Approvals 세대 관리(SharePoint 인프라 전환) 같은 민감한 기능은 이 사람들에게만 노출
+    const itList = cfgEmails(cfg, ['ACC-Voucher_IT']);
+    if(itList.length) IT_EMAILS.splice(0, IT_EMAILS.length, ...itList);
+    // IT 담당자(ACC-Voucher_IT)만 Approvals 세대 관리 버튼을 볼 수 있도록 처리
+    const rawUserEmail = (user?.email||user?.username||'').toLowerCase();
+    const isItStaff = IT_EMAILS.map(e=>e.toLowerCase()).includes(rawUserEmail);
+    const volBtn = document.getElementById('btn-vol-manage');
+    if(volBtn) volBtn.style.display = isItStaff ? 'inline-block' : 'none';
     _configLoaded = true;
     renderApproval(); // config 로드 후 재렌더
   }).catch(()=>{ _configLoaded = true; });
@@ -3130,6 +3139,11 @@ function renderVolListSelect() {
 }
 
 function openVolumeModal() {
+  const rawUserEmail = (user?.email||user?.username||'').toLowerCase();
+  if(!IT_EMAILS.map(e=>e.toLowerCase()).includes(rawUserEmail)){
+    showAccAlert('접근 권한이 없습니다', 'Approvals 세대 관리는 IT 담당자만 사용할 수 있습니다.', '🔒');
+    return;
+  }
   document.getElementById('volume-modal').classList.add('open');
   renderVolumeList();
   document.getElementById('vol-new-list-select').innerHTML = '<option value="">목록 불러오는 중...</option>';
