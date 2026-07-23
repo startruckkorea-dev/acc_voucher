@@ -958,9 +958,7 @@ const APPROVAL_RULES = {
 async function signIn() {
   try {
     if (window !== window.top) { window.open(location.href,'_blank'); return; }
-    const r = await msal_g.loginPopup({scopes:SCOPES});
-    msal_g.setActiveAccount(r.account);
-    await boot(r.account);
+    await msal_g.loginRedirect({scopes:SCOPES});
   } catch(e) { showLoginError(e.message||e.errorMessage||'로그인 실패'); }
 }
 function signOut() { msal_g.logoutRedirect(); }
