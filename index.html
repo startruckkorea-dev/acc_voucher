@@ -829,7 +829,8 @@ async function useVolumeOf(item) {
   if (item && item._spId) {
     const checks = await Promise.all((VOL_CONFIG.aprVolumes||[]).map(async vol => {
       try {
-        const res = await api(`/sites/${siteId}/lists/${vol.id}/items?$expand=fields&$filter=fields/RequestID eq ${parseInt(item._spId)}&$top=1`);
+        // apiAll() 사용 — 비인덱스 대용량 리스트 조회 허용 헤더가 포함돼 있어, 커진 예전 세대에서도 필터 조회가 조용히 실패하지 않음
+        const res = await apiAll(`/sites/${siteId}/lists/${vol.id}/items?$expand=fields&$filter=fields/RequestID eq ${parseInt(item._spId)}&$top=1`);
         return (res.value && res.value.length) ? vol : null;
       } catch(e) { return null; } // 이 세대에 없거나 조회 실패
     }));
