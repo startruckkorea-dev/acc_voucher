@@ -3836,12 +3836,23 @@ async function openVoucherSP(spId, fromTab){
   });
 }
 
+// 특정 전표의 결재이력을 직접 조회 (캐시에 의존하지 않음 - PDF 생성처럼 정확성이 중요한 곳에서 재사용)
+async function fetchApprovalListDirect(v){
+  await useVolumeOf(v); // 이 전표의 결재이력이 있는 Approvals 세대로 전환
+  if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
+  const t = await token();
+  const url = `${GRAPH}/sites/${siteId}/lists/${LIST_APPROVALS}/items?$expand=fields&$filter=fields/RequestID eq ${parseInt(v._spId)}&$top=50`;
+  const res = await fetch(url, {headers:{Authorization:'Bearer '+t, Prefer:'HonorNonIndexedQueriesWarningMayFailRandomly'}});
+  if(!res.ok) throw new Error('결재 이력 조회 실패');
+  const data = await res.json();
+  return data.value.map(i=>({...i.fields, _apprId:i.id})).sort((a,b)=>(a.ApprovalOrder||0)-(b.ApprovalOrder||0));
+}
+
 async function loadApprovalHistory(spId){
   const v = voucherListCache.find(x=>x._spId===spId)
     || adminListCache.find(x=>x._spId===spId)
     || (approvalQueueCache.find(x=>x._voucher?._spId===spId)?._voucher);
   if(!v) return;
-  await useVolumeOf(v); // 이 전표의 결재이력이 있는 Approvals 세대로 전환
   const stClsMap={'대기':'status-대기','대기(잠김)':'status-대기잠김','승인':'status-승인','승인완료':'status-승인','반려':'status-반려','철회(잠김)':'status-대기잠김','철회':'status-반려',
     Pending:'status-대기',Approved:'status-승인',Rejected:'status-반려'};
   const stLabelMap={'대기':'대기','대기(잠김)':'대기(잠김)','승인':'승인','승인완료':'승인완료','반려':'반려','철회(잠김)':'철회(잠김)','철회':'철회',
@@ -3854,14 +3865,8 @@ async function loadApprovalHistory(spId){
   };
   const fmtDate = s => s ? new Date(s).toLocaleString('ko-KR',{year:'2-digit',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}) : '';
   try{
-    if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
-    const t = await token();
-    const url = `${GRAPH}/sites/${siteId}/lists/${LIST_APPROVALS}/items?$expand=fields&$filter=fields/RequestID eq ${parseInt(spId)}&$top=50`;
-    const res = await fetch(url, {headers:{Authorization:'Bearer '+t, Prefer:'HonorNonIndexedQueriesWarningMayFailRandomly'}});
-    if(!res.ok) throw new Error('결재 이력 조회 실패');
-    const data = await res.json();
-    const list = data.value.map(i=>({...i.fields, _apprId:i.id})).sort((a,b)=>(a.ApprovalOrder||0)-(b.ApprovalOrder||0));
-    window._currentApprovalList = list; // No.14: PDF 출력용 캐시
+    const list = await fetchApprovalListDirect(v);
+    window._currentApprovalList = list; // No.14: PDF 출력용 캐시 (참고용 - exportVoucherPdf는 이제 이 캐시에 의존하지 않고 직접 재조회함)
     if(!list.length){
       document.getElementById('voucher-appr-history').innerHTML = '<div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력이 없습니다.</div>';
       return;
@@ -4362,7 +4367,9 @@ async function exportVoucherPdf() {
     if(!v) throw new Error('전표 정보를 찾을 수 없습니다.');
     let lines_data = [];
     try { lines_data = JSON.parse(v.LinesJSON||'[]'); } catch(e) { lines_data = []; }
-    const apprList = window._currentApprovalList || [];
+    // 캐시(window._currentApprovalList)는 상세 모달이 열릴 때 별도로 비동기 로드되는데,
+    // 그 로딩이 끝나기 전에 PDF를 누르면 비어있거나 이전 전표의 이력이 남아있을 수 있어 항상 직접 재조회한다.
+    const apprList = await fetchApprovalListDirect(v);
 
     // 화면 밖에 공식 양식 HTML을 렌더링 후 캡처
     printHost = document.createElement('div');
