@@ -2014,7 +2014,7 @@ function renderLines() {
     const amt = parseFloat(l.amount)||0;
     let totalTxt = '';
     if(amt){
-      if(l.currency==='KRW') totalTxt = fmt(amt);
+      if(l.currency==='KRW') totalTxt = Math.round(amt).toLocaleString('ko-KR');
       else {
         const rate = getExchangeRate(l.currency) || 0;
         totalTxt = rate ? Math.round(amt*rate).toLocaleString('ko-KR') : '-';
@@ -2028,8 +2028,9 @@ function renderLines() {
     const cpTxt = ccIsLocked ? '<span style="color:#c7c6c4">🔒 비활성화</span>' : (l.cctrName ? `${l.cctr} ${l.cctrName}` : (l.cctr ? l.cctr : (l.pcName ? `${l.pc} ${l.pcName}` : (l.pc || '-'))));
     const subTxt  = ccIsLocked ? '<span style="color:#c7c6c4">🔒</span>' : (l.subpcName ? `${l.subpc} ${l.subpcName}` : (l.subpc ? l.subpc : '-'));
     const glTxt   = l.gl   ? l.gl : '-';
-    const drTxt = l.drcr==='DR' && amt ? `<span style="color:#0078d4">${fmt(amt)}</span>` : '<span style="color:#a19f9d">-</span>';
-    const crTxt = l.drcr==='CR' && amt ? `<span style="color:#d83b01">${fmt(amt)}</span>` : '<span style="color:#a19f9d">-</span>';
+    const amtFmtTxt = l.currency==='KRW' ? Math.round(amt).toLocaleString('en') : fmt(amt);
+    const drTxt = l.drcr==='DR' && amt ? `<span style="color:#0078d4">${amtFmtTxt}</span>` : '<span style="color:#a19f9d">-</span>';
+    const crTxt = l.drcr==='CR' && amt ? `<span style="color:#d83b01">${amtFmtTxt}</span>` : '<span style="color:#a19f9d">-</span>';
     const glDescTxt = (l._lockCC && !l.glName) ? '<span style="color:#c7c6c4">🔒 BP 선택 대기</span>' : (l.glName||'-');
     // 주BP/추가BP/VAT 라인은 _lockCC 플래그로 예약 표시 → 회색 배경의 "고정 라인" 느낌 부여
     // (GL/Fixed Asset 선택 시에는 애초에 예약 라인 자체가 생성되지 않으므로 이 로직이 적용되지 않음)
@@ -2664,7 +2665,7 @@ function openLineModal(i) {
   if(glHint) glHint.style.display = (noGlYet && !l._lockCC) ? 'block' : 'none';
   // Line Desc / Amount
   document.getElementById('lm-linedesc').value = l.lineDesc || '';
-  const amtVal = l.amount ? parseFloat(l.amount).toLocaleString('en', {minimumFractionDigits:2, maximumFractionDigits:2}) : '';
+  const amtVal = l.amount ? (l.currency==='KRW' ? Math.round(parseFloat(l.amount)).toLocaleString('en') : parseFloat(l.amount).toLocaleString('en', {minimumFractionDigits:2, maximumFractionDigits:2})) : '';
   document.getElementById('lm-amount').value = amtVal;
   calcLmAmount(); // KRW 환산 표시 갱신
 
@@ -2674,9 +2675,18 @@ function openLineModal(i) {
 // 콤마 포맷 입력 헬퍼
 function fmtInput(el) {
   const raw = el.value.replace(/,/g, '');
+  if (raw === '' || raw === '-') { el.value = raw; return; }
+  // 소수점을 입력하는 도중(예: "20." 또는 "20.3")이면 정수부만 콤마 포맷하고 소수부는 입력한 그대로 유지
+  // — 그렇지 않으면 매 키 입력마다 재포맷되면서 끝에 붙은 "."이 사라져 다음 숫자가 앞자리에 붙어버림(예: 20. 입력 후 3을 치면 203이 됨)
+  const m = raw.match(/^(-?\d*)\.(\d{0,2})$/);
+  if (m) {
+    const intPart = (m[1] === '' || m[1] === '-') ? m[1] : Number(m[1]).toLocaleString('en');
+    el.value = intPart + '.' + m[2];
+    return;
+  }
   const num = parseFloat(raw);
   if(!isNaN(num)) el.value = num.toLocaleString('en', {maximumFractionDigits:2});
-  else if(raw === '' || raw === '-') el.value = raw;
+  else el.value = raw;
 }
 function parseComma(str) {
   return parseFloat((str||'').toString().replace(/,/g,'')) || 0;
@@ -3604,8 +3614,9 @@ async function openVoucherSP(spId, fromTab){
   const lineRows = lines_data.map((l,i)=>{
     const amt = parseFloat(l.amount)||0;
     const cpTxt = l.cctrName ? `${l.cctr} ${l.cctrName}` : (l.cctr ? l.cctr : (l.pcName ? `${l.pc} ${l.pcName}` : (l.pc || '-')));
-    const drTxt = l.drcr==='DR' && amt ? `<span style="color:#0078d4">${amt.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>` : '<span style="color:#a19f9d">-</span>';
-    const crTxt = l.drcr==='CR' && amt ? `<span style="color:#d83b01">${amt.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>` : '<span style="color:#a19f9d">-</span>';
+    const amtTxt = l.currency==='KRW' ? Math.round(amt).toLocaleString('en') : amt.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
+    const drTxt = l.drcr==='DR' && amt ? `<span style="color:#0078d4">${amtTxt}</span>` : '<span style="color:#a19f9d">-</span>';
+    const crTxt = l.drcr==='CR' && amt ? `<span style="color:#d83b01">${amtTxt}</span>` : '<span style="color:#a19f9d">-</span>';
     return `
     <tr style="border-bottom:1px solid #f3f2f1">
       <td style="padding:6px 7px;color:#605e5c;font-size:.74rem">${i+1}</td>
@@ -4010,8 +4021,8 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
       '<td style="'+cellThin+bgFixedOnly+bottomThick+'">'+esc(l.subpcName||l.subpc)+'</td>'+
       '<td style="'+cellThin+bottomThick+'">'+esc(l.lineDesc)+'</td>'+
       '<td style="'+cellThin+bottomThick+';text-align:center">'+esc(l.currency)+'</td>'+
-      '<td style="'+cellThin+bottomThick+';text-align:right">'+(l.drcr==='DR'?fmt2(l.amount):'')+'</td>'+
-      '<td style="'+cellThin+bottomThick+';text-align:right">'+(l.drcr==='CR'?fmt2(l.amount):'')+'</td>'+
+      '<td style="'+cellThin+bottomThick+';text-align:right">'+(l.drcr==='DR'?(l.currency==='KRW'?fmtK(l.amount):fmt2(l.amount)):'')+'</td>'+
+      '<td style="'+cellThin+bottomThick+';text-align:right">'+(l.drcr==='CR'?(l.currency==='KRW'?fmtK(l.amount):fmt2(l.amount)):'')+'</td>'+
     '</tr>';
   }).join('');
   const drSum=(lines_data||[]).filter(l=>l.drcr==='DR').reduce((s,l)=>s+(parseFloat(l.amount)||0),0);
@@ -4299,8 +4310,8 @@ function buildAccountLinesTableHTML(v, lines_data) {
       '<td style="'+cellB+'">'+esc(l.subpcName||l.subpc)+'</td>'+
       '<td style="'+cellB+'">'+esc(l.lineDesc)+'</td>'+
       '<td style="'+cellB+';text-align:center">'+esc(l.currency)+'</td>'+
-      '<td style="'+cellB+';text-align:right;font-weight:600">'+(l.drcr==='DR'?fmt2(l.amount):'')+'</td>'+
-      '<td style="'+cellB+';text-align:right;font-weight:600">'+(l.drcr==='CR'?fmt2(l.amount):'')+'</td>'+
+      '<td style="'+cellB+';text-align:right;font-weight:600">'+(l.drcr==='DR'?(l.currency==='KRW'?fmtK(l.amount):fmt2(l.amount)):'')+'</td>'+
+      '<td style="'+cellB+';text-align:right;font-weight:600">'+(l.drcr==='CR'?(l.currency==='KRW'?fmtK(l.amount):fmt2(l.amount)):'')+'</td>'+
     '</tr>')).join('');
 
   const curSums = {};
