@@ -1599,7 +1599,7 @@ function onTypeChange() {
   const cat = TYPE_CONTACT_CAT[type];
   const email = cat ? CONTACT_EMAILS[cat] : '';
   if (cat && email) {
-    contactEl.innerHTML = `Voucher Type 문의: ${email}`;
+    contactEl.innerHTML = `작성 문의: ${email}`;
     contactEl.style.display = 'flex';
   } else {
     contactEl.style.display = 'none';
