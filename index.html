@@ -350,6 +350,7 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
             <option value="ADV">Advance Payment</option>
             <option value="SET">Settlement of Advance</option>
           </select>
+          <div id="v-type-contact" style="display:none;margin-top:6px;align-items:center;gap:6px;background:#eff6fc;border:1px solid #c7e0f4;border-radius:999px;padding:4px 12px;font-size:11.5px;color:#0078d4;width:fit-content"></div>
         </div>
         <div class="form-group">
           <label>Submission Date <span class="req">*</span> <span class="auto-tag">자동</span></label>
@@ -912,6 +913,10 @@ function cfgEmails(cfg, keys) {
   return [...new Set(expanded)].map(k => (cfg && cfg[k] ? cfg[k].email : '')).filter(Boolean);
 }
 const ADMIN_EMAILS = [];
+// Voucher Type 선택 시 담당 연락처 배지 표시용 - loadSystemConfig 콜백에서 채워짐
+const CONTACT_EMAILS = { ap:'', ar:'', gl:'' };
+// 각 Voucher Type이 어느 담당(AP/AR/GL)에 해당하는지
+const TYPE_CONTACT_CAT = { AP:'ap', AP_IMS:'gl', AP_CR:'ar', AR:'ar', GL:'gl', FA:'gl', ADV:'ap', SET:'ap' };
 const IT_EMAILS = []; // ACC-Voucher_IT — Approvals 세대 관리 등 인프라 전환 기능 노출 대상
 let _configLoaded = false;
 
@@ -1111,6 +1116,8 @@ async function boot(account) {
     if(ap.email) el('acc-contact-ap').textContent = 'BU Admin(AP 관련) 문의 Email: '+ap.email;
     if(ar.email) el('acc-contact-ar').textContent = 'BU Admin(AR 관련) 문의 Email: '+ar.email;
     if(gl.email) el('acc-contact-gl').textContent = 'BU Admin(GL 관련) 문의 Email: '+gl.email;
+    CONTACT_EMAILS.ap = ap.email||''; CONTACT_EMAILS.ar = ar.email||''; CONTACT_EMAILS.gl = gl.email||'';
+    onTypeChange(); // Voucher Type이 이미 선택돼 있었다면(기존 전표 불러오기 등) 배지를 바로 갱신
     // 관리자 권한: ACC-Voucher_ADMIN_1~N 모두 읽기
     const adminList = cfgEmails(cfg, ['ACC-Voucher_ADMIN_1']); // ADMIN_N 패턴 자동 확장
     if(adminList.length) ADMIN_EMAILS.splice(0, ADMIN_EMAILS.length, ...adminList);
@@ -1586,6 +1593,18 @@ function onTypeChange() {
   document.getElementById('bp-req-mark').style.display = (type==='GL')?'none':'';
   renderApproval();
   applyFixedLines();
+
+  // Voucher Type별 담당(AP/AR/GL) 연락처를 타원형 배지로 표시
+  const contactEl = document.getElementById('v-type-contact');
+  const cat = TYPE_CONTACT_CAT[type];
+  const email = cat ? CONTACT_EMAILS[cat] : '';
+  if (cat && email) {
+    const catLabel = {ap:'AP', ar:'AR', gl:'GL'}[cat];
+    contactEl.innerHTML = `📧 <b>${catLabel}</b> 담당 문의: ${email}`;
+    contactEl.style.display = 'flex';
+  } else {
+    contactEl.style.display = 'none';
+  }
 
   // Voucher Type 변경 시 BP Category 경고 재평가 (주 BP + 추가 BP 전체 대상)
   evaluateBpCategoryWarning();
