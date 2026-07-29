@@ -1599,8 +1599,7 @@ function onTypeChange() {
   const cat = TYPE_CONTACT_CAT[type];
   const email = cat ? CONTACT_EMAILS[cat] : '';
   if (cat && email) {
-    const catLabel = {ap:'AP', ar:'AR', gl:'GL'}[cat];
-    contactEl.innerHTML = `📧 <b>${catLabel}</b> 담당 문의: ${email}`;
+    contactEl.innerHTML = `Voucher Type 문의: ${email}`;
     contactEl.style.display = 'flex';
   } else {
     contactEl.style.display = 'none';
