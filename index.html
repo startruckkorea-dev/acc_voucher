@@ -3070,16 +3070,16 @@ function renderApprovalQueue() {
       <td><span class="${stMap[v.Status]||'badge-대기'}">${stLabel[v.Status]||v.Status}</span></td>
       <td style="font-size:.78rem;color:#605e5c">${fmtDate(v.SubmittedDate)}</td>
       <td onclick="event.stopPropagation()" style="text-align:center;white-space:nowrap">
-        <button class="btn-approve" style="padding:4px 10px;font-size:.72rem;background:#107c10;color:#fff;border:none;border-radius:4px;cursor:pointer;margin-right:4px" onclick="showApprConfirm(${item._apprId},'승인',${item.RequestID})">승인</button>
-        <button class="btn-reject" style="padding:4px 10px;font-size:.72rem;background:#a4262c;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="showApprConfirm(${item._apprId},'반려',${item.RequestID})">반려</button>
+        <button class="btn-approve" style="padding:4px 10px;font-size:.72rem;background:#107c10;color:#fff;border:none;border-radius:4px;cursor:pointer;margin-right:4px" onclick="showApprConfirm(${item._apprId},'승인',${item.RequestID},'${v._aprCode||''}')">승인</button>
+        <button class="btn-reject" style="padding:4px 10px;font-size:.72rem;background:#a4262c;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="showApprConfirm(${item._apprId},'반려',${item.RequestID},'${v._aprCode||''}')">반려</button>
       </td>
     </tr>`;
   }).join('');
 }
 
 let _pendingAppr = null;
-function showApprConfirm(apprId, action, reqId) {
-  _pendingAppr = {apprId, action, reqId};
+function showApprConfirm(apprId, action, reqId, aprCode) {
+  _pendingAppr = {apprId, action, reqId, aprCode};
   const isReject = action === '반려';
   document.getElementById('appr-confirm-title').textContent = isReject ? '❌ 반려 확인' : '✅ 승인 확인';
   document.getElementById('appr-confirm-msg').textContent = isReject ? '반려 사유를 입력해주세요. (필수)' : '이 전표를 승인하시겠습니까?';
@@ -3095,14 +3095,16 @@ function closeApprConfirm() {
 }
 async function confirmApprAction() {
   if(!_pendingAppr) return;
-  const {apprId, action, reqId} = _pendingAppr;
+  const {apprId, action, reqId, aprCode} = _pendingAppr;
   const comment = document.getElementById('appr-confirm-comment').value.trim();
   if(action === '반려' && !comment) { alert('반려 사유를 입력해주세요.'); return; }
   closeApprConfirm();
-  await processApproval(apprId, action, reqId, comment);
+  await processApproval(apprId, action, reqId, comment, aprCode);
 }
-async function processApproval(apprId, action, reqId, comment='') {
-  await useVolumeOf(window._currentVoucherDetail); // 이 전표의 결재이력이 있는 Approvals 세대로 전환
+async function processApproval(apprId, action, reqId, comment='', aprCode='') {
+  // 목록에서 바로 승인/반려할 때는 aprCode(결재 대기열 로드 시 태깅된 세대 코드)를 우선 사용.
+  // 상세화면을 거쳐 열었을 때만 유효한 window._currentVoucherDetail 대신, 이 항목 고유의 세대 정보로 정확히 라우팅.
+  await useVolumeOf(aprCode ? { _aprCode: aprCode, _spId: reqId } : window._currentVoucherDetail);
   try {
     const t = await token();
     const curRes = await fetch(`${GRAPH}/sites/${siteId}/lists/${LIST_APPROVALS}/items/${apprId}?$expand=fields`,
