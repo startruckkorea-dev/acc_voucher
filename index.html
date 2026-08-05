@@ -3051,9 +3051,9 @@ function renderApprovalQueue() {
   const fmtK=n=>Math.round(n||0).toLocaleString('ko-KR');
   const fmtDate = s => {
     if(!s) return '-';
-    const d = new Date(s);
+    const d = new Date(new Date(s).getTime()+9*3600*1000);
     const p = n=>String(n).padStart(2,'0');
-    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    return `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
   };
   tbody.innerHTML = approvalQueueCache.map((item,i)=>{
     const v = item._voucher;
@@ -3343,7 +3343,7 @@ async function exportAdminExcel(){
     let maxStep = 0;
     items.forEach(i=>{ const n=(i._apprList||[]).length; if(n>maxStep) maxStep=n; });
 
-    const fmtX = s => { if(!s) return ''; const d=new Date(s); const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+    const fmtX = s => { if(!s) return ''; const d=new Date(new Date(s).getTime()+9*3600*1000); const p=n=>String(n).padStart(2,'0'); return `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`; };
 
     const headers = ['번호','결재이력세대','신청자','Title','유형','BP명','Purpose','DR(KRW)','CR(KRW)','상태','신청일'];
     for(let s=1;s<=maxStep;s++){
@@ -3479,9 +3479,9 @@ function renderAdminList(){
   const fmtK=n=>Math.round(n||0).toLocaleString('ko-KR');
   const fmtDate = s => {
     if(!s) return '-';
-    const d = new Date(s);
+    const d = new Date(new Date(s).getTime()+9*3600*1000);
     const p = n=>String(n).padStart(2,'0');
-    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    return `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
   };
 
   const total = adminListCache.length;
@@ -3550,9 +3550,9 @@ function renderList(){
   const fmtK=n=>Math.round(n||0).toLocaleString('ko-KR');
   const fmtDate = s => {
     if(!s) return '-';
-    const d = new Date(s);
+    const d = new Date(new Date(s).getTime()+9*3600*1000);
     const p = n=>String(n).padStart(2,'0');
-    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    return `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
   };
   body.innerHTML=list.map((v,i)=>`<tr onclick="openVoucherSP('${v._spId}','mylist')">
     <td style="color:#a19f9d;font-size:.78rem">${list.length-i}</td>
@@ -3623,9 +3623,9 @@ async function openVoucherSP(spId, fromTab){
   const row = (label, value) => `<div class="det-row"><div class="det-lbl">${label}</div><div class="det-val">${value||'-'}</div></div>`;
 
   const submittedDate = v.SubmittedDate ? (() => {
-    const d = new Date(v.SubmittedDate);
+    const d = new Date(new Date(v.SubmittedDate).getTime()+9*3600*1000);
     const p = n => String(n).padStart(2,'0');
-    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    return `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
   })() : '-';
   const invoiceDate = fmtDateOnly(v.InvoiceDate) || '-';
   const exchangeRateDisplay = v.ExchangeRate
@@ -4002,7 +4002,7 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
   const fmt2 = n => (parseFloat(n)||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
   const stripHtml = s => String(s==null?'':s).replace(/<[^>]*>/g,'').replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>').trim();
   const esc = s => stripHtml(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const submittedDate = v.SubmittedDate ? (()=>{const d=new Date(v.SubmittedDate);const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;})() : '-';
+  const submittedDate = v.SubmittedDate ? fmtDateOnly(v.SubmittedDate) : '-';
   const invoiceDate = fmtDateOnly(v.InvoiceDate) || '-';
   const lineCurrencies=[...new Set((lines_data||[]).map(l=>l.currency).filter(c=>c&&c!=='KRW'))];
   const exRateParts = v.ExchangeRate ? v.ExchangeRate.split(',').map(s=>{const parts=s.split(':');const c=parts[0];const rv=parseFloat(parts[1]);return rv>0?{c,txt:c+' '+rv.toLocaleString('ko-KR',{maximumFractionDigits:4})}:null;}).filter(Boolean) : [];
@@ -4024,7 +4024,7 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
   const roleCols=[['TL','Team Leader'],['MC','MC'],['CEO','CEO'],['RD','RD'],['ACC','Acc. Specialist'],['AMGR','Acc. Manager'],['CFO','CFO']];
   const NA_BADGE='<span style="display:inline-block;background:#e1dfdd;color:#484644;font-size:8.5px;font-weight:800;padding:2px 7px;border-radius:3px;letter-spacing:.3px">NOT REQUIRED</span>';
   const apprByRole={}; (apprList||[]).forEach(a=>{apprByRole[a.ApproverRole]=a;});
-  const fmtApprDateTime=s=>{if(!s)return '';const d=new Date(s);const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;};
+  const fmtApprDateTime=s=>{if(!s)return '';const d=new Date(new Date(s).getTime()+9*3600*1000);const p=n=>String(n).padStart(2,'0');return `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;};
   // "이준순 스타트럭코리아 IT(Junsoon Lee)" 형태에서 한글 이름만 추출
   const koreanName = (s)=>{ const m=String(s||'').match(/^[가-힣]+/); return m ? m[0] : (s||'-'); };
   const requesterKoName = koreanName(v.RequesterName);
