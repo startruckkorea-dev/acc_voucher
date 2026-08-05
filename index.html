@@ -1098,7 +1098,7 @@ async function boot(account) {
   document.getElementById('app-header').style.display='flex';
   document.getElementById('user-name').textContent=(account.name||account.username)+' ('+(account.username)+')';
   document.getElementById('v-requester').value = account.name||account.username;
-  document.getElementById('v-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('v-date').value = new Date(new Date().getTime()+9*3600*1000).toISOString().slice(0,10);
   renderApproval();
   applyFixedLines();
   switchTab('new');
