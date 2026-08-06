@@ -12,6 +12,9 @@
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Segoe UI', sans-serif; background: #f3f2f1; min-height: 100vh; }
+/* ?openId= 딥링크로 진입한 단독 상세보기 모드 — 뒤에 깔린 작성 폼/헤더/탭은 볼 일이 없으므로
+   통째로 숨기고 배경색만 남긴다. 모달은 #app 바깥에 있어 영향받지 않음. */
+body.standalone-detail #app { display: none !important; }
 
 /* ── Login ── */
 #login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(145deg,#0f2744 0%,#0078d4 100%)}
@@ -1140,10 +1143,9 @@ async function boot(account) {
   // URL로 특정 전표 상세를 바로 열기 (다른 시스템에서 연동 링크로 진입할 때)
   const _openId = new URLSearchParams(location.search).get('openId');
   if (_openId) {
-    const _backLink = document.getElementById('acc-back-link');
-    const _tabs = document.getElementById('acc-tabs');
-    if (_backLink) _backLink.style.display = 'none';
-    if (_tabs) _tabs.style.display = 'none';
+    // 단독 상세보기 모드: 전표 작성 폼·헤더·탭은 필요 없으므로 배경색만 남기고 전부 숨김
+    _standaloneDetail = true;
+    document.body.classList.add('standalone-detail');
     openVoucherSP(String(_openId), 'mylist');
     history.replaceState(null, '', location.pathname);
   }
@@ -4135,7 +4137,12 @@ async function submitAdminComment(reqSpId) {
   } catch(e) { alert('의견 저장 실패: '+e.message); }
 }
 
+// ?openId= 딥링크로 진입한 단독 상세보기 모드 여부 (다른 시스템에서 연동 링크로 들어온 경우)
+let _standaloneDetail = false;
 function closeDetailModal(){
+  // 단독 모드에서 모달만 닫으면 텅 빈 배경만 남아 사용자가 할 수 있는 게 없다.
+  // 새 탭으로 열린 경우이므로 탭 자체를 닫아주고, 브라우저가 막으면 모달을 그대로 둔다.
+  if(_standaloneDetail){ window.close(); return; }
   document.getElementById('voucher-detail-modal').classList.remove('open');
   const pdfBtn = document.getElementById('btn-export-pdf');
   if(pdfBtn) pdfBtn.style.display = 'none';
