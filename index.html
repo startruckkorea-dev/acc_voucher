@@ -3995,10 +3995,18 @@ async function fetchApprovalListDirect(v){
 }
 
 async function loadApprovalHistory(spId){
+  // ?openId= 로 바로 진입한 경우 목록 탭을 거치지 않아 3개 캐시가 모두 비어 있다.
+  // openVoucherSP()가 SharePoint에서 직접 조회해 _currentVoucherDetail에 담아두므로 그걸 최후 fallback으로 사용.
+  // (예전엔 여기서 조용히 return 해버려서 "결재 이력을 불러오는 중..."에 영원히 멈춰 있었음)
   const v = voucherListCache.find(x=>x._spId===spId)
     || adminListCache.find(x=>x._spId===spId)
-    || (approvalQueueCache.find(x=>x._voucher?._spId===spId)?._voucher);
-  if(!v) return;
+    || (approvalQueueCache.find(x=>x._voucher?._spId===spId)?._voucher)
+    || (window._currentVoucherDetail?._spId===spId ? window._currentVoucherDetail : null);
+  if(!v){
+    const el = document.getElementById('voucher-appr-history');
+    if(el) el.innerHTML = '<div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력을 불러올 수 없습니다.</div>';
+    return;
+  }
   const stClsMap={'대기':'status-대기','대기(잠김)':'status-대기잠김','승인':'status-승인','승인완료':'status-승인','반려':'status-반려','철회(잠김)':'status-대기잠김','철회':'status-반려',
     Pending:'status-대기',Approved:'status-승인',Rejected:'status-반려'};
   const stLabelMap={'대기':'대기','대기(잠김)':'대기(잠김)','승인':'승인','승인완료':'승인완료','반려':'반려','철회(잠김)':'철회(잠김)','철회':'철회',
