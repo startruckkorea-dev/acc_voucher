@@ -350,7 +350,15 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
             <option value="ADV">Advance Payment</option>
             <option value="SET">Settlement of Advance</option>
           </select>
-          <div id="v-type-contact" style="display:none;margin-top:6px;align-items:center;gap:6px;background:#eff6fc;border:1px solid #c7e0f4;border-radius:999px;padding:4px 12px;font-size:11.5px;color:#0078d4;width:fit-content"></div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px">
+            <div id="v-type-contact" style="display:none;align-items:center;gap:6px;background:#eff6fc;border:1px solid #c7e0f4;border-radius:999px;padding:4px 12px;font-size:11.5px;color:#0078d4;width:fit-content"></div>
+            <span id="v-type-contact-toggle" class="hint" style="display:none;cursor:pointer;color:#0078d4;font-size:11.5px" onclick="contactToggleManual()">✎ 변경</span>
+          </div>
+          <div id="v-type-contact-edit" style="display:none;margin-top:6px;gap:8px;grid-template-columns:1fr 1fr 1fr">
+            <select id="vc-dept" onchange="contactDeptChange()"><option value="">부서</option></select>
+            <select id="vc-team" onchange="contactTeamChange()" disabled><option value="">팀</option></select>
+            <select id="vc-person" onchange="contactPersonChange()" disabled><option value="">직원 선택</option></select>
+          </div>
         </div>
         <div class="form-group">
           <label>Submission Date <span class="req">*</span> <span class="auto-tag">자동</span></label>
@@ -1596,15 +1604,18 @@ function onTypeChange() {
   renderApproval();
   applyFixedLines();
 
-  // Voucher Type별 담당(AP/AR/GL) 연락처를 타원형 배지로 표시 — Accounting 담당자를 수동 변경했으면 그 사람 이메일로 동기화
+  // Voucher Type별 담당(AP/AR/GL) Accounting 처리 담당자를 타원형 배지로 표시 — 결재라인의 Accounting 담당자를 수동 변경했으면 그 사람 이메일로 동기화
   const contactEl = document.getElementById('v-type-contact');
+  const contactToggleEl = document.getElementById('v-type-contact-toggle');
   const cat = TYPE_CONTACT_CAT[type];
   const email = accOverride ? accOverride.email : (cat ? CONTACT_EMAILS[cat] : '');
   if (email) {
-    contactEl.innerHTML = `작성 문의: ${email}` + (accOverride ? ' <span style="color:#8a6914">(수동 지정됨)</span>' : '');
+    contactEl.innerHTML = `Accounting 처리 담당자: ${email}` + (accOverride ? ' <span style="color:#8a6914">(수동 지정됨)</span>' : '');
     contactEl.style.display = 'flex';
+    if (contactToggleEl) contactToggleEl.style.display = 'inline';
   } else {
     contactEl.style.display = 'none';
+    if (contactToggleEl) contactToggleEl.style.display = 'none';
   }
 
   // Voucher Type 변경 시 BP Category 경고 재평가 (주 BP + 추가 BP 전체 대상)
@@ -1796,6 +1807,55 @@ function accResetOverride(){
   accOverride = null;
   renderApproval();
   onTypeChange();
+}
+
+// ── 상단 "Accounting 처리 담당자" 배지 옆 "✎ 변경" — 결재라인(6번 섹션)까지 안 내려가도 여기서 바로 변경 가능 ──
+function contactToggleManual(){
+  const editRow = document.getElementById('v-type-contact-edit');
+  const toggleEl = document.getElementById('v-type-contact-toggle');
+  if(!editRow) return;
+  const opening = editRow.style.display === 'none';
+  if(opening){
+    const depts=[...new Set((window._employeeData||[]).map(e=>e.dept))].sort();
+    document.getElementById('vc-dept').innerHTML = '<option value="">부서</option>'+depts.map(d=>`<option value="${d}">${d}</option>`).join('');
+    document.getElementById('vc-team').innerHTML = '<option value="">팀</option>';
+    document.getElementById('vc-team').disabled = true;
+    document.getElementById('vc-person').innerHTML = '<option value="">직원 선택</option>';
+    document.getElementById('vc-person').disabled = true;
+    editRow.style.display = 'grid';
+    if(toggleEl) toggleEl.textContent = '✕ 취소';
+  } else {
+    editRow.style.display = 'none';
+    if(toggleEl) toggleEl.textContent = '✎ 변경';
+  }
+}
+function contactDeptChange(){
+  const dept=document.getElementById('vc-dept').value;
+  const tSel=document.getElementById('vc-team');
+  const pSel=document.getElementById('vc-person');
+  const teams=[...new Set((window._employeeData||[]).filter(e=>e.dept===dept).map(e=>e.team))].sort();
+  tSel.innerHTML='<option value="">팀</option>'+teams.map(t=>`<option value="${t}">${t}</option>`).join('');
+  tSel.disabled=!dept; pSel.innerHTML='<option value="">직원 선택</option>'; pSel.disabled=true;
+}
+function contactTeamChange(){
+  const dept=document.getElementById('vc-dept').value;
+  const team=document.getElementById('vc-team').value;
+  const pSel=document.getElementById('vc-person');
+  const persons=(window._employeeData||[]).filter(e=>e.dept===dept&&e.team===team);
+  pSel.innerHTML='<option value="">직원 선택</option>'+persons.map(p=>`<option value="${p.email}">${p.name}</option>`).join('');
+  pSel.disabled=!team;
+}
+function contactPersonChange(){
+  const email=document.getElementById('vc-person').value;
+  const p=(window._employeeData||[]).find(e=>e.email===email);
+  if(!p) return;
+  accOverride = { name: p.name, email: p.email }; // 결재라인(Accounting 담당자)에도 동일하게 반영됨 — 양방향 동기화
+  renderApproval();
+  onTypeChange();
+  const editRow = document.getElementById('v-type-contact-edit');
+  const toggleEl = document.getElementById('v-type-contact-toggle');
+  if(editRow) editRow.style.display = 'none';
+  if(toggleEl) toggleEl.textContent = '✎ 변경';
 }
 
 function gwDeptChange(order){
