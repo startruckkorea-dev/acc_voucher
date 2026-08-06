@@ -3889,15 +3889,12 @@ async function openVoucherSP(spId, fromTab){
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">
         <div>
           <div style="font-size:.72rem;color:#605e5c;margin-bottom:4px;font-weight:600">B1 Doc No.</div>
-          <input type="text" id="modal-b1docno" placeholder="B1 Doc No. 입력..."
+          <input type="text" id="modal-b1docno" placeholder="B1 Doc No. 입력..." oninput="updatePostingBadge()"
             style="width:100%;height:34px;border:1px solid #d2d0ce;border-radius:4px;padding:0 10px;font-size:.78rem;font-family:inherit;box-sizing:border-box;line-height:32px;vertical-align:middle">
         </div>
         <div>
-          <div style="font-size:.72rem;color:#605e5c;margin-bottom:4px;font-weight:600">Posting</div>
-          <select id="modal-posting" style="width:100%;height:34px;border:1px solid #d2d0ce;border-radius:4px;padding:0 10px;font-size:.78rem;font-family:inherit;box-sizing:border-box;line-height:32px;vertical-align:middle;-webkit-appearance:menulist">
-            <option value="">미완료</option>
-            <option value="완료">✅ 완료</option>
-          </select>
+          <div style="font-size:.72rem;color:#605e5c;margin-bottom:4px;font-weight:600">Posting <span style="font-weight:400;color:#a19f9d">(B1 Doc No. 입력 시 자동)</span></div>
+          <div id="modal-posting-badge" style="width:100%;height:34px;border:1px solid #d2d0ce;border-radius:4px;padding:0 10px;font-size:.78rem;font-family:inherit;box-sizing:border-box;line-height:32px;background:#f9f8f7;display:flex;align-items:center">미완료</div>
         </div>
       </div>
       <div style="display:flex;align-items:center;justify-content:flex-end">
@@ -3945,7 +3942,7 @@ async function openVoucherSP(spId, fromTab){
   if(b1Section && showAdminSections) {
     b1Section.style.display = 'block';
     document.getElementById('modal-b1docno').value = v.B1DocNo||'';
-    document.getElementById('modal-posting').value = v.PostingDone||'';
+    updatePostingBadge();
     renderB1ChangeLog(v.B1ChangeLog);
   } else if(b1Section) {
     b1Section.style.display = 'none';
@@ -4053,11 +4050,26 @@ async function loadApprovalHistory(spId){
     document.getElementById('voucher-appr-history').innerHTML = '<div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력을 불러올 수 없습니다.</div>';
   }
 }
+// B1 Doc No. 입력값 유무에 따라 Posting 상태를 자동 계산해서 뱃지에 표시 (수동 선택 불가 — 완전 자동)
+function updatePostingBadge() {
+  const b1 = document.getElementById('modal-b1docno')?.value?.trim() || '';
+  const badge = document.getElementById('modal-posting-badge');
+  if (!badge) return;
+  if (b1) {
+    badge.textContent = '✅ 완료';
+    badge.style.color = '#107c10';
+    badge.style.fontWeight = '700';
+  } else {
+    badge.textContent = '미완료';
+    badge.style.color = '#7d5700';
+    badge.style.fontWeight = '600';
+  }
+}
 async function saveB1DocFromModal() {
   const v = window._currentVoucherDetail;
   if(!v) return;
   const b1DocNo = document.getElementById('modal-b1docno')?.value||'';
-  const postingDone = document.getElementById('modal-posting')?.value||'';
+  const postingDone = b1DocNo.trim() ? '완료' : ''; // B1 Doc No. 입력 여부로만 자동 결정 — 더 이상 수동 선택 불가
   const btn = document.querySelector('#b1-input-section button');
   if(btn){btn.disabled=true;btn.textContent='저장 중...';}
   const logs = await saveB1Doc(v._spId, b1DocNo, postingDone);
