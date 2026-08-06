@@ -1138,6 +1138,10 @@ async function boot(account) {
   if(!siteId){ api('/sites/'+SITE_PATH_DB).then(s=>{ siteId=s.id; checkApprovalBadge(); }).catch(()=>{}); }
   else checkApprovalBadge();
   setInterval(()=>{ try{ checkApprovalBadge(); }catch(e){} }, 60000);
+
+  // URL로 특정 전표 상세를 바로 열기 (다른 시스템에서 연동 링크로 진입할 때)
+  const _openId = new URLSearchParams(location.search).get('openId');
+  if (_openId) { openVoucherSP(String(_openId), 'mylist'); history.replaceState(null, '', location.pathname); }
 }
 
 // ── 회계 마스터 로드 (STK-DB: acc_voucher_GL_CCTR_COPA + COA + 환율) ──
@@ -3602,9 +3606,17 @@ async function withdrawRequest(spId) {
 }
 
 async function openVoucherSP(spId, fromTab){
-  const v = voucherListCache.find(x=>x._spId===spId)
+  let v = voucherListCache.find(x=>x._spId===spId)
     || adminListCache.find(x=>x._spId===spId)
     || (approvalQueueCache.find(x=>x._voucher?._spId===spId)?._voucher);
+  if(!v){
+    // 캐시에 없으면(예: URL로 바로 진입) SharePoint에서 직접 조회
+    try{
+      if(!siteId){ const s = await api('/sites/'+SITE_PATH_DB); siteId = s.id; }
+      const item = await api('/sites/'+siteId+'/lists/'+LIST_REQUESTS+'/items/'+spId+'?$expand=fields');
+      v = { ...item.fields, _spId: String(item.id) };
+    }catch(e){ console.warn('[openVoucherSP] 직접 조회 실패:', e.message); }
+  }
   if(!v) return;
   window._currentVoucherDetail = v;
   const pdfBtn = document.getElementById('btn-export-pdf');
