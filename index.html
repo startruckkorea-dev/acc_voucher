@@ -2439,7 +2439,7 @@ async function saveVoucher(status) {
     const missing = approvers.filter(a=>!a.email);
     if(missing.length){
       alert('다음 결재자 정보를 불러오지 못해 제출할 수 없습니다: '+missing.map(a=>a.role).join(', ')+
-        '\n\nTL/MC는 결재라인에서 직접 선택해주세요.\nCEO/RD/Controlling/Accounting/CFO는 system_config_final.xlsx 설정을 확인하거나 관리자에게 문의해주세요.');
+        '\n\nTL/MC는 결재라인에서 직접 선택해주세요.\nRD/Accounting/CFO 및 AP·AR·GL 담당자는 system_config_final.xlsx 설정을 확인하거나 관리자에게 문의해주세요.');
       return;
     }
   }
