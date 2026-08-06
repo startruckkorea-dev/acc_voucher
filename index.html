@@ -1079,19 +1079,6 @@ function isMe(email) {
 
 async function boot(account) {
   user = account;
-  // 접근 권한 체크 — system_config_final.xlsx에서 "ACC-Voucher_"로 시작하는 모든 키의 이메일 명단에 없으면 앱 사용 자체를 차단
-  // (APS 통합 화이트리스트와 동일한 소스 — config 시트만 수정하면 양쪽 다 자동 반영됨)
-  const _cfgForGate = await loadSystemConfig();
-  const _allowedList = _cfgForGate
-    ? Object.keys(_cfgForGate).filter(k=>k.startsWith('ACC-Voucher_')).map(k=>(_cfgForGate[k].email||'').toLowerCase()).filter(Boolean)
-    : [];
-  const _myEmail = (account.username||'').toLowerCase();
-  if (_cfgForGate && !_allowedList.includes(_myEmail)) {
-    alert('ACC Voucher는 현재 UAT(사용자 승인 테스트) 진행 중입니다.\n정식 출시 후 이용하실 수 있습니다.');
-    const _btn = document.getElementById('btn-login');
-    if (_btn) { _btn.disabled = false; _btn.textContent = 'Hyosung M365 계정으로 로그인'; }
-    return; // 앱 초기화 중단, 로그인 화면 그대로 유지
-  }
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='block';
   document.getElementById('app').style.maxWidth='960px';
@@ -1099,6 +1086,8 @@ async function boot(account) {
   document.getElementById('user-name').textContent=(account.name||account.username)+' ('+(account.username)+')';
   document.getElementById('v-requester').value = account.name||account.username;
   document.getElementById('v-date').value = new Date(new Date().getTime()+9*3600*1000).toISOString().slice(0,10);
+  const _uatModal = document.getElementById('uat-notice-modal');
+  if (_uatModal) _uatModal.style.display = 'flex';
   renderApproval();
   applyFixedLines();
   switchTab('new');
@@ -4595,6 +4584,19 @@ window.addEventListener('load',async()=>{
       </div>
     </div>
     <button onclick="document.getElementById('no-auth-modal').style.display='none'" style="background:#0078d4;color:#fff;border:none;border-radius:8px;padding:10px 32px;font-size:.88rem;font-weight:600;cursor:pointer;font-family:inherit">확인</button>
+  </div>
+</div>
+
+<!-- UAT 안내 모달 -->
+<div id="uat-notice-modal" onclick="if(event.target===this) this.style.display='none'" style="display:none;position:fixed;inset:0;background:rgba(16,27,52,.45);z-index:999;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:14px;padding:32px 30px 26px;max-width:380px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.3);text-align:center">
+    <div style="width:52px;height:52px;border-radius:50%;background:#E4F1F0;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:24px">🧪</div>
+    <div style="font-size:15px;font-weight:800;color:#101B34;margin-bottom:10px">ACC Voucher 사용자 승인 테스트(UAT) 안내</div>
+    <div style="font-size:12.5px;color:#475569;line-height:1.7;margin-bottom:22px">
+      현재 <b style="color:#2F7B7A">UAT(사용자 승인 테스트)</b> 진행 중인 시스템입니다.<br>
+      일부 기능이 예고 없이 변경될 수 있으니, 이용 중 이상이 있으면 IT팀으로 알려주세요.
+    </div>
+    <button onclick="document.getElementById('uat-notice-modal').style.display='none'" style="width:100%;padding:11px 0;background:#101B34;color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">확인했습니다</button>
   </div>
 </div>
 
