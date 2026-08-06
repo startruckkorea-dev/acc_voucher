@@ -354,10 +354,10 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
             <div id="v-type-contact" style="display:none;align-items:center;gap:6px;background:#eff6fc;border:1px solid #c7e0f4;border-radius:999px;padding:4px 12px;font-size:11.5px;color:#0078d4;width:fit-content"></div>
             <span id="v-type-contact-toggle" class="hint" style="display:none;cursor:pointer;color:#0078d4;font-size:11.5px" onclick="contactToggleManual()">✎ 변경</span>
           </div>
-          <div id="v-type-contact-edit" style="display:none;margin-top:6px;gap:8px;grid-template-columns:1fr 1fr 1fr">
-            <select id="vc-dept" onchange="contactDeptChange()"><option value="">부서</option></select>
-            <select id="vc-team" onchange="contactTeamChange()" disabled><option value="">팀</option></select>
-            <select id="vc-person" onchange="contactPersonChange()" disabled><option value="">직원 선택</option></select>
+          <div id="v-type-contact-edit" style="display:none;margin-top:6px">
+            <select id="vc-person" onchange="contactPersonChange()" style="width:100%">
+              <option value="">-- AP/AR/GL 담당자 중 선택 --</option>
+            </select>
           </div>
         </div>
         <div class="form-group">
@@ -1745,10 +1745,22 @@ function renderApproval() {
       : `<span style="font-size:10px;color:#8a6914;background:#fff4ce;border-radius:10px;padding:1px 6px;margin-left:4px">직접 선택</span>`;
     if(a.role==='ACC'){
       // Accounting 담당자 — 기본은 AP/AR/GL 설정값 자동표시, "직접 변경"으로 수동 지정 가능(수동 지정 시 문의 배지도 동기화)
+      // 단, 여기서 고를 수 있는 사람은 전체 직원이 아니라 ACC-Voucher_AP/AR/GL 3명으로 한정
       const overrideTag = accOverride
         ? `<span style="font-size:10px;color:#8a6914;background:#fff4ce;border-radius:10px;padding:1px 6px;margin-left:4px">수동 변경됨</span>`
         : `<span style="font-size:10px;color:#107c10;background:#dff6dd;border-radius:10px;padding:1px 6px;margin-left:4px">자동 지정</span>`;
       const resetBtn = accOverride ? `<span class="hint" style="cursor:pointer;color:#0078d4;margin-left:6px" onclick="accResetOverride()">↺ 기본값으로</span>` : '';
+      const _accApOpt = cfgVal(cfg,'ACC-Voucher_AP',{name:'',email:''});
+      const _accArOpt = cfgVal(cfg,'ACC-Voucher_AR',{name:'',email:''});
+      const _accGlOpt = cfgVal(cfg,'ACC-Voucher_GL',{name:'',email:''});
+      const accCandidates = [
+        _accApOpt.email ? {cat:'AP', ..._accApOpt} : null,
+        _accArOpt.email ? {cat:'AR', ..._accArOpt} : null,
+        _accGlOpt.email ? {cat:'GL', ..._accGlOpt} : null,
+      ].filter(Boolean);
+      const accOptionsHtml = accCandidates.map(c =>
+        `<option value="${c.email}" data-name="${c.name}" ${accOverride && accOverride.email===c.email ? 'selected' : ''}>${c.name} (${c.cat} 담당자, ${c.email})</option>`
+      ).join('');
       return `<div class="appr-block appr-fixed">
         <div class="appr-block-title">${order}차 결재자${overrideTag} <span class="hint">— ${a.label}</span>
           <span class="hint" style="cursor:pointer;color:#0078d4;margin-left:6px" onclick="accToggleManual(${order})">✎ 직접 변경</span>${resetBtn}
@@ -1757,10 +1769,11 @@ function renderApproval() {
           <input type="text"  value="${a.person.name}"  readonly placeholder="이름">
           <input type="email" value="${a.person.email}" readonly placeholder="이메일">
         </div>
-        <div class="appr-select-row" id="acc-manual-view-${order}" style="display:none;margin-top:6px">
-          <select id="ga${order}-dept" onchange="gwDeptChange(${order})"><option value="">부서</option>${deptOpts}</select>
-          <select id="ga${order}-team" onchange="gwTeamChange(${order})" disabled><option value="">팀</option></select>
-          <select id="ga${order}-person" onchange="gwPersonChange(${order});accApplyOverride(${order})" disabled><option value="">직원 선택</option></select>
+        <div id="acc-manual-view-${order}" style="display:none;margin-top:6px">
+          <select id="ga${order}-person" onchange="accApplyOverrideFromSelect(${order})" style="width:100%">
+            <option value="">-- AP/AR/GL 담당자 중 선택 --</option>
+            ${accOptionsHtml}
+          </select>
         </div></div>`;
     } else if(a.fixed){
       return `<div class="appr-block appr-fixed">
@@ -1801,7 +1814,17 @@ function accApplyOverride(order){
   if(!email) return;
   accOverride = { name, email };
   renderApproval();
-  onTypeChange(); // 작성 문의 배지도 같은 로직으로 동기화
+  onTypeChange(); // Accounting 처리 담당자 배지도 같은 로직으로 동기화
+}
+// AP/AR/GL 담당자 3명 중에서만 고르는 단일 드롭다운 선택 시 적용
+function accApplyOverrideFromSelect(order){
+  const sel = document.getElementById('ga'+order+'-person');
+  const email = sel?.value||'';
+  if(!email) return;
+  const name = sel.options[sel.selectedIndex]?.dataset.name || '';
+  accOverride = { name, email };
+  renderApproval();
+  onTypeChange(); // Accounting 처리 담당자 배지도 같은 로직으로 동기화
 }
 function accResetOverride(){
   accOverride = null;
@@ -1816,40 +1839,31 @@ function contactToggleManual(){
   if(!editRow) return;
   const opening = editRow.style.display === 'none';
   if(opening){
-    const depts=[...new Set((window._employeeData||[]).map(e=>e.dept))].sort();
-    document.getElementById('vc-dept').innerHTML = '<option value="">부서</option>'+depts.map(d=>`<option value="${d}">${d}</option>`).join('');
-    document.getElementById('vc-team').innerHTML = '<option value="">팀</option>';
-    document.getElementById('vc-team').disabled = true;
-    document.getElementById('vc-person').innerHTML = '<option value="">직원 선택</option>';
-    document.getElementById('vc-person').disabled = true;
-    editRow.style.display = 'grid';
+    const cfg = _sysConfig||{};
+    const _ap = cfgVal(cfg,'ACC-Voucher_AP',{name:'',email:''});
+    const _ar = cfgVal(cfg,'ACC-Voucher_AR',{name:'',email:''});
+    const _gl = cfgVal(cfg,'ACC-Voucher_GL',{name:'',email:''});
+    const candidates = [
+      _ap.email ? {cat:'AP', ..._ap} : null,
+      _ar.email ? {cat:'AR', ..._ar} : null,
+      _gl.email ? {cat:'GL', ..._gl} : null,
+    ].filter(Boolean);
+    const pSel = document.getElementById('vc-person');
+    pSel.innerHTML = '<option value="">-- AP/AR/GL 담당자 중 선택 --</option>' +
+      candidates.map(c => `<option value="${c.email}" data-name="${c.name}" ${accOverride && accOverride.email===c.email ? 'selected' : ''}>${c.name} (${c.cat} 담당자, ${c.email})</option>`).join('');
+    editRow.style.display = 'block';
     if(toggleEl) toggleEl.textContent = '✕ 취소';
   } else {
     editRow.style.display = 'none';
     if(toggleEl) toggleEl.textContent = '✎ 변경';
   }
 }
-function contactDeptChange(){
-  const dept=document.getElementById('vc-dept').value;
-  const tSel=document.getElementById('vc-team');
-  const pSel=document.getElementById('vc-person');
-  const teams=[...new Set((window._employeeData||[]).filter(e=>e.dept===dept).map(e=>e.team))].sort();
-  tSel.innerHTML='<option value="">팀</option>'+teams.map(t=>`<option value="${t}">${t}</option>`).join('');
-  tSel.disabled=!dept; pSel.innerHTML='<option value="">직원 선택</option>'; pSel.disabled=true;
-}
-function contactTeamChange(){
-  const dept=document.getElementById('vc-dept').value;
-  const team=document.getElementById('vc-team').value;
-  const pSel=document.getElementById('vc-person');
-  const persons=(window._employeeData||[]).filter(e=>e.dept===dept&&e.team===team);
-  pSel.innerHTML='<option value="">직원 선택</option>'+persons.map(p=>`<option value="${p.email}">${p.name}</option>`).join('');
-  pSel.disabled=!team;
-}
 function contactPersonChange(){
-  const email=document.getElementById('vc-person').value;
-  const p=(window._employeeData||[]).find(e=>e.email===email);
-  if(!p) return;
-  accOverride = { name: p.name, email: p.email }; // 결재라인(Accounting 담당자)에도 동일하게 반영됨 — 양방향 동기화
+  const sel = document.getElementById('vc-person');
+  const email = sel?.value||'';
+  if(!email) return;
+  const name = sel.options[sel.selectedIndex]?.dataset.name || '';
+  accOverride = { name, email }; // 결재라인(Accounting 담당자)에도 동일하게 반영됨 — 양방향 동기화
   renderApproval();
   onTypeChange();
   const editRow = document.getElementById('v-type-contact-edit');
