@@ -13,8 +13,10 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Segoe UI', sans-serif; background: #f3f2f1; min-height: 100vh; }
 /* ?openId= 딥링크로 진입한 단독 상세보기 모드 — 뒤에 깔린 작성 폼/헤더/탭은 볼 일이 없으므로
-   통째로 숨기고 배경색만 남긴다. 모달은 #app 바깥에 있어 영향받지 않음. */
-body.standalone-detail #app { display: none !important; }
+   통째로 숨기고 배경색만 남긴다. 모달은 #app 바깥에 있어 영향받지 않음.
+   클래스는 <head>의 인라인 스크립트가 파싱 시점에 <html>에 즉시 붙인다(아래 참고).
+   body에 붙이면 body 파싱 전까지 폼이 잠깐 보였다 사라지는 깜빡임이 생김. */
+html.standalone-detail #app { display: none !important; }
 
 /* ── Login ── */
 #login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(145deg,#0f2744 0%,#0078d4 100%)}
@@ -235,6 +237,14 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 .list-table td{padding:9px 12px;border-bottom:1px solid #edebe9;color:#323130}
 .list-table tr:hover td{background:#f9f8f7}
 </style>
+<script>
+// ?openId= 단독 상세보기 모드 판별을 최대한 앞당긴다.
+// DOMContentLoaded까지 기다리면 작성 폼이 1~4초간 그대로 보였다가 사라지는 깜빡임이 생기므로,
+// <head> 파싱 시점에 <html>에 클래스를 붙여 #app이 처음부터 렌더링되지 않게 한다.
+if (new URLSearchParams(location.search).get('openId')) {
+  document.documentElement.classList.add('standalone-detail');
+}
+</script>
 </head>
 <body>
 
@@ -1145,7 +1155,6 @@ async function boot(account) {
   if (_openId) {
     // 단독 상세보기 모드: 전표 작성 폼·헤더·탭은 필요 없으므로 배경색만 남기고 전부 숨김
     _standaloneDetail = true;
-    document.body.classList.add('standalone-detail');
     openVoucherSP(String(_openId), 'mylist');
     history.replaceState(null, '', location.pathname);
   }
