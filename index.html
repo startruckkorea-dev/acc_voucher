@@ -17,6 +17,23 @@ body { font-family: 'Segoe UI', sans-serif; background: #f3f2f1; min-height: 100
    클래스는 <head>의 인라인 스크립트가 파싱 시점에 <html>에 즉시 붙인다(아래 참고).
    body에 붙이면 body 파싱 전까지 폼이 잠깐 보였다 사라지는 깜빡임이 생김. */
 html.standalone-detail #app { display: none !important; }
+/* 단독 상세보기 진입 시, 상세 팝업이 뜨기 전까지 보여줄 로딩 오버레이.
+   #app을 숨겨 화면이 통째로 비어 있는 상태라 안내가 없으면 사용자가 멈춘 줄 안다.
+   CSS만으로 표시되므로 JS 실행 전 첫 페인트부터 보인다. */
+#standalone-loader { display: none; }
+html.standalone-detail #standalone-loader {
+  display: flex; position: fixed; inset: 0; z-index: 500;
+  flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  font-family: 'Segoe UI', sans-serif; color: #605e5c;
+}
+html.standalone-detail.detail-ready #standalone-loader { display: none; }
+#standalone-loader .sl-spin {
+  width: 34px; height: 34px; border: 3px solid #e1dfdd; border-top-color: #0078d4;
+  border-radius: 50%; animation: sl-rotate .8s linear infinite;
+}
+#standalone-loader .sl-text { font-size: .82rem; font-weight: 600; }
+#standalone-loader .sl-sub { font-size: .72rem; color: #a19f9d; margin-top: -8px; }
+@keyframes sl-rotate { to { transform: rotate(360deg); } }
 
 /* ── Login ── */
 #login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(145deg,#0f2744 0%,#0078d4 100%)}
@@ -247,6 +264,11 @@ if (new URLSearchParams(location.search).get('openId')) {
 </script>
 </head>
 <body>
+<div id="standalone-loader">
+  <div class="sl-spin"></div>
+  <div class="sl-text">상세 내용을 불러오는 중입니다</div>
+  <div class="sl-sub">잠시만 기다려 주세요</div>
+</div>
 
 <div id="login-screen">
   <div class="login-card">
@@ -843,6 +865,22 @@ function applyCurrentVolume() {
 }
 // 특정 전표(item)의 결재이력이 어느 Approvals 세대에 있는지 확인해서 LIST_APPROVALS를 그쪽으로 임시 전환
 // — item._aprCode를 이미 알면(결재함에서 열었을 때) 바로 사용, 모르면(내 전표목록/관리자목록에서 열었을 때) 등록된 세대를 순서대로 뒤져서 찾아 캐싱
+
+// 단독 상세보기 모드의 로딩 오버레이 제거 — 상세 팝업이 실제로 뜨는 시점에 호출
+function markDetailReady() {
+  document.documentElement.classList.add('detail-ready');
+}
+// 안전장치: 어떤 이유로든 상세가 끝내 안 뜨면 30초 뒤 안내 문구로 바꿔 사용자가 무한 대기하지 않게 한다
+function armStandaloneLoaderTimeout() {
+  setTimeout(() => {
+    if (document.documentElement.classList.contains('detail-ready')) return;
+    const el = document.getElementById('standalone-loader');
+    if (!el) return;
+    el.innerHTML = '<div style="font-size:1.6rem">⚠️</div>'
+      + '<div class="sl-text">상세 내용을 불러오지 못했습니다</div>'
+      + '<div class="sl-sub">네트워크 상태를 확인한 뒤 새로고침해 주세요</div>';
+  }, 30000);
+}
 async function useVolumeOf(item) {
   // VOL_CONFIG는 보통 목록 탭 로드 과정에서 채워지지만, ?openId= 딥링크로 상세만 바로 여는 경우엔
   // 목록을 한 번도 거치지 않아 null이다. 그대로 아래 줄에서 참조하면 TypeError로 터지고
@@ -1168,6 +1206,7 @@ async function boot(account) {
     // 일반 사용자가 이 링크로 들어와도 해당 섹션은 노출되지 않는다.
     // ⚠ ADMIN_EMAILS는 system_config 로드가 끝나야 채워진다. 기다리지 않고 바로 열면
     //   그 시점엔 빈 배열이라 관리자인데도 관리자 섹션이 숨겨진다(경쟁 조건).
+    armStandaloneLoaderTimeout();
     _configPromise.finally(()=>openVoucherSP(String(_openId), 'admin'));
     history.replaceState(null, '', location.pathname);
   }
@@ -3760,8 +3799,17 @@ async function openVoucherSP(spId, fromTab){
       v = { ...item.fields, _spId: String(item.id) };
     }catch(e){ console.warn('[openVoucherSP] 직접 조회 실패:', e.message); }
   }
-  if(!v) return;
-  window._currentVoucherDetail = v;
+  if(!v){
+    // 전표를 못 찾으면 상세 팝업이 아예 안 뜬다. 단독 모드에선 화면이 비어 있으므로
+    // 로딩 스피너가 영원히 돌지 않도록 즉시 안내로 바꿔준다.
+    const _sl = document.getElementById('standalone-loader');
+    if(_standaloneDetail && _sl){
+      _sl.innerHTML = '<div style="font-size:1.6rem">⚠️</div>'
+        + '<div class="sl-text">전표를 찾을 수 없습니다</div>'
+        + '<div class="sl-sub">삭제되었거나 접근 권한이 없을 수 있습니다</div>';
+    }
+    return;
+  }
   const pdfBtn = document.getElementById('btn-export-pdf');
   if(pdfBtn) pdfBtn.style.display = 'flex';
   const pdfDetailBtn = document.getElementById('btn-export-detail-pdf');
@@ -3957,6 +4005,7 @@ async function openVoucherSP(spId, fromTab){
   `;
 
   document.getElementById('voucher-detail-modal').classList.add('open');
+  markDetailReady();
 
   // 관리자 의견 섹션 표시 (관리자 탭에서 연 경우에만 — 내 전표 목록/결재함에선 본인이 관리자여도 숨김)
   const commentSection = document.getElementById('admin-comment-section');
