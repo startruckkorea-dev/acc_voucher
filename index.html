@@ -3655,8 +3655,8 @@ async function saveB1Doc(spId, b1DocNo, postingDone) {
     return logs;
   } catch(e){
     // LIST_REQUESTS가 잘못 잡혔거나 컬럼이 없으면 여기로 온다. 원인 추적을 위해 대상까지 남긴다.
-    console.error('saveB1Doc error:', e.message, '| list:', LIST_REQUESTS, '| spId:', spId);
-    alert('저장 실패: '+e.message);
+    console.error('[B1] saveB1Doc error:', e.message, '| list:', LIST_REQUESTS, '| spId:', spId);
+    showAccAlert('저장 실패', (e.message||String(e)) + '\n\n대상 리스트: ' + LIST_REQUESTS + '\n항목 ID: ' + spId, '⚠️');
     return null;
   }
 }
@@ -4013,6 +4013,7 @@ async function openVoucherSP(spId, fromTab){
         <div>
           <div style="font-size:.72rem;color:#605e5c;margin-bottom:4px;font-weight:600">Posting <span style="font-weight:400;color:#a19f9d">(B1 Doc No. 입력 시 자동)</span></div>
           <div id="modal-posting-badge" style="width:100%;height:34px;border:1px solid #d2d0ce;border-radius:4px;padding:0 10px;font-size:.78rem;font-family:inherit;box-sizing:border-box;line-height:32px;background:#f9f8f7;display:flex;align-items:center">미완료</div>
+          <div id="modal-posting-pending" style="display:none;font-size:.7rem;color:#8a6116;font-weight:600;margin-top:3px"></div>
         </div>
       </div>
       <div style="background:#fdf6e3;border:1px solid #f0d9a0;border-radius:8px;padding:11px 14px;margin-bottom:10px">
@@ -4184,12 +4185,17 @@ async function loadApprovalHistory(spId){
     document.getElementById('voucher-appr-history').innerHTML = '<div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력을 불러올 수 없습니다.</div>';
   }
 }
-// B1 Doc No. 입력값 유무에 따라 Posting 상태를 자동 계산해서 뱃지에 표시 (수동 선택 불가 — 완전 자동)
+// Posting 뱃지는 "저장된 상태"를 보여준다.
+// 입력만 하고 아직 저장하지 않았으면 완료로 바꾸지 않고, 저장 시 어떻게 바뀔지 예고만 한다.
+// (예전엔 타이핑하는 순간 '완료'로 바뀌어, 저장하지 않았는데도 완료된 것처럼 보였다)
 function updatePostingBadge() {
-  const b1 = document.getElementById('modal-b1docno')?.value?.trim() || '';
   const badge = document.getElementById('modal-posting-badge');
   if (!badge) return;
-  if (b1) {
+  const typed = document.getElementById('modal-b1docno')?.value?.trim() || '';
+  const savedB1 = (window._currentVoucherDetail?.B1DocNo || '').trim();
+  const savedDone = !!savedB1;      // 저장 기준: 저장된 B1 Doc No. 유무
+  const willBeDone = !!typed;       // 저장하면 되는 상태
+  if (savedDone) {
     badge.textContent = '✅ 완료';
     badge.style.color = '#107c10';
     badge.style.fontWeight = '700';
@@ -4198,28 +4204,50 @@ function updatePostingBadge() {
     badge.style.color = '#7d5700';
     badge.style.fontWeight = '600';
   }
+  // 아직 저장 안 된 변경이 있으면 뱃지 옆에 안내
+  const hint = document.getElementById('modal-posting-pending');
+  if (hint) {
+    if (typed !== savedB1) {
+      hint.style.display = 'inline';
+      hint.textContent = willBeDone ? '· 저장하면 완료로 바뀝니다' : '· 저장하면 미완료로 바뀝니다';
+    } else {
+      hint.style.display = 'none';
+    }
+  }
 }
 async function saveB1DocFromModal() {
-  const v = window._currentVoucherDetail;
-  if(!v) return;
-  const b1DocNo = document.getElementById('modal-b1docno')?.value||'';
-  const postingDone = b1DocNo.trim() ? '완료' : ''; // B1 Doc No. 입력 여부로만 자동 결정 — 더 이상 수동 선택 불가
+  console.log('[B1] 저장 시작 — 이 줄이 안 보이면 옛 화면(캐시)입니다. Ctrl+Shift+R 필요');
   const btn = document.getElementById('b1-save-btn');
-  if(btn){btn.disabled=true;btn.textContent='저장 중...';}
   try {
+    const v = window._currentVoucherDetail;
+    if(!v){
+      // 예전엔 여기서 조용히 return 해서 저장을 눌러도 아무 반응이 없었다.
+      showAccAlert('전표 정보를 찾을 수 없습니다', '상세를 닫았다가 다시 열어주세요.', '⚠️');
+      return;
+    }
+    if(!v._spId){
+      showAccAlert('전표 ID를 확인할 수 없습니다', '상세를 닫았다가 다시 열어주세요.', '⚠️');
+      return;
+    }
+    const b1DocNo = (document.getElementById('modal-b1docno')?.value||'').trim();
+    const postingDone = b1DocNo ? '완료' : ''; // B1 Doc No. 입력 여부로만 자동 결정 — 수동 선택 불가
+    console.log('[B1] 대상 spId:', v._spId, '| list:', LIST_REQUESTS, '| 입력값:', JSON.stringify(b1DocNo));
+    if(btn){btn.disabled=true;btn.textContent='저장 중...';}
+
     const logs = await saveB1Doc(v._spId, b1DocNo, postingDone);
     if(logs === null) return; // saveB1Doc가 이미 실패 알림을 띄움
     renderB1ChangeLog(JSON.stringify(logs));
 
-    // 저장이 실제로 반영됐는지 SharePoint에서 되읽어 확인한다.
-    // (예전엔 저장 후 아무 피드백도 없고 목록도 그대로여서, 반영이 됐는지 알 수 없었음)
+    // 저장이 실제로 반영됐는지 SharePoint에서 되읽어 확인
     const after = await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${v._spId}/fields`);
-    const savedB1 = after.B1DocNo || '';
-    if (savedB1 !== b1DocNo.trim() && savedB1 !== b1DocNo) {
-      showAccAlert('저장이 반영되지 않았습니다', 'SharePoint에 값이 기록되지 않았습니다.\n권한 또는 컬럼 설정을 확인해주세요.', '⚠️');
+    const savedB1 = (after.B1DocNo || '').trim();
+    console.log('[B1] 되읽기 결과:', JSON.stringify(savedB1), '| PostingDone:', JSON.stringify(after.PostingDone||''));
+    if (savedB1 !== b1DocNo) {
+      showAccAlert('저장이 반영되지 않았습니다',
+        '보낸 값: ' + (b1DocNo||'(빈값)') + '\n실제 저장된 값: ' + (savedB1||'(빈값)') + '\n\n권한 또는 컬럼 설정을 확인해주세요.', '⚠️');
       return;
     }
-    // 화면 상태 동기화 — 상세 입력칸 / 상세 캐시 / 관리자 목록
+    // 화면 상태 동기화 — 상세 캐시 / 입력칸 / Posting 뱃지 / 관리자 목록
     v.B1DocNo = savedB1;
     v.PostingDone = after.PostingDone || '';
     const input = document.getElementById('modal-b1docno');
@@ -4228,7 +4256,12 @@ async function saveB1DocFromModal() {
     const cached = adminListCache.find(x=>x._spId===v._spId);
     if(cached){ cached.B1DocNo = savedB1; cached.PostingDone = v.PostingDone; }
     try { if(typeof renderAdminList==='function' && adminListCache.length) renderAdminList(); } catch(e){}
-    showAccAlert('저장되었습니다', 'B1 Doc No.: ' + (savedB1 || '(없음)') + '\nPosting: ' + (savedB1.trim() ? '완료' : '미완료'), '✅');
+    showAccAlert('저장되었습니다',
+      'B1 Doc No.: ' + (savedB1 || '(없음)') + '\nPosting: ' + (savedB1 ? '완료' : '미완료'), '✅');
+  } catch(e) {
+    // 되읽기 등 저장 바깥 단계에서 터져도 조용히 끝나지 않도록
+    console.error('[B1] saveB1DocFromModal error:', e);
+    showAccAlert('저장 처리 중 오류', e.message || String(e), '⚠️');
   } finally {
     if(btn){btn.disabled=false;btn.textContent='저장';}
   }
