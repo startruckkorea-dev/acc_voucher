@@ -121,6 +121,17 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 .appr-block.appr-fixed { background:#f0f6ff; border-color:#c7e0f4; }
 .appr-block-title { font-size:12px; font-weight:700; color:#323130; margin-bottom:10px; }
 .appr-block-title .hint { font-weight:400; color:#605e5c; margin-left:4px; }
+/* 담당자 "직접 변경" 계열 버튼 — 예전엔 파란 글씨뿐이라 클릭 가능한지조차 잘 안 보였다.
+   테두리·배경을 준 실제 버튼 형태로 통일한다. */
+.btn-change {
+  display:inline-flex; align-items:center; gap:4px; cursor:pointer; user-select:none;
+  background:#fff; color:#0078d4; border:1px solid #0078d4; border-radius:6px;
+  padding:3px 10px; font-size:11.5px; font-weight:600; line-height:1.5;
+  margin-left:6px; white-space:nowrap; transition:background .12s,color .12s;
+}
+.btn-change:hover { background:#0078d4; color:#fff; }
+.btn-change.btn-change-reset { color:#605e5c; border-color:#c8c6c4; font-weight:500; }
+.btn-change.btn-change-reset:hover { background:#605e5c; color:#fff; border-color:#605e5c; }
 .appr-block-title .req-mark { color:#d83b01; }
 .appr-info { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
 .appr-info input { padding:7px 10px; border:1px solid #d2d0ce; border-radius:4px; font-size:12px; font-family:inherit; background:#faf9f8; color:#323130; }
@@ -387,7 +398,7 @@ if (new URLSearchParams(location.search).get('openId')) {
           </select>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px">
             <div id="v-type-contact" style="display:none;align-items:center;gap:6px;background:#eff6fc;border:1px solid #c7e0f4;border-radius:999px;padding:4px 12px;font-size:11.5px;color:#0078d4;width:fit-content"></div>
-            <span id="v-type-contact-toggle" class="hint" style="display:none;cursor:pointer;color:#0078d4;font-size:11.5px" onclick="contactToggleManual()">✎ 변경</span>
+            <span id="v-type-contact-toggle" class="btn-change" style="display:none" onclick="contactToggleManual()">✎ 담당자 변경</span>
           </div>
           <div id="v-type-contact-edit" style="display:none;margin-top:6px">
             <select id="vc-person" onchange="contactPersonChange()" style="width:100%">
@@ -1675,7 +1686,7 @@ function onTypeChange() {
   if (email) {
     contactEl.innerHTML = `Accounting 처리 담당자: ${email}` + (accOverride ? ' <span style="color:#8a6914">(수동 지정됨)</span>' : '');
     contactEl.style.display = 'flex';
-    if (contactToggleEl) contactToggleEl.style.display = 'inline';
+    if (contactToggleEl) contactToggleEl.style.display = 'inline-flex';
   } else {
     contactEl.style.display = 'none';
     if (contactToggleEl) contactToggleEl.style.display = 'none';
@@ -1812,7 +1823,7 @@ function renderApproval() {
       const overrideTag = accOverride
         ? `<span style="font-size:10px;color:#8a6914;background:#fff4ce;border-radius:10px;padding:1px 6px;margin-left:4px">수동 변경됨</span>`
         : `<span style="font-size:10px;color:#107c10;background:#dff6dd;border-radius:10px;padding:1px 6px;margin-left:4px">자동 지정</span>`;
-      const resetBtn = accOverride ? `<span class="hint" style="cursor:pointer;color:#0078d4;margin-left:6px" onclick="accResetOverride()">↺ 기본값으로</span>` : '';
+      const resetBtn = accOverride ? `<span class="btn-change btn-change-reset" onclick="accResetOverride()">↺ 기본값으로</span>` : '';
       const _accApOpt = cfgVal(cfg,'ACC-Voucher_AP',{name:'',email:''});
       const _accArOpt = cfgVal(cfg,'ACC-Voucher_AR',{name:'',email:''});
       const _accGlOpt = cfgVal(cfg,'ACC-Voucher_GL',{name:'',email:''});
@@ -1826,7 +1837,7 @@ function renderApproval() {
       ).join('');
       return `<div class="appr-block appr-fixed">
         <div class="appr-block-title">${order}차 결재자${overrideTag} <span class="hint">— ${a.label}</span>
-          <span class="hint" style="cursor:pointer;color:#0078d4;margin-left:6px" onclick="accToggleManual(${order})">✎ 직접 변경</span>${resetBtn}
+          <span class="btn-change" id="acc-change-btn-${order}" onclick="accToggleManual(${order})">✎ 담당자 변경</span>${resetBtn}
         </div>
         <div class="appr-info" id="acc-fixed-view-${order}">
           <input type="text"  value="${a.person.name}"  readonly placeholder="이름">
@@ -1869,6 +1880,9 @@ function accToggleManual(order){
   const showing = manualView.style.display !== 'none';
   fixedView.style.display = showing ? 'grid' : 'none';
   manualView.style.display = showing ? 'none' : 'grid';
+  // 상단 배지 옆 버튼과 동일하게, 열려 있을 땐 "취소"로 바뀌어 현재 상태가 드러나게 한다
+  const btn = document.getElementById('acc-change-btn-'+order);
+  if(btn) btn.textContent = showing ? '✎ 담당자 변경' : '✕ 취소';
 }
 // 직원 선택 완료 시 accOverride에 저장하고, 결재라인/작성문의 배지 둘 다 재렌더링해서 동기화
 function accApplyOverride(order){
@@ -1918,7 +1932,7 @@ function contactToggleManual(){
     if(toggleEl) toggleEl.textContent = '✕ 취소';
   } else {
     editRow.style.display = 'none';
-    if(toggleEl) toggleEl.textContent = '✎ 변경';
+    if(toggleEl) toggleEl.textContent = '✎ 담당자 변경';
   }
 }
 function contactPersonChange(){
@@ -1932,7 +1946,7 @@ function contactPersonChange(){
   const editRow = document.getElementById('v-type-contact-edit');
   const toggleEl = document.getElementById('v-type-contact-toggle');
   if(editRow) editRow.style.display = 'none';
-  if(toggleEl) toggleEl.textContent = '✎ 변경';
+  if(toggleEl) toggleEl.textContent = '✎ 담당자 변경';
 }
 
 function gwDeptChange(order){
