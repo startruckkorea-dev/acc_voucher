@@ -1119,7 +1119,9 @@ async function boot(account) {
   loadBPMaster().catch(e=>console.warn('BP 마스터 로드 실패:', e.message));
   loadAccMasters().catch(e=>console.warn('회계 마스터 로드 실패:', e.message));
   // system_config 로드 → 헤더 문의 이메일 + 결재라인 재렌더
-  loadSystemConfig().then(cfg=>{
+  // 프라미스를 보관해두는 이유: ADMIN_EMAILS가 여기서 비로소 채워지므로,
+  // ?openId= 딥링크로 바로 상세를 여는 경우 이 로드가 끝난 뒤에 열어야 관리자 판별이 정상 동작한다.
+  const _configPromise = loadSystemConfig().then(cfg=>{
     if(!cfg) return;
     const ap = cfgVal(cfg,'ACC-Voucher_CONTACT_AP');
     const ar = cfgVal(cfg,'ACC-Voucher_CONTACT_AR');
@@ -1159,7 +1161,9 @@ async function boot(account) {
     // 똑같은 상세화면(B1 Doc No./Posting, 결재 의견 제시)을 보여주기 위함.
     // 관리자 섹션은 여전히 userIsAdmin(ADMIN_EMAILS 포함 여부)로 한 번 더 걸러지므로,
     // 일반 사용자가 이 링크로 들어와도 해당 섹션은 노출되지 않는다.
-    openVoucherSP(String(_openId), 'admin');
+    // ⚠ ADMIN_EMAILS는 system_config 로드가 끝나야 채워진다. 기다리지 않고 바로 열면
+    //   그 시점엔 빈 배열이라 관리자인데도 관리자 섹션이 숨겨진다(경쟁 조건).
+    _configPromise.finally(()=>openVoucherSP(String(_openId), 'admin'));
     history.replaceState(null, '', location.pathname);
   }
 }
