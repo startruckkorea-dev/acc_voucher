@@ -1155,7 +1155,11 @@ async function boot(account) {
   if (_openId) {
     // 단독 상세보기 모드: 전표 작성 폼·헤더·탭은 필요 없으므로 배경색만 남기고 전부 숨김
     _standaloneDetail = true;
-    openVoucherSP(String(_openId), 'mylist');
+    // 'admin'으로 여는 이유: SSC 등 다른 시스템의 바로가기로 들어와도 ACC 관리자 탭에서 연 것과
+    // 똑같은 상세화면(B1 Doc No./Posting, 결재 의견 제시)을 보여주기 위함.
+    // 관리자 섹션은 여전히 userIsAdmin(ADMIN_EMAILS 포함 여부)로 한 번 더 걸러지므로,
+    // 일반 사용자가 이 링크로 들어와도 해당 섹션은 노출되지 않는다.
+    openVoucherSP(String(_openId), 'admin');
     history.replaceState(null, '', location.pathname);
   }
 }
