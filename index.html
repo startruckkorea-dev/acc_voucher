@@ -3635,7 +3635,12 @@ async function saveB1Doc(spId, b1DocNo, postingDone) {
       window._currentVoucherDetail.B1ChangeLog = JSON.stringify(logs);
     }
     return logs;
-  } catch(e){ console.error('saveB1Doc error:', e.message); alert('저장 실패: '+e.message); return null; }
+  } catch(e){
+    // LIST_REQUESTS가 잘못 잡혔거나 컬럼이 없으면 여기로 온다. 원인 추적을 위해 대상까지 남긴다.
+    console.error('saveB1Doc error:', e.message, '| list:', LIST_REQUESTS, '| spId:', spId);
+    alert('저장 실패: '+e.message);
+    return null;
+  }
 }
 
 // ── B1 Doc No./Posting 변경 이력 렌더링 (SSC PKF 담당자 변경 이력과 동일 카드 스타일) ──
@@ -4175,11 +4180,34 @@ async function saveB1DocFromModal() {
   if(!v) return;
   const b1DocNo = document.getElementById('modal-b1docno')?.value||'';
   const postingDone = b1DocNo.trim() ? '완료' : ''; // B1 Doc No. 입력 여부로만 자동 결정 — 더 이상 수동 선택 불가
-  const btn = document.querySelector('#b1-input-section button');
+  const btn = document.getElementById('b1-save-btn');
   if(btn){btn.disabled=true;btn.textContent='저장 중...';}
-  const logs = await saveB1Doc(v._spId, b1DocNo, postingDone);
-  if(logs !== null) renderB1ChangeLog(JSON.stringify(logs));
-  if(btn){btn.disabled=false;btn.textContent='저장';}
+  try {
+    const logs = await saveB1Doc(v._spId, b1DocNo, postingDone);
+    if(logs === null) return; // saveB1Doc가 이미 실패 알림을 띄움
+    renderB1ChangeLog(JSON.stringify(logs));
+
+    // 저장이 실제로 반영됐는지 SharePoint에서 되읽어 확인한다.
+    // (예전엔 저장 후 아무 피드백도 없고 목록도 그대로여서, 반영이 됐는지 알 수 없었음)
+    const after = await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${v._spId}/fields`);
+    const savedB1 = after.B1DocNo || '';
+    if (savedB1 !== b1DocNo.trim() && savedB1 !== b1DocNo) {
+      showAccAlert('저장이 반영되지 않았습니다', 'SharePoint에 값이 기록되지 않았습니다.\n권한 또는 컬럼 설정을 확인해주세요.', '⚠️');
+      return;
+    }
+    // 화면 상태 동기화 — 상세 입력칸 / 상세 캐시 / 관리자 목록
+    v.B1DocNo = savedB1;
+    v.PostingDone = after.PostingDone || '';
+    const input = document.getElementById('modal-b1docno');
+    if(input) input.value = savedB1;
+    updatePostingBadge();
+    const cached = adminListCache.find(x=>x._spId===v._spId);
+    if(cached){ cached.B1DocNo = savedB1; cached.PostingDone = v.PostingDone; }
+    try { if(typeof renderAdminList==='function' && adminListCache.length) renderAdminList(); } catch(e){}
+    showAccAlert('저장되었습니다', 'B1 Doc No.: ' + (savedB1 || '(없음)') + '\nPosting: ' + (savedB1.trim() ? '완료' : '미완료'), '✅');
+  } finally {
+    if(btn){btn.disabled=false;btn.textContent='저장';}
+  }
 }
 
 // ── No.10: 관리자 의견 기능 (ACC-Voucher_Requests의 AdminComments 필드 사용) ──
