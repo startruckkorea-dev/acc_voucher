@@ -3853,6 +3853,9 @@ async function openVoucherSP(spId, fromTab){
     }
     return;
   }
+  // ⚠ 이 할당이 빠지면 저장(saveB1DocFromModal)·PDF 출력·결재이력 세대 판별이 전부 동작하지 않는다.
+  //   상세를 기반으로 하는 기능들이 모두 이 전역값을 참조하므로 절대 제거하지 말 것.
+  window._currentVoucherDetail = v;
   const pdfBtn = document.getElementById('btn-export-pdf');
   if(pdfBtn) pdfBtn.style.display = 'flex';
   const pdfDetailBtn = document.getElementById('btn-export-detail-pdf');
