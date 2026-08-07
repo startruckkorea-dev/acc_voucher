@@ -844,6 +844,11 @@ function applyCurrentVolume() {
 // 특정 전표(item)의 결재이력이 어느 Approvals 세대에 있는지 확인해서 LIST_APPROVALS를 그쪽으로 임시 전환
 // — item._aprCode를 이미 알면(결재함에서 열었을 때) 바로 사용, 모르면(내 전표목록/관리자목록에서 열었을 때) 등록된 세대를 순서대로 뒤져서 찾아 캐싱
 async function useVolumeOf(item) {
+  // VOL_CONFIG는 보통 목록 탭 로드 과정에서 채워지지만, ?openId= 딥링크로 상세만 바로 여는 경우엔
+  // 목록을 한 번도 거치지 않아 null이다. 그대로 아래 줄에서 참조하면 TypeError로 터지고
+  // 호출부(loadApprovalHistory)의 catch에 걸려 "결재 이력을 불러올 수 없습니다."만 표시됐다.
+  // loadVolumeConfig()는 이미 로드됐으면 즉시 반환하므로 중복 비용도 없다.
+  await loadVolumeConfig();
   LIST_REQUESTS = VOL_CONFIG.reqList;
   if (item && item._aprCode) {
     const vol = getAprVolumeByCode(item._aprCode);
@@ -3632,7 +3637,10 @@ function renderAdminList(){
     const reverseNo = total - (cur * PAGE_SIZE + idx);
     const isCompleted = v.Status === '승인완료';
     const b1DocNo = v.B1DocNo||'';
-    const postingDone = v.PostingDone||'';
+    // Posting은 저장된 PostingDone이 아니라 B1 Doc No. 유무로만 판정한다.
+    // 수동 선택이 가능하던 시절에 만들어진 과거 데이터 중 "B1 없음 + PostingDone=완료" 조합이 남아 있어,
+    // 저장값을 그대로 쓰면 목록과 상세가 서로 다르게 보인다. 판정 기준을 한 곳으로 통일.
+    const postingDone = b1DocNo.trim() ? '완료' : '';
     return `<tr onclick="openVoucherSP('${v._spId}','admin')">
     <td style="color:#a19f9d;font-size:.78rem">${reverseNo}</td>
     <td style="font-size:.78rem;color:#605e5c">${v.RequesterEmail||'-'}</td>
@@ -3916,8 +3924,14 @@ async function openVoucherSP(spId, fromTab){
           <div id="modal-posting-badge" style="width:100%;height:34px;border:1px solid #d2d0ce;border-radius:4px;padding:0 10px;font-size:.78rem;font-family:inherit;box-sizing:border-box;line-height:32px;background:#f9f8f7;display:flex;align-items:center">미완료</div>
         </div>
       </div>
-      <div style="display:flex;align-items:center;justify-content:flex-end">
-        <button id="b1-save-btn" onclick="saveB1DocFromModal()" style="padding:6px 16px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:.78rem;cursor:pointer">저장</button>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <div style="font-size:.7rem;color:#605e5c;line-height:1.6;background:#f0f6ff;border-left:3px solid #0078d4;border-radius:3px;padding:7px 10px;flex:1">
+          <b style="color:#0078d4">Posting 상태는 B1 Doc No.로만 결정됩니다.</b><br>
+          · B1 Doc No.가 <b>비어 있으면 미완료</b> (기본값)<br>
+          · B1 Doc No.에 <b>값이 입력되어 있으면 완료</b><br>
+          · Posting은 직접 선택할 수 없으며, 입력 즉시 자동으로 바뀝니다.
+        </div>
+        <button id="b1-save-btn" onclick="saveB1DocFromModal()" style="padding:6px 16px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:.78rem;cursor:pointer;white-space:nowrap">저장</button>
       </div>
       <div id="b1-change-log" style="margin-top:12px"></div>
     </div>
