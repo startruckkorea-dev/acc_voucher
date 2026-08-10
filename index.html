@@ -4666,6 +4666,11 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
 
   const roleCols=[['TL','Team Leader'],['MC','MC'],['CEO','CEO'],['RD','RD'],['ACC','Acc. Specialist'],['AMGR','Acc. Manager'],['CFO','CFO']];
   const NA_BADGE='<span style="display:inline-block;background:#e1dfdd;color:#484644;font-size:8.5px;font-weight:800;padding:2px 7px;border-radius:3px;letter-spacing:.3px">NOT REQUIRED</span>';
+  // RD 승인 제외로 빠진 경우는 "원래 불필요한 단계"와 구분되어야 한다.
+  // 금액 기준상 RD가 필요한데도 사유를 들어 제외한 건이므로, 표기와 색을 달리해 눈에 띄게 한다.
+  const rdExemptNote = (v.RDExemptReason||'').trim();
+  const isRdExempted = !!rdExemptNote;
+  const EXEMPT_BADGE='<span style="display:inline-block;background:#fdf6e3;color:#8a6116;border:1px solid #f0d9a0;font-size:8.5px;font-weight:800;padding:2px 7px;border-radius:3px;letter-spacing:.2px;white-space:nowrap">EXEMPTED</span>';
   const apprByRole={}; (apprList||[]).forEach(a=>{apprByRole[a.ApproverRole]=a;});
   const fmtApprDateTime=s=>{if(!s)return '';const d=new Date(new Date(s).getTime()+9*3600*1000);const p=n=>String(n).padStart(2,'0');return `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;};
   // "이준순 스타트럭코리아 IT(Junsoon Lee)" 형태에서 한글 이름만 추출
@@ -4712,7 +4717,7 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
               '<div style="font-size:7px;color:#666;white-space:nowrap">'+fmtApprDateTime(a.ApprovalDate)+'</div>'+
             '</div>';
       } else if(!a){
-        val=NA_BADGE;
+        val = (role==='RD' && isRdExempted) ? EXEMPT_BADGE : NA_BADGE;
       }
     } else {
       val = a ? esc(a.ApproverName||'') : NA_BADGE;
@@ -4824,7 +4829,9 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
           if(role==='ACC'||role==='AMGR') ruleText='Required'; // 항상 결재라인에 포함 (needed() 체크 없이 무조건 push)
           else {
             const rv = rules[role];
-            if(!rv || rv==='-') ruleText='Not Required';
+            // RD가 사유를 들어 제외된 건은 조건 자체가 적용되지 않았음을 명시
+            if(role==='RD' && isRdExempted) ruleText='Exempted by approved reason';
+            else if(!rv || rv==='-') ruleText='Not Required';
             else if(rv==='필수') ruleText='Required';
             else if(rv==='필요시') ruleText='If necessary';
             else ruleText=rv; // 예: '>= 1,000,000', '> 50,000,000' 등 실제 임계값 그대로 표기
@@ -4833,6 +4840,14 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
         }).join('')+
       '</tr>'+
     '</table>'+
+    // RD 승인 제외 건은 결재 단계가 하나 빠진 상태이므로, 그 근거를 양식 안에 남겨 감사 시 확인 가능하게 한다.
+    (isRdExempted
+      ? '<div style="margin-top:4px;border:1px solid #f0d9a0;background:#fdf6e3;border-radius:3px;padding:5px 8px;font-size:8.5px;color:#8a6116;line-height:1.5">'+
+          '<b>※ RD Approval Exempted</b> &nbsp;·&nbsp; '+esc(rdExemptNote)+'<br>'+
+          'This voucher was submitted with the RD approval step exempted under the reason stated above, in accordance with internal accounting policy. '+
+          '(RD 승인 단계는 위 사유에 따라 내부 회계 기준에 근거하여 제외되었습니다.)'+
+        '</div>'
+      : '')+
   '</div>';
 }
 
