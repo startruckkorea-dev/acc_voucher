@@ -4105,17 +4105,17 @@ async function openVoucherSP(spId, fromTab){
     </div>
     <div id="admin-comment-section" style="display:none;margin-top:16px;border-top:1px solid #edebe9;padding-top:14px">
       <div class="det-sec">결재 의견 제시</div>
-      <div style="background:#fdf6e3;border:1px solid #f0d9a0;border-radius:8px;padding:11px 14px;margin-bottom:10px">
+      <div id="admin-comments-list" style="margin-bottom:10px;max-height:180px;overflow-y:auto"></div>
+      <div id="admin-comment-input-wrap" style="display:flex;gap:8px;align-items:flex-end">
+        <textarea id="admin-comment-text" placeholder="의견을 입력해주세요..." rows="2" style="flex:1;border:1px solid #d2d0ce;border-radius:4px;padding:8px 10px;font-size:.78rem;font-family:inherit;resize:vertical"></textarea>
+        <button onclick="submitAdminComment('${v._spId}')" style="padding:7px 16px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:.78rem;cursor:pointer;white-space:nowrap;height:fit-content">등록</button>
+      </div>
+      <div style="background:#fdf6e3;border:1px solid #f0d9a0;border-radius:8px;padding:11px 14px;margin-top:10px">
         <div style="font-size:.76rem;font-weight:700;color:#8a6116;margin-bottom:5px">⚠️ 결재 의견은 지정된 담당자만 입력할 수 있습니다</div>
         <div style="font-size:.73rem;color:#8a6116;line-height:1.75">
           <b>ACC Voucher 관리자</b>와 이 전표가 연결된 <b>SSC 티켓의 PKF 담당자</b>만 열람·입력이 가능합니다.
           <b>승인완료·철회된 전표</b>에는 의견을 추가할 수 없으며, 등록된 의견에는 작성자와 작성 시각이 함께 기록됩니다.
         </div>
-      </div>
-      <div id="admin-comments-list" style="margin-bottom:10px;max-height:180px;overflow-y:auto"></div>
-      <div id="admin-comment-input-wrap" style="display:flex;gap:8px;align-items:flex-end">
-        <textarea id="admin-comment-text" placeholder="의견을 입력해주세요..." rows="2" style="flex:1;border:1px solid #d2d0ce;border-radius:4px;padding:8px 10px;font-size:.78rem;font-family:inherit;resize:vertical"></textarea>
-        <button onclick="submitAdminComment('${v._spId}')" style="padding:7px 16px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:.78rem;cursor:pointer;white-space:nowrap;height:fit-content">등록</button>
       </div>
       <div id="admin-comment-closed" style="display:none;font-size:.78rem;color:#a19f9d;padding:8px 0">승인완료된 전표는 의견을 입력할 수 없습니다.</div>
     </div>
