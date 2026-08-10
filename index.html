@@ -1010,6 +1010,10 @@ function cfgEmails(cfg, keys) {
   return [...new Set(expanded)].map(k => (cfg && cfg[k] ? cfg[k].email : '')).filter(Boolean);
 }
 const ADMIN_EMAILS = [];
+// 외부 회계법인(PKF) 담당자 — system_config의 SHARED-SC_2nd_N 키에 등록된 사람들.
+// SSC 티켓 처리를 맡고 있어 B1 Doc No./Posting 입력과 결재 의견 확인이 업무상 필요하다.
+// 다만 관리자와 동일 권한은 아니므로 이 두 섹션에 한해서만 열어준다.
+const PKF_EMAILS = [];
 // Voucher Type 선택 시 담당 연락처 배지 표시용 - loadSystemConfig 콜백에서 채워짐
 const CONTACT_EMAILS = { ap:'', ar:'', gl:'' };
 // 각 Voucher Type이 어느 담당(AP/AR/GL)에 해당하는지
@@ -1213,6 +1217,15 @@ async function boot(account) {
     // IT 담당자(ACC-Voucher_IT) — Approvals 세대 관리(SharePoint 인프라 전환) 같은 민감한 기능은 이 사람들에게만 노출
     const itList = cfgEmails(cfg, ['ACC-Voucher_IT']);
     if(itList.length) IT_EMAILS.splice(0, IT_EMAILS.length, ...itList);
+    // PKF 담당자(SHARED-SC_2nd_N) — SSC와 동일한 키를 그대로 사용해 명단을 한 곳에서만 관리
+    const pkfList = [];
+    let _pn = 1;
+    while (cfg && cfg['SHARED-SC_2nd_' + _pn]) {
+      const em = (cfg['SHARED-SC_2nd_' + _pn].email || '').trim().toLowerCase();
+      if (em) pkfList.push(em);
+      _pn++;
+    }
+    if(pkfList.length) PKF_EMAILS.splice(0, PKF_EMAILS.length, ...pkfList);
     // IT 담당자(ACC-Voucher_IT)만 결재이력 세대 상태/관리 영역 전체를 볼 수 있도록 처리
     const rawUserEmail = (user?.email||user?.username||'').toLowerCase();
     const isItStaff = IT_EMAILS.map(e=>e.toLowerCase()).includes(rawUserEmail);
@@ -3660,7 +3673,12 @@ async function saveB1Doc(spId, b1DocNo, postingDone) {
   } catch(e){
     // LIST_REQUESTS가 잘못 잡혔거나 컬럼이 없으면 여기로 온다. 원인 추적을 위해 대상까지 남긴다.
     console.error('[B1] saveB1Doc error:', e.message, '| list:', LIST_REQUESTS, '| spId:', spId);
-    showAccAlert('저장 실패', (e.message||String(e)) + '\n\n대상 리스트: ' + LIST_REQUESTS + '\n항목 ID: ' + spId, '⚠️');
+    // 읽기 전용 권한만 있는 계정(예: 외부 회계법인)은 조회는 되지만 저장에서 403이 난다.
+    // 원인을 못 알아채면 "저장이 안 된다"로만 인식하게 되므로 명시적으로 안내한다.
+    const denied = /403|Forbidden|accessDenied|denied/i.test(e.message||'');
+    showAccAlert(denied ? '저장 권한이 없습니다' : '저장 실패',
+      denied ? '이 전표 목록에 대한 쓰기 권한이 없습니다.\n읽기 전용 권한으로는 B1 Doc No.를 저장할 수 없습니다.\nSTK IT에 권한 조정을 요청해 주세요.'
+             : (e.message||String(e)) + '\n\n대상 리스트: ' + LIST_REQUESTS + '\n항목 ID: ' + spId, '⚠️');
     return null;
   }
 }
@@ -4060,8 +4078,12 @@ async function openVoucherSP(spId, fromTab){
 
   // 관리자 의견 섹션 표시 (관리자 탭에서 연 경우에만 — 내 전표 목록/결재함에선 본인이 관리자여도 숨김)
   const commentSection = document.getElementById('admin-comment-section');
-  const userIsAdmin = ADMIN_EMAILS.map(e=>e.toLowerCase()).includes((user?.email||user?.username||'').toLowerCase());
-  const showAdminSections = userIsAdmin && fromTab==='admin';
+  const myEmailLower = (user?.email||user?.username||'').toLowerCase();
+  const userIsAdmin = ADMIN_EMAILS.map(e=>e.toLowerCase()).includes(myEmailLower);
+  // PKF 담당자는 SSC 처리 업무상 B1 Doc No./Posting 입력과 결재 의견 확인이 필요하다.
+  // 관리자 탭을 거치지 않고 SSC 링크(?openId=)로 들어오는 경로가 주 사용 방식이므로 fromTab 조건은 걸지 않는다.
+  const userIsPkf = PKF_EMAILS.includes(myEmailLower);
+  const showAdminSections = (userIsAdmin && fromTab==='admin') || userIsPkf;
   if(commentSection && showAdminSections) {
     commentSection.style.display = 'block';
     const isCompleted = v.Status === '승인완료' || v.Status === '철회';
@@ -4321,7 +4343,16 @@ async function submitAdminComment(reqSpId) {
     textEl.value='';
     await loadAdminComments(reqSpId);
     if(btn){btn.disabled=false;btn.textContent='등록';}
-  } catch(e) { alert('의견 저장 실패: '+e.message); }
+  } catch(e) {
+    console.error('submitAdminComment error:', e);
+    // 읽기 전용 권한 계정은 조회는 되지만 등록에서 403이 난다 — 원인을 명확히 알린다.
+    const denied = /403|Forbidden|accessDenied|denied/i.test(e.message||'');
+    showAccAlert(denied ? '등록 권한이 없습니다' : '의견 저장 실패',
+      denied ? '이 전표 목록에 대한 쓰기 권한이 없습니다.\n읽기 전용 권한으로는 의견을 등록할 수 없습니다.\nSTK IT에 권한 조정을 요청해 주세요.'
+             : (e.message||String(e)), '⚠️');
+    const btn = document.querySelector('#admin-comment-input-wrap button');
+    if(btn){btn.disabled=false;btn.textContent='등록';}
+  }
 }
 
 // ?openId= 딥링크로 진입한 단독 상세보기 모드 여부 (다른 시스템에서 연동 링크로 들어온 경우)
