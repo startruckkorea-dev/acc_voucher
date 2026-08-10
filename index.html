@@ -988,7 +988,10 @@ async function loadPkfAllowedAccIds() {
     _pkfAllowedAccIds = ids;
   } catch (e) {
     console.warn('[PKF] 담당 티켓 조회 실패:', e.message);
-    _pkfAllowedAccIds = null;   // 판정 불가 — 안전하게 차단 쪽으로 처리
+    // 실패는 캐시하지 않는다. null로 굳혀두면 일시적 네트워크 오류 한 번에
+    // 해당 세션 내내 차단되어 새로고침 외에는 복구할 방법이 없어진다.
+    _pkfAllowedAccIds = undefined;
+    return null;   // 이번 호출만 "판정 불가"로 처리 (차단 쪽)
   }
   return _pkfAllowedAccIds;
 }
