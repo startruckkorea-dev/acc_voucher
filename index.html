@@ -409,9 +409,10 @@ if (new URLSearchParams(location.search).get('openId')) {
             </select>
           </div>
         </div>
-        <!-- RD 결재 제외 — AP / AP_IMS / GL 에서만 활성화 -->
-        <div class="form-group" id="rd-exempt-group" style="display:none">
-          <label>RD Approval Removal</label>
+        <!-- RD 결재 제외 — 자리는 항상 유지하고 AP / AP_IMS / GL 에서만 활성화한다.
+             (유형에 따라 영역이 사라지면 옆 칸 레이아웃이 흔들려 보인다) -->
+        <div class="form-group" id="rd-exempt-group">
+          <label id="rd-exempt-label">RD Approval Removal <span id="rd-exempt-hint" style="font-weight:400;font-size:.68rem;color:#a19f9d">— AP · AP(IMS) · GL 전용</span></label>
           <div style="display:flex;align-items:center;gap:8px;height:34px">
             <label id="rd-exempt-toggle" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:.78rem;color:#605e5c;user-select:none;background:#faf9f8;border:1px solid #d2d0ce;border-radius:6px;padding:0 12px;height:34px;box-sizing:border-box;white-space:nowrap">
               <input type="checkbox" id="rd-exempt-check" onchange="onRdExemptChange()" style="cursor:pointer;width:14px;height:14px;accent-color:#0078d4;margin:0">
@@ -1321,6 +1322,8 @@ async function boot(account) {
     renderApproval(); // config 로드 후 재렌더
   }).catch(()=>{ _configLoaded = true; });
 
+  syncRdExemptUI();   // Voucher Type 미선택 상태에서도 RD 제외 영역이 비활성으로 보이도록 초기화
+
   // 결재 대기 배지 미리 로드 (GW 동일: 진입 시 1회 + 60초마다 갱신)
   if(!siteId){ api('/sites/'+SITE_PATH_DB).then(s=>{ siteId=s.id; checkApprovalBadge(); }).catch(()=>{}); }
   else checkApprovalBadge();
@@ -1797,21 +1800,31 @@ function switchTab(tab) {
 // "예전에 켜둔 제외가 남아 있는" 상태를 만들지 않는다.
 function syncRdExemptUI() {
   const type = document.getElementById('v-type').value;
-  const group = document.getElementById('rd-exempt-group');
   const chk = document.getElementById('rd-exempt-check');
   const sel = document.getElementById('rd-exempt-reason');
   const etc = document.getElementById('rd-exempt-etc');
-  if (!group) return;
+  const lbl = document.getElementById('rd-exempt-label');
+  const tgl = document.getElementById('rd-exempt-toggle');
+  const note = document.getElementById('rd-exempt-note');
+  if (!chk) return;
 
-  if (!RD_EXEMPT_TYPES.includes(type)) {
-    group.style.display = 'none';
-    if (chk) chk.checked = false;
-    if (sel) sel.value = '';
+  const enabled = RD_EXEMPT_TYPES.includes(type);
+
+  if (!enabled) {
+    // 대상 유형이 아니면 자리는 그대로 두고 비활성 처리 — 선택값도 확실히 초기화한다.
+    chk.checked = false; chk.disabled = true;
+    if (sel) { sel.value = ''; sel.disabled = true; sel.style.background = '#f3f2f1'; sel.style.color = '#a19f9d'; }
     if (etc) { etc.value = ''; etc.style.display = 'none'; }
+    if (note) note.style.display = 'none';
+    if (lbl) lbl.style.color = '#a19f9d';   // textContent를 덮어쓰면 안내 span이 지워지므로 색상만 조정
+    if (tgl) { tgl.style.opacity = '.5'; tgl.style.cursor = 'not-allowed'; tgl.title = 'AP · AP(IMS) · GL 유형에서만 사용할 수 있습니다'; }
     rdExempt = false; rdExemptReason = '';
     return;
   }
-  group.style.display = '';
+
+  chk.disabled = false;
+  if (lbl) lbl.style.color = '';
+  if (tgl) { tgl.style.opacity = ''; tgl.style.cursor = 'pointer'; tgl.title = ''; }
   // 유형별 사유 목록 재구성 (유형이 바뀌면 사유도 달라진다)
   const reasons = RD_EXEMPT_REASONS[type] || [];
   const prev = sel.value;
