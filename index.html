@@ -385,7 +385,9 @@ if (new URLSearchParams(location.search).get('openId')) {
       </div>
 
       <div class="section-title">1. 바우처 정보 (Voucher Information)</div>
-      <div class="form-row">
+      <!-- Voucher Type / RD Approval Removal / Submission Date 를 한 줄에 배치.
+           RD 영역은 체크박스+드롭박스가 들어가 조금 더 넓게 잡는다. -->
+      <div class="form-row" style="grid-template-columns:1fr 1.25fr 0.85fr">
         <div class="form-group">
           <label>Voucher Type <span class="req">*</span></label>
           <select id="v-type" onchange="onTypeChange()">
@@ -400,7 +402,7 @@ if (new URLSearchParams(location.search).get('openId')) {
             <option value="SET">Settlement of Advance</option>
           </select>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px">
-            <div id="v-type-contact" style="display:none;align-items:center;gap:6px;background:#eff6fc;border:1px solid #c7e0f4;border-radius:999px;padding:4px 12px;font-size:11.5px;color:#0078d4;width:fit-content"></div>
+            <div id="v-type-contact" title="" style="display:none;align-items:center;gap:6px;background:#eff6fc;border:1px solid #c7e0f4;border-radius:999px;padding:4px 12px;font-size:11px;color:#0078d4;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
             <span id="v-type-contact-toggle" class="btn-change" style="display:none" onclick="contactToggleManual()">✎ 담당자 변경</span>
           </div>
           <div id="v-type-contact-edit" style="display:none;margin-top:6px">
@@ -412,11 +414,11 @@ if (new URLSearchParams(location.search).get('openId')) {
         <!-- RD 결재 제외 — 자리는 항상 유지하고 AP / AP_IMS / GL 에서만 활성화한다.
              (유형에 따라 영역이 사라지면 옆 칸 레이아웃이 흔들려 보인다) -->
         <div class="form-group" id="rd-exempt-group">
-          <label id="rd-exempt-label">RD Approval Removal <span id="rd-exempt-hint" style="font-weight:400;font-size:.68rem;color:#a19f9d">— AP · AP(IMS) · GL 전용</span></label>
+          <label id="rd-exempt-label">RD Approval Removal <span id="rd-exempt-hint" style="font-weight:400;font-size:.66rem;color:#a19f9d">— AP · AP(IMS) · GL</span></label>
           <div style="display:flex;align-items:center;gap:8px;height:34px">
-            <label id="rd-exempt-toggle" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:.78rem;color:#605e5c;user-select:none;background:#faf9f8;border:1px solid #d2d0ce;border-radius:6px;padding:0 12px;height:34px;box-sizing:border-box;white-space:nowrap">
+            <label id="rd-exempt-toggle" title="체크 시 금액과 무관하게 RD 결재 단계가 제외됩니다" style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-size:.75rem;color:#605e5c;user-select:none;background:#faf9f8;border:1px solid #d2d0ce;border-radius:6px;padding:0 10px;height:34px;box-sizing:border-box;white-space:nowrap;flex-shrink:0">
               <input type="checkbox" id="rd-exempt-check" onchange="onRdExemptChange()" style="cursor:pointer;width:14px;height:14px;accent-color:#0078d4;margin:0">
-              RD 승인 제외
+              제외
             </label>
             <select id="rd-exempt-reason" onchange="onRdExemptReasonChange()" disabled
               style="flex:1;min-width:0;height:34px;border:1px solid #d2d0ce;border-radius:4px;padding:0 10px;font-size:.78rem;font-family:inherit;background:#f3f2f1;color:#a19f9d">
@@ -1873,6 +1875,7 @@ function onTypeChange() {
   const email = accOverride ? accOverride.email : (cat ? CONTACT_EMAILS[cat] : '');
   if (email) {
     contactEl.innerHTML = `Accounting 처리 담당자: ${email}` + (accOverride ? ' <span style="color:#8a6914">(수동 지정됨)</span>' : '');
+    contactEl.title = `Accounting 처리 담당자: ${email}`;   // 폭이 좁아 말줄임될 때 전체 확인용
     contactEl.style.display = 'flex';
     if (contactToggleEl) contactToggleEl.style.display = 'inline-flex';
   } else {
