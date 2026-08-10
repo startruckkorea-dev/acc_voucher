@@ -414,7 +414,7 @@ if (new URLSearchParams(location.search).get('openId')) {
         <!-- RD 결재 제외 — 자리는 항상 유지하고 AP / AP_IMS / GL 에서만 활성화한다.
              (유형에 따라 영역이 사라지면 옆 칸 레이아웃이 흔들려 보인다) -->
         <div class="form-group" id="rd-exempt-group">
-          <label id="rd-exempt-label">RD Approval Removal <span id="rd-exempt-hint" style="font-weight:400;font-size:.66rem;color:#a19f9d">— AP · AP(IMS) · GL</span></label>
+          <label id="rd-exempt-label">RD Approval Removal <span id="rd-exempt-hint" style="font-weight:400;font-size:.66rem;color:#a19f9d">— Applicable to AP · AP(IMS) · GL only</span></label>
           <div style="display:flex;align-items:center;gap:8px;height:34px">
             <label id="rd-exempt-toggle" title="체크 시 금액과 무관하게 RD 결재 단계가 제외됩니다" style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-size:.75rem;color:#605e5c;user-select:none;background:#faf9f8;border:1px solid #d2d0ce;border-radius:6px;padding:0 10px;height:34px;box-sizing:border-box;white-space:nowrap;flex-shrink:0">
               <input type="checkbox" id="rd-exempt-check" onchange="onRdExemptChange()" style="cursor:pointer;width:14px;height:14px;accent-color:#0078d4;margin:0">
@@ -427,6 +427,9 @@ if (new URLSearchParams(location.search).get('openId')) {
           </div>
           <input type="text" id="rd-exempt-etc" placeholder="사유를 직접 입력해주세요" oninput="onRdExemptReasonChange()"
             style="display:none;width:100%;margin-top:6px;height:34px;border:1px solid #d2d0ce;border-radius:4px;padding:0 10px;font-size:.78rem;font-family:inherit;box-sizing:border-box">
+          <div style="font-size:.66rem;color:#a19f9d;margin-top:5px;line-height:1.55">
+            * Check the box if the RD approval should be <b>exempted</b> for this voucher, then select the reason.
+          </div>
           <div id="rd-exempt-note" style="display:none;font-size:.68rem;color:#8a6116;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:6px;padding:7px 10px;margin-top:6px;line-height:1.6">
             선택 시 <b>금액과 무관하게 RD 결재 단계가 제외</b>됩니다. 사유는 전표에 함께 기록됩니다.
           </div>
