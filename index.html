@@ -409,6 +409,25 @@ if (new URLSearchParams(location.search).get('openId')) {
             </select>
           </div>
         </div>
+        <!-- RD 결재 제외 — AP / AP_IMS / GL 에서만 활성화 -->
+        <div class="form-group" id="rd-exempt-group" style="display:none">
+          <label>RD Approval Removal</label>
+          <div style="display:flex;align-items:center;gap:8px;height:34px">
+            <label id="rd-exempt-toggle" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:.78rem;color:#605e5c;user-select:none;background:#faf9f8;border:1px solid #d2d0ce;border-radius:6px;padding:0 12px;height:34px;box-sizing:border-box;white-space:nowrap">
+              <input type="checkbox" id="rd-exempt-check" onchange="onRdExemptChange()" style="cursor:pointer;width:14px;height:14px;accent-color:#0078d4;margin:0">
+              RD 승인 제외
+            </label>
+            <select id="rd-exempt-reason" onchange="onRdExemptReasonChange()" disabled
+              style="flex:1;min-width:0;height:34px;border:1px solid #d2d0ce;border-radius:4px;padding:0 10px;font-size:.78rem;font-family:inherit;background:#f3f2f1;color:#a19f9d">
+              <option value="">-- 제외 사유 --</option>
+            </select>
+          </div>
+          <input type="text" id="rd-exempt-etc" placeholder="사유를 직접 입력해주세요" oninput="onRdExemptReasonChange()"
+            style="display:none;width:100%;margin-top:6px;height:34px;border:1px solid #d2d0ce;border-radius:4px;padding:0 10px;font-size:.78rem;font-family:inherit;box-sizing:border-box">
+          <div id="rd-exempt-note" style="display:none;font-size:.68rem;color:#8a6116;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:6px;padding:7px 10px;margin-top:6px;line-height:1.6">
+            선택 시 <b>금액과 무관하게 RD 결재 단계가 제외</b>됩니다. 사유는 전표에 함께 기록됩니다.
+          </div>
+        </div>
         <div class="form-group">
           <label>Submission Date <span class="req">*</span> <span class="auto-tag">자동</span></label>
           <input type="date" id="v-date" readonly>
@@ -1087,17 +1106,40 @@ let COST_CENTERS = []
 let PROFIT_CENTERS = [];
 const APPROVAL_RULES = {
   // 규칙 해석: 해당 금액 "이상"이면 그 결재자까지 모두 포함 (누적 구조)
-  // AP_IMS 예: 50,000,001원 → TL + MC + CEO + RD 전부 필요
   // 2026-07-25: AP/AP_IMS/AP_CR/GL/FA/ADV의 CEO 결재 라인 제거 (AR/SET은 원래부터 CEO 불필요였음)
-  AP:    {TL:'필수',MC:'>= 1,000,000',CEO:'-',RD:'>= 20,000,000',CFO:'필수'},
-  AP_IMS:{TL:'필수',MC:'>= 1,000,000',CEO:'-',RD:'> 50,000,000',CFO:'필수'},
-  AP_CR: {TL:'필수',MC:'필수',CEO:'-',RD:'> 10,000,000',CFO:'필수'},
+  // 2026-08-10: ACC Approval lines To-Be 반영 — RD 결재 기준 금액 조정
+  //   AP     2,000만 이상 → 1,000만 이상
+  //   AP_IMS 5,000만 초과 → 1,000만 이상
+  //   AP_CR  1,000만 초과 → 1,000만 이상 (정확히 1,000만원인 건도 RD 포함)
+  //   GL     2,000만 이상 → 3,000만 이상
+  //   ADV    2,000만 이상 → 1,000만 이상
+  //   AR/FA/SET 변경 없음
+  AP:    {TL:'필수',MC:'>= 1,000,000',CEO:'-',RD:'>= 10,000,000',CFO:'필수'},
+  AP_IMS:{TL:'필수',MC:'>= 1,000,000',CEO:'-',RD:'>= 10,000,000',CFO:'필수'},
+  AP_CR: {TL:'필수',MC:'필수',CEO:'-',RD:'>= 10,000,000',CFO:'필수'},
   AR:    {TL:'필수',MC:'필수',CEO:'-',RD:'-',CFO:'>= 20,000,000'},
-  GL:    {TL:'필수',MC:'필수',CEO:'-',RD:'>= 20,000,000',CFO:'필수'},
+  GL:    {TL:'필수',MC:'필수',CEO:'-',RD:'>= 30,000,000',CFO:'필수'},
   FA:    {TL:'필수',MC:'필수',CEO:'-',RD:'>= 20,000,000',CFO:'필수'},
-  ADV:   {TL:'필수',MC:'>= 1,000,000',CEO:'-',RD:'>= 20,000,000',CFO:'필수'},
+  ADV:   {TL:'필수',MC:'>= 1,000,000',CEO:'-',RD:'>= 10,000,000',CFO:'필수'},
   SET:   {TL:'필수',MC:'필수',CEO:'-',RD:'-',CFO:'필수'},
 };
+
+// ── RD 결재 제외 ────────────────────────────────────────────────────────
+// AP / AP_IMS / GL 에 한해, 규정상 금액과 무관하게 RD 승인이 불필요한 유형이 있다.
+// 요청자가 임의로 결재자를 빼는 방식이 아니라 "사유를 선택"하게 해서, 사후에 근거가 남도록 한다.
+const RD_EXEMPT_TYPES = ['AP','AP_IMS','GL'];
+const RD_EXEMPT_REASONS = {
+  AP:     ['TAX (세관 등)'],
+  AP_IMS: ['TAX (세관 등)'],
+  GL:     ['Closing'],
+};
+// 화면과 제출 로직이 같은 기준을 쓰도록 판정을 한 곳으로 모은다.
+// 대상 유형이 아니면 체크 상태와 무관하게 항상 false — 유형을 바꿔도 제외가 새어나가지 않는다.
+function isRdExempt(type) {
+  return rdExempt && RD_EXEMPT_TYPES.includes(type);
+}
+let rdExempt = false;        // 제외 선택 여부
+let rdExemptReason = '';     // 선택/입력된 사유
 
 // ── MSAL ──
 async function signIn() {
@@ -1750,9 +1792,64 @@ function switchTab(tab) {
 }
 
 // ── Form ──
+// ── RD 결재 제외 UI 제어 ────────────────────────────────────────────────
+// AP / AP_IMS / GL 에서만 노출한다. 다른 유형으로 바꾸면 선택값도 함께 초기화해
+// "예전에 켜둔 제외가 남아 있는" 상태를 만들지 않는다.
+function syncRdExemptUI() {
+  const type = document.getElementById('v-type').value;
+  const group = document.getElementById('rd-exempt-group');
+  const chk = document.getElementById('rd-exempt-check');
+  const sel = document.getElementById('rd-exempt-reason');
+  const etc = document.getElementById('rd-exempt-etc');
+  if (!group) return;
+
+  if (!RD_EXEMPT_TYPES.includes(type)) {
+    group.style.display = 'none';
+    if (chk) chk.checked = false;
+    if (sel) sel.value = '';
+    if (etc) { etc.value = ''; etc.style.display = 'none'; }
+    rdExempt = false; rdExemptReason = '';
+    return;
+  }
+  group.style.display = '';
+  // 유형별 사유 목록 재구성 (유형이 바뀌면 사유도 달라진다)
+  const reasons = RD_EXEMPT_REASONS[type] || [];
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">-- 제외 사유 --</option>'
+    + reasons.map(r => '<option value="' + r + '">' + r + '</option>').join('')
+    + '<option value="__etc__">직접 입력</option>';
+  if ([...sel.options].some(o => o.value === prev)) sel.value = prev; else sel.value = '';
+  onRdExemptChange();
+}
+function onRdExemptChange() {
+  const chk = document.getElementById('rd-exempt-check');
+  const sel = document.getElementById('rd-exempt-reason');
+  const etc = document.getElementById('rd-exempt-etc');
+  const note = document.getElementById('rd-exempt-note');
+  rdExempt = !!(chk && chk.checked);
+  if (sel) {
+    sel.disabled = !rdExempt;
+    sel.style.background = rdExempt ? '#fff' : '#f3f2f1';
+    sel.style.color = rdExempt ? '#323130' : '#a19f9d';
+    if (!rdExempt) sel.value = '';
+  }
+  if (note) note.style.display = rdExempt ? 'block' : 'none';
+  if (!rdExempt && etc) { etc.value = ''; etc.style.display = 'none'; }
+  onRdExemptReasonChange();
+}
+function onRdExemptReasonChange() {
+  const sel = document.getElementById('rd-exempt-reason');
+  const etc = document.getElementById('rd-exempt-etc');
+  const v = sel ? sel.value : '';
+  if (etc) etc.style.display = (rdExempt && v === '__etc__') ? 'block' : 'none';
+  rdExemptReason = !rdExempt ? '' : (v === '__etc__' ? (etc ? etc.value.trim() : '') : v);
+  renderApproval();   // 사유 유무와 무관하게 결재라인은 즉시 반영
+}
+
 function onTypeChange() {
   const type = document.getElementById('v-type').value;
   document.getElementById('bp-req-mark').style.display = (type==='GL')?'none':'';
+  syncRdExemptUI();
   renderApproval();
   applyFixedLines();
 
@@ -1863,7 +1960,9 @@ function renderApproval() {
   if(needed(rules.TL,drKrw))  apLine.push({role:'TL',  label:'Team Lead (팀장)',       rule:rules.TL,  fixed:false});
   if(needed(rules.MC,drKrw))  apLine.push({role:'MC',  label:'Department Head (부서장)',rule:rules.MC,  fixed:false});
   if(needed(rules.CEO,drKrw)) apLine.push({role:'CEO', label:'CEO',                      rule:rules.CEO, fixed:true, person:CEO});
-  if(needed(rules.RD,drKrw))  apLine.push({role:'RD',  label:'RD',                       rule:rules.RD,  fixed:true, person:RD});
+  // RD 제외가 선택된 경우 금액 조건과 무관하게 RD 단계를 뺀다 (AP/AP_IMS/GL 한정)
+  if(needed(rules.RD,drKrw) && !isRdExempt(type))
+    apLine.push({role:'RD',  label:'RD',                       rule:rules.RD,  fixed:true, person:RD});
   // No.3: BU 승인 후 ACC 담당자 → Accounting Head → CFO 순서
   // No.10: Controlling Head 완전 제거
   if(ACC.email) apLine.push({role:'ACC',label:'Accounting 담당자', rule:'필수', fixed:true, person:ACC});
@@ -2652,6 +2751,12 @@ async function saveVoucher(status) {
   applyCurrentVolume(); // 신규 전표는 항상 "현재 활성 볼륨"에 저장 — 직전에 다른 볼륨 전표를 조회/처리했더라도 여기서 다시 현재 볼륨으로 고정
   const type=document.getElementById('v-type').value;
   if(!type){alert('Voucher Type을 선택하세요.');return;}
+  // RD 승인 제외는 감사 대상이므로 사유 없이는 제출을 막는다.
+  if(isRdExempt(type) && !rdExemptReason){
+    alert('RD 승인 제외 사유를 선택하거나 직접 입력해주세요.');
+    document.getElementById('rd-exempt-reason')?.focus();
+    return;
+  }
   const purpose=document.getElementById('v-purpose').value.trim();
   if(!purpose){alert('Purpose를 입력하세요.');return;}
   if(!lines.length){alert('회계 라인을 1개 이상 추가하세요.');return;}
@@ -2761,6 +2866,33 @@ async function saveVoucher(status) {
     voucherId = 'ACC-Voucher-'+dateStr+'_ID-'+requestId;
     await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${requestId}/fields`, 'PATCH', {Title: voucherId});
 
+    // RD 결재 제외 사유 기록 — 감사 근거가 되므로 유실되지 않게 처리한다.
+    // 전용 컬럼(RDExemptReason)에 저장하고, 컬럼이 없거나 실패하면 Purpose 끝에 덧붙여 남긴다.
+    if (isRdExempt(type)) {
+      const _rdNote = 'RD 승인 제외' + (rdExemptReason ? ' — ' + rdExemptReason : '');
+      let _rdSaved = false;
+      try {
+        await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${requestId}/fields`, 'PATCH', { RDExemptReason: _rdNote });
+        _rdSaved = true;
+      } catch(e) {
+        console.warn('[RD제외] 전용 컬럼 저장 실패, 컬럼 생성 시도:', e.message);
+        try {
+          const cols = await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/columns`);
+          if (!(cols.value||[]).some(c => c.name === 'RDExemptReason')) {
+            await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/columns`, 'POST', { name:'RDExemptReason', text:{ allowMultipleLines:false } });
+          }
+          await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${requestId}/fields`, 'PATCH', { RDExemptReason: _rdNote });
+          _rdSaved = true;
+        } catch(e2){ console.warn('[RD제외] 컬럼 생성/저장 실패:', e2.message); }
+      }
+      if (!_rdSaved) {
+        try {
+          await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${requestId}/fields`, 'PATCH', { Purpose: purpose + '\n\n[' + _rdNote + ']' });
+          console.warn('[RD제외] 전용 컬럼 대신 Purpose에 기록했습니다.');
+        } catch(e3){ console.warn('[RD제외] 사유 기록 최종 실패:', e3.message); }
+      }
+    }
+
     // 2. 첨부파일 업로드 → AttachedFiles/ACC-Voucher_AttachedFiles/{voucherId}/
     if(accFiles.length){
       try{
@@ -2853,7 +2985,7 @@ function buildApprovers() {
   if(needed(rules.TL,drKrw))  apLine.push({fixed:false,role:'TL'});
   if(needed(rules.MC,drKrw))  apLine.push({fixed:false,role:'MC'});
   if(needed(rules.CEO,drKrw)) apLine.push({fixed:true,role:'CEO',person:CEO});
-  if(needed(rules.RD,drKrw))  apLine.push({fixed:true,role:'RD',person:RD});
+  if(needed(rules.RD,drKrw) && !isRdExempt(type)) apLine.push({fixed:true,role:'RD',person:RD});
   // No.3: BU 승인 후 ACC 담당자(회계담당자) 처리 → 그 다음 Accounting Head → CFO
   // No.10: Controlling Head 완전 제거
   if(ACC.email) apLine.push({fixed:true,role:'ACC',person:ACC});
@@ -4037,6 +4169,7 @@ async function openVoucherSP(spId, fromTab){
 
     <div class="det-sec">Purpose / Description</div>
     ${row('Purpose', `<span style="white-space:pre-wrap">${v.Purpose||'-'}</span>`)}
+    ${v.RDExemptReason ? row('RD 승인 제외', `<span style="color:#8a6116;font-weight:600">${v.RDExemptReason}</span>`) : ''}
 
     <div class="det-sec">첨부파일</div>
     <div style="padding:4px 0;font-size:.78rem">${attHtml}</div>
