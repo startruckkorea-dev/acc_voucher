@@ -959,6 +959,40 @@ async function _forEachAprVolume(fn) {
   return results.flat();
 }
 
+// ── PKF 담당자 열람 범위 판정 ────────────────────────────────────────────
+// PKF는 "본인이 담당자로 지정된 SSC 티켓에 연결된 전표"에 한해서만
+// B1 Doc No./Posting과 결재 의견을 다룰 수 있다.
+// SSC_Requests에서 PKFAssignees에 내 이메일이 있는 티켓을 찾고,
+// 그 티켓 Detail의 [제목:ACC:id] 참조 토큰에서 전표 ID를 모은다.
+//
+// ⚠ 이것은 화면 단계의 안전장치이지 접근 통제가 아니다.
+//    SharePoint에 쓰기 권한이 있는 한 API 직접 호출은 막을 수 없다.
+//    실질 차단이 필요하면 리스트 권한 분리가 필요하다.
+const SSC_REQ_LIST_ID = 'bb912dff-ba54-4abd-871a-b3d4c3c8620d'; // SSC_Requests
+let _pkfAllowedAccIds = undefined;   // undefined=미조회 / null=조회실패 / Set=조회완료
+async function loadPkfAllowedAccIds() {
+  if (_pkfAllowedAccIds !== undefined) return _pkfAllowedAccIds;
+  const me = (user?.email || user?.username || '').trim().toLowerCase();
+  try {
+    if(!siteId){ const s = await api('/sites/'+SITE_PATH_DB); siteId = s.id; }
+    const res = await apiAll('/sites/' + siteId + '/lists/' + SSC_REQ_LIST_ID + '/items?$expand=fields&$top=500');
+    const ids = new Set();
+    (res.value || []).forEach(it => {
+      const f = it.fields || {};
+      if (!(f.PKFAssignees || '').toLowerCase().includes(me)) return;
+      const detail = String(f.Detail || '');
+      const re = /\[[^:\]]+:ACC:(\d+)\]/g;
+      let m;
+      while ((m = re.exec(detail)) !== null) ids.add(String(m[1]));
+    });
+    _pkfAllowedAccIds = ids;
+  } catch (e) {
+    console.warn('[PKF] 담당 티켓 조회 실패:', e.message);
+    _pkfAllowedAccIds = null;   // 판정 불가 — 안전하게 차단 쪽으로 처리
+  }
+  return _pkfAllowedAccIds;
+}
+
 // ── System Config (system_config_final.xlsx) ──
 let _sysConfig = null;
 async function loadSystemConfig() {
@@ -4056,6 +4090,10 @@ async function openVoucherSP(spId, fromTab){
 
     <!-- No.10: 관리자 의견 제시 -->
 
+    <div id="pkf-scope-notice" style="display:none;margin-top:16px;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:8px;padding:11px 14px">
+      <div style="font-size:.76rem;font-weight:700;color:#8a6116;margin-bottom:4px">🔒 B1 Doc No. / 결재 의견을 사용할 수 없습니다</div>
+      <div class="pkf-notice-text" style="font-size:.73rem;color:#8a6116;line-height:1.7;white-space:pre-line"></div>
+    </div>
     <div id="admin-comment-section" style="display:none;margin-top:16px;border-top:1px solid #edebe9;padding-top:14px">
       <div class="det-sec">결재 의견 제시 <span style="font-size:.7rem;font-weight:400;color:#a19f9d">(관리자만 입력 가능 · 미결재 건에 한함)</span></div>
       <div id="admin-comments-list" style="margin-bottom:10px;max-height:180px;overflow-y:auto"></div>
@@ -4081,9 +4119,21 @@ async function openVoucherSP(spId, fromTab){
   const myEmailLower = (user?.email||user?.username||'').toLowerCase();
   const userIsAdmin = ADMIN_EMAILS.map(e=>e.toLowerCase()).includes(myEmailLower);
   // PKF 담당자는 SSC 처리 업무상 B1 Doc No./Posting 입력과 결재 의견 확인이 필요하다.
-  // 관리자 탭을 거치지 않고 SSC 링크(?openId=)로 들어오는 경로가 주 사용 방식이므로 fromTab 조건은 걸지 않는다.
+  // 단, 아무 전표나 다룰 수 있으면 안 되므로 "본인 담당 SSC 티켓에 연결된 전표"로 범위를 제한한다.
+  // 관리자 탭을 거치지 않고 SSC 링크(?openId=)로 들어오는 경로가 주 사용 방식이라 fromTab 조건은 걸지 않는다.
   const userIsPkf = PKF_EMAILS.includes(myEmailLower);
-  const showAdminSections = (userIsAdmin && fromTab==='admin') || userIsPkf;
+  let pkfAllowed = false, pkfDenyReason = '';
+  if (userIsPkf && !userIsAdmin) {
+    const allowed = await loadPkfAllowedAccIds();
+    if (allowed === null) {
+      pkfDenyReason = '담당 티켓 정보를 확인하지 못했습니다. STK IT에 문의해 주세요.';
+    } else if (allowed.has(String(v._spId))) {
+      pkfAllowed = true;
+    } else {
+      pkfDenyReason = '담당하시는 SSC 티켓에 연결된 전표가 아닙니다.\n연결이 필요하면 SSC 티켓에 이 전표를 첨부해 주세요.';
+    }
+  }
+  const showAdminSections = (userIsAdmin && fromTab==='admin') || pkfAllowed;
   if(commentSection && showAdminSections) {
     commentSection.style.display = 'block';
     const isCompleted = v.Status === '승인완료' || v.Status === '철회';
@@ -4102,6 +4152,16 @@ async function openVoucherSP(spId, fromTab){
     renderB1ChangeLog(v.B1ChangeLog);
   } else if(b1Section) {
     b1Section.style.display = 'none';
+  }
+  // PKF 담당자가 범위 밖 전표를 연 경우, 섹션이 왜 안 보이는지 알려준다(빈 화면이면 오해 소지가 크다)
+  const pkfNoticeEl = document.getElementById('pkf-scope-notice');
+  if (pkfNoticeEl) {
+    if (pkfDenyReason) {
+      pkfNoticeEl.style.display = 'block';
+      pkfNoticeEl.querySelector('.pkf-notice-text').textContent = pkfDenyReason;
+    } else {
+      pkfNoticeEl.style.display = 'none';
+    }
   }
 
   // 결재 이력 비동기 로드
@@ -4244,6 +4304,18 @@ function updatePostingBadge() {
     }
   }
 }
+// PKF 담당자가 화면을 우회해 함수를 직접 호출하는 경우까지 한 번 더 막는다.
+// (근본 차단은 아니지만, 실수로 범위 밖 전표를 수정하는 일은 확실히 방지된다)
+async function pkfBlockedFor(spId) {
+  const me = (user?.email || user?.username || '').toLowerCase();
+  if (!PKF_EMAILS.includes(me)) return false;                       // PKF가 아니면 이 검사 대상 아님
+  if (ADMIN_EMAILS.map(e=>e.toLowerCase()).includes(me)) return false;
+  const allowed = await loadPkfAllowedAccIds();
+  if (allowed === null) return '담당 티켓 정보를 확인하지 못했습니다.\nSTK IT에 문의해 주세요.';
+  if (allowed.has(String(spId))) return false;
+  return '담당하시는 SSC 티켓에 연결된 전표가 아닙니다.\n이 전표는 수정할 수 없습니다.';
+}
+
 async function saveB1DocFromModal() {
   console.log('[B1] 저장 시작 — 이 줄이 안 보이면 옛 화면(캐시)입니다. Ctrl+Shift+R 필요');
   const btn = document.getElementById('b1-save-btn');
@@ -4258,6 +4330,8 @@ async function saveB1DocFromModal() {
       showAccAlert('전표 ID를 확인할 수 없습니다', '상세를 닫았다가 다시 열어주세요.', '⚠️');
       return;
     }
+    const blocked = await pkfBlockedFor(v._spId);
+    if (blocked) { showAccAlert('수정 권한이 없습니다', blocked, '🔒'); return; }
     const b1DocNo = (document.getElementById('modal-b1docno')?.value||'').trim();
     const postingDone = b1DocNo ? '완료' : ''; // B1 Doc No. 입력 여부로만 자동 결정 — 수동 선택 불가
     console.log('[B1] 대상 spId:', v._spId, '| list:', LIST_REQUESTS, '| 입력값:', JSON.stringify(b1DocNo));
@@ -4320,6 +4394,8 @@ async function submitAdminComment(reqSpId) {
   const textEl = document.getElementById('admin-comment-text');
   const comment = (textEl?.value||'').trim();
   if(!comment) { alert('의견을 입력해주세요.'); return; }
+  const _blocked = await pkfBlockedFor(reqSpId);
+  if (_blocked) { showAccAlert('등록 권한이 없습니다', _blocked, '🔒'); return; }
   if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
   try {
     const check = await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${reqSpId}/fields`);
