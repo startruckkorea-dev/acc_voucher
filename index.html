@@ -21,12 +21,15 @@ html.standalone-detail #app { display: none !important; }
    #app을 숨겨 화면이 통째로 비어 있는 상태라 안내가 없으면 사용자가 멈춘 줄 안다.
    CSS만으로 표시되므로 JS 실행 전 첫 페인트부터 보인다. */
 #standalone-loader { display: none; }
-html.standalone-detail #standalone-loader {
+/* 로더는 '인증이 끝나고 상세를 부르는 동안'에만 띄운다.
+   로그인 화면(#login-screen)은 #app 바깥이라 단독 모드에서도 그대로 보이는데,
+   그 위에 로더가 겹쳐 그려지면 글자가 포개져 읽을 수 없다. */
+html.standalone-detail.detail-loading #standalone-loader {
   display: flex; position: fixed; inset: 0; z-index: 400;  /* 상세 모달(500~998)보다 반드시 아래 */
   flex-direction: column; align-items: center; justify-content: center; gap: 14px;
   font-family: 'Segoe UI', sans-serif; color: #605e5c;
 }
-html.standalone-detail.detail-ready #standalone-loader { display: none; }
+html.standalone-detail.detail-ready #standalone-loader { display: none !important; }
 #standalone-loader .sl-spin {
   width: 34px; height: 34px; border: 3px solid #e1dfdd; border-top-color: #0078d4;
   border-radius: 50%; animation: sl-rotate .8s linear infinite;
@@ -1235,6 +1238,7 @@ async function boot(account) {
     // 일반 사용자가 이 링크로 들어와도 해당 섹션은 노출되지 않는다.
     // ⚠ ADMIN_EMAILS는 system_config 로드가 끝나야 채워진다. 기다리지 않고 바로 열면
     //   그 시점엔 빈 배열이라 관리자인데도 관리자 섹션이 숨겨진다(경쟁 조건).
+    document.documentElement.classList.add('detail-loading'); // 인증 완료 후부터 로더 노출
     armStandaloneLoaderTimeout();
     _configPromise.finally(()=>openVoucherSP(String(_openId), 'admin'));
     history.replaceState(null, '', location.pathname);
