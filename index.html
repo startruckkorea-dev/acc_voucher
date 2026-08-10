@@ -4105,7 +4105,6 @@ async function openVoucherSP(spId, fromTab){
     </div>
     <div id="admin-comment-section" style="display:none;margin-top:16px;border-top:1px solid #edebe9;padding-top:14px">
       <div class="det-sec">결재 의견 제시</div>
-      <div id="admin-comments-list" style="margin-bottom:10px;max-height:180px;overflow-y:auto"></div>
       <div id="admin-comment-input-wrap" style="display:flex;gap:8px;align-items:flex-end">
         <textarea id="admin-comment-text" placeholder="의견을 입력해주세요..." rows="2" style="flex:1;border:1px solid #d2d0ce;border-radius:4px;padding:8px 10px;font-size:.78rem;font-family:inherit;resize:vertical"></textarea>
         <button onclick="submitAdminComment('${v._spId}')" style="padding:7px 16px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:.78rem;cursor:pointer;white-space:nowrap;height:fit-content">등록</button>
@@ -4118,6 +4117,8 @@ async function openVoucherSP(spId, fromTab){
         </div>
       </div>
       <div id="admin-comment-closed" style="display:none;font-size:.78rem;color:#a19f9d;padding:8px 0">승인완료된 전표는 의견을 입력할 수 없습니다.</div>
+      <!-- 등록된 의견은 B1 변경 이력과 동일한 형태의 별도 이력 블록으로 아래에 표시 -->
+      <div id="admin-comments-list" style="margin-top:12px"></div>
     </div>
 
     <div class="det-sec" style="margin-top:16px">결재 이력</div>
@@ -4395,14 +4396,20 @@ async function loadAdminComments(reqSpId) {
     const f = await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${reqSpId}/fields`);
     let comments = [];
     try { comments = JSON.parse(f.AdminComments||'[]'); } catch(e){ comments=[]; }
-    if(!comments.length){ listEl.innerHTML='<div style="font-size:.75rem;color:#a19f9d;padding:6px 0">등록된 의견이 없습니다.</div>'; return; }
-    listEl.innerHTML = comments.map(c=>`
-      <div style="background:#f0f6ff;border:1px solid #c7e0f4;border-radius:6px;padding:8px 12px;margin-bottom:8px">
-        <div style="font-size:.72rem;color:#a19f9d;margin-bottom:3px">${c.date||''}</div>
-        <div style="font-size:.75rem;color:#605e5c;margin-bottom:3px">작성자: <span style="font-weight:600;color:#0078d4">${c.email||''}</span></div>
-        <div style="font-size:.75rem;color:#605e5c;margin-bottom:2px">내용:</div>
-        <div style="font-size:.78rem;color:#323130;white-space:pre-wrap;padding-left:8px">${c.text||''}</div>
-      </div>`).join('');
+    if(!comments.length){ listEl.innerHTML=''; return; }   // 없으면 이력 블록 자체를 감춤 (B1 변경 이력과 동일)
+    listEl.innerHTML =
+      '<div style="font-size:.75rem;font-weight:700;color:#0078d4;padding:5px 9px;background:#f0f6ff;border-left:3px solid #0078d4;border-radius:3px;margin-bottom:6px">🔄 결재 의견 제시 이력</div>' +
+      '<div id="admin-comments-log-list" style="background:#f0f6ff;border:1px solid #c7e0f4;border-radius:6px;overflow:hidden;max-height:220px;overflow-y:auto">' +
+      comments.map((c,i,arr)=>
+        '<div style="padding:8px 12px;'+(i===arr.length-1?'':'border-bottom:1px solid #c7e0f4')+'">' +
+          '<div style="font-size:.68rem;color:#a19f9d">'+(c.date||'')+'</div>' +
+          '<div style="font-size:.72rem;color:#323130;margin-top:2px">작성자: <b>'+(c.email||'')+'</b></div>' +
+          '<div style="font-size:.72rem;color:#323130;margin-top:2px;white-space:pre-wrap">'+(c.text||'')+'</div>' +
+        '</div>'
+      ).join('') +
+      '</div>';
+    const _cl = document.getElementById('admin-comments-log-list');
+    if(_cl) _cl.scrollTop = _cl.scrollHeight;  // 최신 의견(맨 아래)이 보이도록 자동 스크롤
   } catch(e) { listEl.innerHTML='<div style="font-size:.75rem;color:#a19f9d">의견을 불러올 수 없습니다.</div>'; }
 }
 
