@@ -2885,7 +2885,9 @@ async function saveVoucher(status) {
     // RD 결재 제외 사유 기록 — 감사 근거가 되므로 유실되지 않게 처리한다.
     // 전용 컬럼(RDExemptReason)에 저장하고, 컬럼이 없거나 실패하면 Purpose 끝에 덧붙여 남긴다.
     if (isRdExempt(type)) {
-      const _rdNote = 'RD 승인 제외' + (rdExemptReason ? ' — ' + rdExemptReason : '');
+      // 저장은 사유 원문만 남긴다. 'RD 승인 제외' 같은 라벨을 함께 저장하면
+      // 화면·PDF에서 라벨을 다시 붙일 때 문구가 중복된다.
+      const _rdNote = rdExemptReason || '(사유 미기재)';
       let _rdSaved = false;
       try {
         await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${requestId}/fields`, 'PATCH', { RDExemptReason: _rdNote });
@@ -2903,7 +2905,7 @@ async function saveVoucher(status) {
       }
       if (!_rdSaved) {
         try {
-          await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${requestId}/fields`, 'PATCH', { Purpose: purpose + '\n\n[' + _rdNote + ']' });
+          await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${requestId}/fields`, 'PATCH', { Purpose: purpose + '\n\n[요청자에 의한 RD 승인 제외 요청 사유: ' + _rdNote + ']' });
           console.warn('[RD제외] 전용 컬럼 대신 Purpose에 기록했습니다.');
         } catch(e3){ console.warn('[RD제외] 사유 기록 최종 실패:', e3.message); }
       }
@@ -4202,7 +4204,7 @@ async function openVoucherSP(spId, fromTab){
 
     <div class="det-sec">Purpose / Description</div>
     ${row('Purpose', `<span style="white-space:pre-wrap">${v.Purpose||'-'}</span>`)}
-    ${v.RDExemptReason ? row('RD 승인 제외', `<span style="color:#8a6116;font-weight:600">${v.RDExemptReason}</span>`) : ''}
+    ${v.RDExemptReason ? row('RD 승인 제외 요청 사유', `<span style="color:#8a6116;font-weight:600">${String(v.RDExemptReason).replace(/^RD\s*승인\s*제외\s*[—\-:]?\s*/,'').trim()}</span><div style="font-size:.7rem;color:#a19f9d;margin-top:2px">요청자가 위 사유로 RD 승인 단계 제외를 요청한 건입니다.</div>`) : ''}
 
     <div class="det-sec">첨부파일</div>
     <div style="padding:4px 0;font-size:.78rem">${attHtml}</div>
@@ -4668,7 +4670,9 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
   const NA_BADGE='<span style="display:inline-block;background:#e1dfdd;color:#484644;font-size:8.5px;font-weight:800;padding:2px 7px;border-radius:3px;letter-spacing:.3px">NOT REQUIRED</span>';
   // RD 승인 제외로 빠진 경우는 "원래 불필요한 단계"와 구분되어야 한다.
   // 금액 기준상 RD가 필요한데도 사유를 들어 제외한 건이므로, 표기와 색을 달리해 눈에 띄게 한다.
-  const rdExemptNote = (v.RDExemptReason||'').trim();
+  // 저장값 정리 — 초기 버전은 'RD 승인 제외 — TAX (세관 등)'처럼 라벨을 함께 저장했다.
+  // 표시 단계에서 라벨을 다시 붙이므로, 옛 데이터의 접두어는 떼어내 문구가 중복되지 않게 한다.
+  const rdExemptNote = (v.RDExemptReason||'').trim().replace(/^RD\s*승인\s*제외\s*[—\-:]?\s*/,'').trim();
   const isRdExempted = !!rdExemptNote;
   const EXEMPT_BADGE='<span style="display:inline-block;background:#fdf6e3;color:#8a6116;border:1px solid #f0d9a0;font-size:8.5px;font-weight:800;padding:2px 7px;border-radius:3px;letter-spacing:.2px;white-space:nowrap">EXEMPTED</span>';
   const apprByRole={}; (apprList||[]).forEach(a=>{apprByRole[a.ApproverRole]=a;});
@@ -4842,10 +4846,12 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
     '</table>'+
     // RD 승인 제외 건은 결재 단계가 하나 빠진 상태이므로, 그 근거를 양식 안에 남겨 감사 시 확인 가능하게 한다.
     (isRdExempted
-      ? '<div style="margin-top:4px;border:1px solid #f0d9a0;background:#fdf6e3;border-radius:3px;padding:5px 8px;font-size:8.5px;color:#8a6116;line-height:1.5">'+
-          '<b>※ RD Approval Exempted</b> &nbsp;·&nbsp; '+esc(rdExemptNote)+'<br>'+
-          'This voucher was submitted with the RD approval step exempted under the reason stated above, in accordance with internal accounting policy. '+
-          '(RD 승인 단계는 위 사유에 따라 내부 회계 기준에 근거하여 제외되었습니다.)'+
+      ? '<div style="margin-top:4px;border:1px solid #f0d9a0;background:#fdf6e3;border-radius:3px;padding:6px 9px;font-size:8.5px;color:#8a6116;line-height:1.55">'+
+          '<b>※ RD Approval Exemption Requested by the Requester</b><br>'+
+          '<b>요청자에 의한 RD 승인 제외 요청 사유 :</b> '+esc(rdExemptNote)+'<br>'+
+          'The requester ('+esc(requesterKoName)+') requested exemption of the RD approval step for the reason stated above, '+
+          'and this voucher was submitted with that step excluded in accordance with internal accounting policy.<br>'+
+          '위 사유로 요청자('+esc(requesterKoName)+')가 RD 승인 단계 제외를 요청하였으며, 내부 회계 기준에 따라 해당 단계를 제외하여 상신되었습니다.'+
         '</div>'
       : '')+
   '</div>';
