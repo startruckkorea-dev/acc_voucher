@@ -4207,7 +4207,7 @@ async function openVoucherSP(spId, fromTab){
 
     <div class="det-sec">Purpose / Description</div>
     ${row('Purpose', `<span style="white-space:pre-wrap">${v.Purpose||'-'}</span>`)}
-    ${v.RDExemptReason ? row('RD 승인 제외 요청 사유', `<span style="color:#8a6116;font-weight:600">${String(v.RDExemptReason).replace(/^RD\s*승인\s*제외\s*[—\-:]?\s*/,'').trim()}</span><div style="font-size:.7rem;color:#a19f9d;margin-top:2px">요청자가 위 사유로 RD 승인 단계 제외를 요청한 건입니다.</div>`) : ''}
+    ${v.RDExemptReason ? row('RD Approval Exemption — Reason Requested', `<span style="color:#8a6116;font-weight:600">${String(v.RDExemptReason).replace(/^RD\s*승인\s*제외\s*[—\-:]?\s*/,'').trim()}</span><div style="font-size:.7rem;color:#a19f9d;margin-top:2px">Requested by the requester; the RD approval step was excluded for this voucher.</div>`) : ''}
 
     <div class="det-sec">첨부파일</div>
     <div style="padding:4px 0;font-size:.78rem">${attHtml}</div>
