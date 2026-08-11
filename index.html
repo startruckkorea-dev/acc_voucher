@@ -1984,6 +1984,8 @@ function renderApproval() {
   const apLine=[];
   if(needed(rules.TL,drKrw))  apLine.push({role:'TL',  label:'Team Lead (팀장)',       rule:rules.TL,  fixed:false});
   if(needed(rules.MC,drKrw))  apLine.push({role:'MC',  label:'Department Head (부서장)',rule:rules.MC,  fixed:false});
+  // CEO는 전 유형이 '-'로 설정되어 실제로는 추가되지 않는다(2026-07-25 라인 제거).
+  // 규칙 테이블만 되돌리면 다시 살아나도록 코드는 유지한다.
   if(needed(rules.CEO,drKrw)) apLine.push({role:'CEO', label:'CEO',                      rule:rules.CEO, fixed:true, person:CEO});
   // RD 제외가 선택된 경우 금액 조건과 무관하게 RD 단계를 뺀다 (AP/AP_IMS/GL 한정)
   if(needed(rules.RD,drKrw) && !isRdExempt(type))
@@ -4428,6 +4430,8 @@ async function loadApprovalHistory(spId){
     Pending:'대기(잠김)',Approved:'승인완료',Rejected:'반려'};
   const roleLabelMap = {
     TL:'Line Manager', MC:'Department Head',
+    // CEO는 2026-07-25자로 신규 결재라인에서 제외됐으나, 그 이전에 생성된 전표의
+    // Approvals에는 ApproverRole='CEO' 행이 남아 있어 결재 이력 표시를 위해 매핑을 유지한다.
     CEO:'CEO', RD:'RD', CTRL:'Controlling Head',
     AMGR:'Accounting Head', CFO:'CFO',
     ACC_AP:'AP 담당자', ACC_AR:'AR 담당자', ACC_GL:'GL 담당자', ACC:'담당자'
@@ -4675,7 +4679,9 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
 
   const bpCatSimple = (v.BPCategory||'').includes('Customer') ? 'Customer' : ((v.BPCategory||'').includes('Vendor') ? 'Vendor' : (esc(v.BPCategory)||'-'));
 
-  const roleCols=[['TL','Team Leader'],['MC','MC'],['CEO','CEO'],['RD','RD'],['ACC','Acc. Specialist'],['AMGR','Acc. Manager'],['CFO','CFO']];
+  // 2026-08-11: CEO 결재 라인은 2026-07-25자로 전 유형에서 제거되어 결재라인에 포함되지 않는다.
+  // 공식 양식 표에만 열이 남아 항상 NOT REQUIRED로 출력되고 있어, 실제 결재 구조와 맞도록 열 자체를 제거한다.
+  const roleCols=[['TL','Team Leader'],['MC','MC'],['RD','RD'],['ACC','Acc. Specialist'],['AMGR','Acc. Manager'],['CFO','CFO']];
   const NA_BADGE='<span style="display:inline-block;background:#e1dfdd;color:#484644;font-size:8.5px;font-weight:800;padding:2px 7px;border-radius:3px;letter-spacing:.3px">NOT REQUIRED</span>';
   // RD 승인 제외로 빠진 경우는 "원래 불필요한 단계"와 구분되어야 한다.
   // 금액 기준상 RD가 필요한데도 사유를 들어 제외한 건이므로, 표기와 색을 달리해 눈에 띄게 한다.
