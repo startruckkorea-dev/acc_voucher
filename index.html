@@ -1137,7 +1137,11 @@ const APPROVAL_RULES = {
 // 요청자가 임의로 결재자를 빼는 방식이 아니라 "사유를 선택"하게 해서, 사후에 근거가 남도록 한다.
 const RD_EXEMPT_TYPES = ['AP','AP_IMS','GL'];
 const RD_EXEMPT_REASONS = {
-  AP:     ['TAX (세관 등)'],
+  // 유형마다 규정상 인정되는 제외 사유가 다르다.
+  //   AP     — 원천세·부가세 등 세무 신고에 따른 지급
+  //   AP(IMS)— 세관 등 수입 관련 지급
+  //   GL     — 결산(Closing) 처리
+  AP:     ['TAX (원천세, 부가세 등)'],
   AP_IMS: ['TAX (세관 등)'],
   GL:     ['Closing'],
 };
