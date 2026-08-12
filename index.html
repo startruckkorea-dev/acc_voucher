@@ -4821,6 +4821,10 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
   const isAccLineSkippedDoc = !!(v.AccLineSkipReason||'').trim();
   const isRdExempted = !!rdExemptNote;
   const EXEMPT_BADGE='<span style="display:inline-block;background:#fdf6e3;color:#8a6116;border:1px solid #f0d9a0;font-size:8.5px;font-weight:800;padding:2px 7px;border-radius:3px;letter-spacing:.2px;white-space:nowrap">EXEMPTED</span>';
+  // 회계팀 담당자가 상신해 Acc. Specialist / Acc. Manager / CFO 단계가 제외된 경우.
+  // 원래 불필요한 단계(NOT REQUIRED)와 구분되도록 별도 표기를 쓴다.
+  const SKIPPED_BADGE='<span style="display:inline-block;background:#fdf6e3;color:#8a6116;border:1px solid #f0d9a0;font-size:8.5px;font-weight:800;padding:2px 7px;border-radius:3px;letter-spacing:.2px;white-space:nowrap">SKIPPED</span>';
+  const ACC_SKIP_ROLES = ['ACC','AMGR','CFO'];
   const apprByRole={}; (apprList||[]).forEach(a=>{apprByRole[a.ApproverRole]=a;});
   const fmtApprDateTime=s=>{if(!s)return '';const d=new Date(new Date(s).getTime()+9*3600*1000);const p=n=>String(n).padStart(2,'0');return `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;};
   // "이준순 스타트럭코리아 IT(Junsoon Lee)" 형태에서 한글 이름만 추출
@@ -4867,10 +4871,14 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
               '<div style="font-size:7px;color:#666;white-space:nowrap">'+fmtApprDateTime(a.ApprovalDate)+'</div>'+
             '</div>';
       } else if(!a){
-        val = (role==='RD' && isRdExempted) ? EXEMPT_BADGE : NA_BADGE;
+        val = (role==='RD' && isRdExempted) ? EXEMPT_BADGE
+            : (isAccLineSkippedDoc && ACC_SKIP_ROLES.includes(role)) ? SKIPPED_BADGE
+            : NA_BADGE;
       }
     } else {
-      val = a ? esc(a.ApproverName||'') : NA_BADGE;
+      val = a ? esc(a.ApproverName||'')
+          : (isAccLineSkippedDoc && ACC_SKIP_ROLES.includes(role)) ? SKIPPED_BADGE
+          : NA_BADGE;
     }
     return '<td style="'+cellB+';text-align:center;font-size:9px">'+val+'</td>';
   }).join('');
@@ -4981,6 +4989,8 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
             const rv = rules[role];
             // RD가 사유를 들어 제외된 건은 조건 자체가 적용되지 않았음을 명시
             if(role==='RD' && isRdExempted) ruleText='Exempted by approved reason';
+            // 회계팀 상신 건은 조건 충족 여부와 무관하게 단계 자체가 제외된 것이므로 그렇게 표기
+            else if(isAccLineSkippedDoc && ACC_SKIP_ROLES.includes(role)) ruleText='Skipped — Accounting Approval Line';
             else if(!rv || rv==='-') ruleText='Not Required';
             else if(rv==='필수') ruleText='Required';
             else if(rv==='필요시') ruleText='If necessary';
