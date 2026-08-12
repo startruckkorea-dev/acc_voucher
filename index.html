@@ -1161,15 +1161,16 @@ function isAccountingMember() {
   if (!cfg) return false;
   const me = (user?.email || user?.username || '').trim().toLowerCase();
   if (!me) return false;
-  const emails = [];
+  // 시스템 전반에서 쓰이는 cfgEmails()를 그대로 사용해 키 해석 방식을 통일한다.
+  // 여기에 더해 _N 확장 키(ACC-Voucher_AP_2 등)도 함께 수집한다.
+  const emails = cfgEmails(cfg, ACC_LINE_KEYS).map(e => (e||'').trim().toLowerCase());
   Object.keys(cfg).forEach(k => {
-    // ACC-Voucher_AP / _AR / _GL / _ACCOUNTING 및 _N 확장 키까지 포함
-    if (ACC_LINE_KEYS.some(base => k === base || k.startsWith(base + '_'))) {
+    if (ACC_LINE_KEYS.some(base => k.startsWith(base + '_'))) {
       const e = (cfg[k] && cfg[k].email || '').trim().toLowerCase();
       if (e) emails.push(e);
     }
   });
-  return emails.includes(me);
+  return emails.filter(Boolean).includes(me);
 }
 
 // 회계팀 담당자에게만 영역을 노출한다. 대상이 아니면 숨기고 선택값도 초기화.
@@ -1408,11 +1409,14 @@ async function boot(account) {
     const volTools = document.getElementById('it-vol-tools');
     if(volTools) volTools.style.display = isItStaff ? 'flex' : 'none';
     _configLoaded = true;
+    // Accounting 결재라인 판정은 _sysConfig가 채워진 뒤에야 가능하다.
+    // .then() 밖에서 호출하면 config 로드 전에 실행되어 항상 "대상 아님"으로 판정된다.
+    syncAccLineUI();
     renderApproval(); // config 로드 후 재렌더
-  }).catch(()=>{ _configLoaded = true; });
+  }).catch(()=>{ _configLoaded = true; syncAccLineUI(); });
 
   syncRdExemptUI();   // Voucher Type 미선택 상태에서도 RD 제외 영역이 비활성으로 보이도록 초기화
-  syncAccLineUI();    // 회계팀 담당자에게만 Accounting 결재라인 지정 영역 노출
+  syncAccLineUI();    // 로드 전 기본 상태(비활성)로 먼저 그려두고, config 로드 후 위에서 다시 판정한다
 
   // 결재 대기 배지 미리 로드 (GW 동일: 진입 시 1회 + 60초마다 갱신)
   if(!siteId){ api('/sites/'+SITE_PATH_DB).then(s=>{ siteId=s.id; checkApprovalBadge(); }).catch(()=>{}); }
