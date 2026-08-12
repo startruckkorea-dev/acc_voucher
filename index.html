@@ -571,6 +571,22 @@ if (new URLSearchParams(location.search).get('openId')) {
 
       <div class="section-title">6. 결재라인 (Authorization)</div>
 
+      <!-- Accounting 결재라인 지정 — 회계팀 담당자에게만 노출 -->
+      <div id="acc-line-group" style="display:none;background:#f0f6ff;border:1px solid #c7e0f4;border-radius:8px;padding:11px 14px;margin-bottom:12px">
+        <label id="acc-line-toggle" style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">
+          <input type="checkbox" id="acc-line-check" onchange="onAccLineChange()" style="cursor:pointer;width:15px;height:15px;accent-color:#0078d4;margin:0;flex-shrink:0">
+          <span style="font-size:.82rem;font-weight:700;color:#0b5fa5">Accounting Approval Line</span>
+          <span style="font-size:.7rem;color:#605e5c">— Skip the accounting review step</span>
+        </label>
+        <div style="font-size:.7rem;color:#605e5c;margin-top:6px;line-height:1.6;padding-left:23px">
+          Check this box if you are submitting the voucher as a member of the Accounting team.
+          The accounting review step is removed, and the approval line ends with Accounting Head and CFO.
+        </div>
+        <div id="acc-line-note" style="display:none;font-size:.7rem;color:#8a6116;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:6px;padding:7px 10px;margin-top:8px;line-height:1.6">
+          회계 담당자 결재 단계가 제외되며, <b>Accounting Head → CFO</b> 순으로 마무리됩니다.
+        </div>
+      </div>
+
       <!-- 결재 라인 프리뷰 -->
       <div id="appr-line-preview" style="display:none;background:#f0f6ff;border:1px solid #c7e0f4;border-radius:6px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:#323130">
         <div id="appr-line-preview-content"></div>
@@ -1132,6 +1148,57 @@ const APPROVAL_RULES = {
   SET:   {TL:'필수',MC:'필수',CEO:'-',RD:'-',CFO:'필수'},
 };
 
+// ── Accounting 결재라인 지정 ──────────────────────────────────────────
+// 회계팀 담당자가 직접 전표를 올리는 경우, 회계 담당자 결재 단계를 넣으면
+// 본인이 본인 전표를 결재하게 되므로 해당 단계를 제외한다.
+// 결재는 Accounting Head → CFO 로 마무리된다.
+const ACC_LINE_KEYS = ['ACC-Voucher_AP','ACC-Voucher_AR','ACC-Voucher_GL','ACC-Voucher_ACCOUNTING'];
+let accLineSkip = false;   // 체크 여부
+
+// 현재 로그인 계정이 회계팀 담당자인지 판정
+function isAccountingMember() {
+  const cfg = _sysConfig;
+  if (!cfg) return false;
+  const me = (user?.email || user?.username || '').trim().toLowerCase();
+  if (!me) return false;
+  const emails = [];
+  Object.keys(cfg).forEach(k => {
+    // ACC-Voucher_AP / _AR / _GL / _ACCOUNTING 및 _N 확장 키까지 포함
+    if (ACC_LINE_KEYS.some(base => k === base || k.startsWith(base + '_'))) {
+      const e = (cfg[k] && cfg[k].email || '').trim().toLowerCase();
+      if (e) emails.push(e);
+    }
+  });
+  return emails.includes(me);
+}
+
+// 회계팀 담당자에게만 영역을 노출한다. 대상이 아니면 숨기고 선택값도 초기화.
+function syncAccLineUI() {
+  const group = document.getElementById('acc-line-group');
+  const chk = document.getElementById('acc-line-check');
+  if (!group || !chk) return;
+  if (!isAccountingMember()) {
+    group.style.display = 'none';
+    chk.checked = false;
+    accLineSkip = false;
+    const note = document.getElementById('acc-line-note');
+    if (note) note.style.display = 'none';
+    return;
+  }
+  group.style.display = 'block';
+}
+function onAccLineChange() {
+  const chk = document.getElementById('acc-line-check');
+  accLineSkip = !!(chk && chk.checked);
+  const note = document.getElementById('acc-line-note');
+  if (note) note.style.display = accLineSkip ? 'block' : 'none';
+  renderApproval();   // 결재라인 미리보기 즉시 반영
+}
+// 화면과 제출 로직이 같은 기준을 쓰도록 판정을 한 곳으로 모은다.
+function isAccLineSkipped() {
+  return accLineSkip && isAccountingMember();
+}
+
 // ── RD 결재 제외 ────────────────────────────────────────────────────────
 // AP / AP_IMS / GL 에 한해, 규정상 금액과 무관하게 RD 승인이 불필요한 유형이 있다.
 // 요청자가 임의로 결재자를 빼는 방식이 아니라 "사유를 선택"하게 해서, 사후에 근거가 남도록 한다.
@@ -1334,6 +1401,7 @@ async function boot(account) {
   }).catch(()=>{ _configLoaded = true; });
 
   syncRdExemptUI();   // Voucher Type 미선택 상태에서도 RD 제외 영역이 비활성으로 보이도록 초기화
+  syncAccLineUI();    // 회계팀 담당자에게만 Accounting 결재라인 지정 영역 노출
 
   // 결재 대기 배지 미리 로드 (GW 동일: 진입 시 1회 + 60초마다 갱신)
   if(!siteId){ api('/sites/'+SITE_PATH_DB).then(s=>{ siteId=s.id; checkApprovalBadge(); }).catch(()=>{}); }
@@ -1992,7 +2060,8 @@ function renderApproval() {
     apLine.push({role:'RD',  label:'RD',                       rule:rules.RD,  fixed:true, person:RD});
   // No.3: BU 승인 후 ACC 담당자 → Accounting Head → CFO 순서
   // No.10: Controlling Head 완전 제거
-  if(ACC.email) apLine.push({role:'ACC',label:'Accounting 담당자', rule:'필수', fixed:true, person:ACC});
+  // 회계팀 담당자가 직접 올린 전표는 본인이 본인 건을 결재하게 되므로 이 단계를 제외한다
+  if(ACC.email && !isAccLineSkipped()) apLine.push({role:'ACC',label:'Accounting 담당자', rule:'필수', fixed:true, person:ACC});
   apLine.push({role:'AMGR',label:'Accounting Head', rule:'필수', fixed:true, person:AMGR});
   if(needed(rules.CFO,drKrw)) apLine.push({role:'CFO', label:'CFO',                      rule:rules.CFO, fixed:true, person:CFO});
 
@@ -3017,7 +3086,7 @@ function buildApprovers() {
   if(needed(rules.RD,drKrw) && !isRdExempt(type)) apLine.push({fixed:true,role:'RD',person:RD});
   // No.3: BU 승인 후 ACC 담당자(회계담당자) 처리 → 그 다음 Accounting Head → CFO
   // No.10: Controlling Head 완전 제거
-  if(ACC.email) apLine.push({fixed:true,role:'ACC',person:ACC});
+  if(ACC.email && !isAccLineSkipped()) apLine.push({fixed:true,role:'ACC',person:ACC});
   apLine.push({fixed:true,role:'AMGR',person:AMGR});
   if(needed(rules.CFO,drKrw)) apLine.push({fixed:true,role:'CFO',person:CFO});
   const result=[];
@@ -3366,6 +3435,11 @@ async function loadExistingVoucher() {
     const _rdEtc = document.getElementById('rd-exempt-etc');
     if(_rdEtc){ _rdEtc.value=''; _rdEtc.style.display='none'; }
     rdExempt = false; rdExemptReason = '';
+    const _accChk2 = document.getElementById('acc-line-check');
+    if(_accChk2) _accChk2.checked = false;
+    accLineSkip = false;
+    const _accNote2 = document.getElementById('acc-line-note');
+    if(_accNote2) _accNote2.style.display = 'none';
     onTypeChange();
     // Invoice Date 불러오기 (기존 전표 날짜 그대로)
     document.getElementById('v-inv-date').value = fmtDateOnly(f.InvoiceDate);
@@ -3412,6 +3486,12 @@ function resetForm(){
   if(_rdEtc){ _rdEtc.value=''; _rdEtc.style.display='none'; }
   rdExempt = false; rdExemptReason = '';
   syncRdExemptUI();   // Voucher Type이 비워졌으므로 비활성 상태로 되돌린다
+  // Accounting 결재라인 지정도 함께 초기화 — 이전 전표의 선택이 남으면 결재 단계가 잘못 빠진다
+  const _accChk = document.getElementById('acc-line-check');
+  if(_accChk) _accChk.checked = false;
+  accLineSkip = false;
+  const _accNote = document.getElementById('acc-line-note');
+  if(_accNote) _accNote.style.display = 'none';
 
   lines=Array.from({length:6}, () => blankLine());renderApproval();applyFixedLines();
 }
