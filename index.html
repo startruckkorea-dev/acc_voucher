@@ -583,7 +583,8 @@ if (new URLSearchParams(location.search).get('openId')) {
           and the voucher is processed through the approval line dedicated to the Accounting department.
         </div>
         <div id="acc-line-note" style="display:none;font-size:.7rem;color:#8a6116;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:6px;padding:7px 10px;margin-top:8px;line-height:1.6">
-          Accounting 이중 결재가 제외되며, <b>Accounting 부서 전용 결재라인</b>으로 처리됩니다.
+          The duplicate accounting review is excluded. This voucher will be processed through the
+          <b>approval line dedicated to the Accounting department</b>.
         </div>
       </div>
 
@@ -4331,7 +4332,7 @@ async function openVoucherSP(spId, fromTab){
 
     <div class="det-sec">Purpose / Description</div>
     ${row('Purpose', `<span style="white-space:pre-wrap">${v.Purpose||'-'}</span>`)}
-    ${v.AccLineSkipReason ? row('Accounting Approval Line', `<span style="color:#0b5fa5;font-weight:600">Accounting review step skipped</span><div style="font-size:.7rem;color:#a19f9d;margin-top:2px">Submitted by a member of the Accounting team; the approval line ends with Accounting Head and CFO.</div>`) : ''}
+    ${v.AccLineSkipReason ? row('Accounting Approval Line', `<span style="color:#0b5fa5;font-weight:600">Duplicate accounting review excluded</span><div style="font-size:.7rem;color:#a19f9d;margin-top:2px">Submitted by a member of the Accounting team and processed through the approval line dedicated to the Accounting department.</div>`) : ''}
     ${v.RDExemptReason ? row('RD Approval Exemption — Reason Requested', `<span style="color:#8a6116;font-weight:600">${String(v.RDExemptReason).replace(/^RD\s*승인\s*제외\s*[—\-:]?\s*/,'').trim()}</span><div style="font-size:.7rem;color:#a19f9d;margin-top:2px">Requested by the requester; the RD approval step was excluded for this voucher.</div>`) : ''}
 
     <div class="det-sec">첨부파일</div>
@@ -4981,10 +4982,10 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
     // 회계팀 담당자가 직접 상신한 건은 회계 담당자 결재 단계가 빠지므로 그 근거를 양식에 남긴다.
     (isAccLineSkippedDoc
       ? '<div style="margin-top:4px;border:1px solid #b6d7f2;background:#eaf3fd;border-radius:3px;padding:6px 9px;font-size:8.5px;color:#0b5fa5;line-height:1.55">'+
-          '<b>※ Accounting Approval Line — Submitted by Accounting Team Member</b><br>'+
+          '<b>※ Accounting Approval Line — Submitted by an Accounting Team Member</b><br>'+
           'The requester ('+esc(requesterKoName)+') is a member of the Accounting team. '+
-          'The accounting review step was therefore excluded, and the approval line ends with Accounting Head and CFO.<br>'+
-          '요청자('+esc(requesterKoName)+')가 회계팀 담당자이므로 회계 담당자 결재 단계를 제외하였으며, Accounting Head → CFO 순으로 상신되었습니다.'+
+          'The duplicate accounting review was therefore excluded, and this voucher was processed through the '+
+          'approval line dedicated to the Accounting department in accordance with internal accounting policy.'+
         '</div>'
       : '')+
     // RD 승인 제외 건은 결재 단계가 하나 빠진 상태이므로, 그 근거를 양식 안에 남겨 감사 시 확인 가능하게 한다.
