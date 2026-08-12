@@ -576,7 +576,7 @@ if (new URLSearchParams(location.search).get('openId')) {
         <label id="acc-line-toggle" style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">
           <input type="checkbox" id="acc-line-check" onchange="onAccLineChange()" style="cursor:pointer;width:15px;height:15px;accent-color:#0078d4;margin:0;flex-shrink:0">
           <span style="font-size:.82rem;font-weight:700;color:#0b5fa5">Accounting Approval Line</span>
-          <span id="acc-line-hint" style="font-size:.7rem;color:#605e5c">— Skip the accounting review step</span>
+          <span id="acc-line-hint" style="font-size:.7rem;color:#605e5c">— Skip the duplicate accounting review</span>
         </label>
         <div style="font-size:.7rem;color:#605e5c;margin-top:6px;line-height:1.6;padding-left:23px">
           Available to Accounting team members only. Selecting this option removes the duplicate accounting review —
@@ -1197,7 +1197,7 @@ function syncAccLineUI() {
   chk.disabled = false;
   group.style.opacity = '';
   if (lbl) { lbl.style.cursor = 'pointer'; lbl.title = ''; }
-  if (hint) hint.textContent = '— Skip the accounting review step';
+  if (hint) hint.textContent = '— Skip the duplicate accounting review';
 }
 function onAccLineChange() {
   const chk = document.getElementById('acc-line-check');
