@@ -4339,7 +4339,6 @@ async function openVoucherSP(spId, fromTab){
 
     <div class="det-sec">Purpose / Description</div>
     ${row('Purpose', `<span style="white-space:pre-wrap">${v.Purpose||'-'}</span>`)}
-    ${v.AccLineSkipReason ? row('Accounting Approval Line', `<span style="color:#0b5fa5;font-weight:600">Duplicate accounting review excluded</span><div style="font-size:.7rem;color:#a19f9d;margin-top:2px">Submitted by a member of the Accounting team. The Team Lead and Dept Head steps already correspond to the Accounting Head and the CFO, so the duplicate accounting review was excluded.</div>`) : ''}
     ${v.RDExemptReason ? row('RD Approval Exemption — Reason Requested', `<span style="color:#8a6116;font-weight:600">${String(v.RDExemptReason).replace(/^RD\s*승인\s*제외\s*[—\-:]?\s*/,'').trim()}</span><div style="font-size:.7rem;color:#a19f9d;margin-top:2px">Requested by the requester; the RD approval step was excluded for this voucher.</div>`) : ''}
 
     <div class="det-sec">첨부파일</div>
@@ -4434,6 +4433,11 @@ async function openVoucherSP(spId, fromTab){
     <div id="voucher-appr-history" style="background:#f9f9f9;border-radius:4px;border:1px solid #edebe9">
       <div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력을 불러오는 중...</div>
     </div>
+    ${v.AccLineSkipReason ? `
+      <div style="margin-top:10px;background:#eaf3fd;border:1px solid #b6d7f2;border-radius:6px;padding:10px 12px;line-height:1.6">
+        <div style="font-size:.76rem;font-weight:700;color:#0b5fa5;margin-bottom:3px">Accounting Approval Line — Duplicate accounting review excluded</div>
+        <div style="font-size:.7rem;color:#0b5fa5">Submitted by a member of the Accounting team. The Team Lead and Dept Head steps already correspond to the Accounting Head and the CFO, so the duplicate accounting review was excluded.</div>
+      </div>` : ''}
     <div id="voucher-appr-action-btns" style="margin-top:14px;text-align:right"></div>
   `;
 
