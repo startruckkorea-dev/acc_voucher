@@ -572,11 +572,11 @@ if (new URLSearchParams(location.search).get('openId')) {
       <div class="section-title">6. 결재라인 (Authorization)</div>
 
       <!-- Accounting 결재라인 지정 — 회계팀 담당자에게만 노출 -->
-      <div id="acc-line-group" style="display:none;background:#f0f6ff;border:1px solid #c7e0f4;border-radius:8px;padding:11px 14px;margin-bottom:12px">
+      <div id="acc-line-group" style="background:#f0f6ff;border:1px solid #c7e0f4;border-radius:8px;padding:11px 14px;margin-bottom:12px">
         <label id="acc-line-toggle" style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">
           <input type="checkbox" id="acc-line-check" onchange="onAccLineChange()" style="cursor:pointer;width:15px;height:15px;accent-color:#0078d4;margin:0;flex-shrink:0">
           <span style="font-size:.82rem;font-weight:700;color:#0b5fa5">Accounting Approval Line</span>
-          <span style="font-size:.7rem;color:#605e5c">— Skip the accounting review step</span>
+          <span id="acc-line-hint" style="font-size:.7rem;color:#605e5c">— Skip the accounting review step</span>
         </label>
         <div style="font-size:.7rem;color:#605e5c;margin-top:6px;line-height:1.6;padding-left:23px">
           Check this box if you are submitting the voucher as a member of the Accounting team.
@@ -1177,15 +1177,26 @@ function syncAccLineUI() {
   const group = document.getElementById('acc-line-group');
   const chk = document.getElementById('acc-line-check');
   if (!group || !chk) return;
-  if (!isAccountingMember()) {
-    group.style.display = 'none';
-    chk.checked = false;
+  const lbl = document.getElementById('acc-line-toggle');
+  const hint = document.getElementById('acc-line-hint');
+  const enabled = isAccountingMember();
+
+  if (!enabled) {
+    // 대상이 아니어도 영역은 그대로 두고 비활성 표시만 한다.
+    // 숨기면 화면 구성이 사람마다 달라져 안내가 어렵고, 왜 없는지도 알 수 없다.
+    chk.checked = false; chk.disabled = true;
     accLineSkip = false;
     const note = document.getElementById('acc-line-note');
     if (note) note.style.display = 'none';
+    group.style.opacity = '.55';
+    if (lbl) { lbl.style.cursor = 'not-allowed'; lbl.title = 'Accounting 담당자로 등록된 계정만 사용할 수 있습니다'; }
+    if (hint) hint.textContent = '— Available to Accounting team members only';
     return;
   }
-  group.style.display = 'block';
+  chk.disabled = false;
+  group.style.opacity = '';
+  if (lbl) { lbl.style.cursor = 'pointer'; lbl.title = ''; }
+  if (hint) hint.textContent = '— Skip the accounting review step';
 }
 function onAccLineChange() {
   const chk = document.getElementById('acc-line-check');
