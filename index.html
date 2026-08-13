@@ -3945,7 +3945,7 @@ async function exportAdminExcel(){
     const headers = ['번호','결재이력세대','신청자','신청자명','원가부서(CCTR)','Title','유형',
                      'BP코드','BP명','사업자등록번호','BP구분','Invoice Date','Purpose','Description',
                      'DR(KRW)','CR(KRW)','상태','신청일','B1 Doc No.','Posting',
-                     'RD 승인 제외 사유','Accounting 결재라인','첨부파일 수'];
+                     'RD 승인 제외 사유','Accounting 결재라인','첨부파일 수','첨부파일명'];
     for(let s=1;s<=maxStep;s++){
       headers.push(s+'차 역할', s+'차 결재자', s+'차 이메일', s+'차 상태', s+'차 처리일', s+'차 Comment');
     }
@@ -3979,6 +3979,9 @@ async function exportAdminExcel(){
         xlText(f.RDExemptReason),
         (f.AccLineSkipReason||'').trim() ? '지정 (회계 검토 단계 제외)' : '',
         (f.AttachmentRef||'').split(';').filter(Boolean).length,
+        // AttachmentRef는 "파일명||ENC||키" 를 ; 로 이은 형태다. 앞부분만 잘라 확장자까지 그대로 담는다.
+        (f.AttachmentRef||'').split(';').filter(Boolean)
+          .map(it => (it.split('||ENC||')[0]||'').trim()).filter(Boolean).join(', '),
       ];
       for(let s=0;s<maxStep;s++){
         const a = aprs[s];
@@ -3992,8 +3995,20 @@ async function exportAdminExcel(){
     });
 
     const ws = XLSX.utils.aoa_to_sheet(rows);
+
+    // DR/CR은 숫자 그대로 두고 표시 서식만 천단위 구분으로 지정한다.
+    // 문자열로 바꾸면 Excel에서 합계·정렬이 안 되므로 셀 서식(z)으로 처리한다.
+    const AMT_COLS = [headers.indexOf('DR(KRW)'), headers.indexOf('CR(KRW)')].filter(i=>i>=0);
+    for(let r=1; r<rows.length; r++){
+      AMT_COLS.forEach(c=>{
+        const ref = XLSX.utils.encode_cell({r:r, c:c});
+        const cell = ws[ref];
+        if(cell && typeof cell.v === 'number'){ cell.t = 'n'; cell.z = '#,##0'; }
+      });
+    }
+
     // 열 너비는 헤더 수와 반드시 같아야 한다. 이전에는 기본 13열에 11개만 지정되어 뒤쪽이 밀렸다.
-    const colW = [6,10,28,14,20,24,12,14,24,18,12,14,30,30,14,14,10,18,16,10,26,24,10];
+    const colW = [6,10,28,14,20,24,12,14,24,18,12,14,30,30,16,16,10,18,16,10,26,24,10,40];
     for(let s=0;s<maxStep;s++) colW.push(16,16,28,12,18,30);
     ws['!cols'] = colW.map(w=>({wch:w}));
 
