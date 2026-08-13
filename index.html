@@ -3921,10 +3921,31 @@ async function exportAdminExcel(){
     items.forEach(i=>{ const n=(i._apprList||[]).length; if(n>maxStep) maxStep=n; });
 
     const fmtX = s => { if(!s) return ''; const d=new Date(new Date(s).getTime()+9*3600*1000); const p=n=>String(n).padStart(2,'0'); return `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`; };
+    const fmtD = s => { if(!s) return ''; const d=new Date(new Date(s).getTime()+9*3600*1000); const p=n=>String(n).padStart(2,'0'); return `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())}`; };
+
+    // SharePoint 다중 텍스트 필드는 <div class="ExternalClass...">로 감싸여 저장된다.
+    // Comment만 태그를 제거하고 있어 Purpose·Description이 Excel에 원문 그대로 실려 나갔다.
+    // 줄바꿈 태그를 공백으로 바꾼 뒤 태그를 걷어내고 엔티티까지 되돌린다.
+    const xlText = raw => String(raw||'')
+      .replace(/<\s*br\s*\/?>/gi, ' ')
+      .replace(/<\/\s*(div|p|li|tr)\s*>/gi, ' ')
+      .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+      .replace(/&amp;/g, '&')
+      .replace(/\s+/g, ' ')
+      .trim();
 
     // B1 Doc No./Posting은 관리자 목록 화면에는 있으나 내보내기에는 빠져 있어,
     // SAP 전기 결과와 대사할 때 Excel만으로는 확인이 안 됐다. 화면과 동일한 기준으로 함께 내보낸다.
-    const headers = ['번호','결재이력세대','신청자','Title','유형','BP명','Purpose','DR(KRW)','CR(KRW)','상태','신청일','B1 Doc No.','Posting'];
+    // 신청 화면·상세보기에는 있으나 내보내기에서 빠져 있던 항목을 함께 담는다.
+    // 특히 RD 승인 제외 사유와 Accounting 결재라인 지정은 결재 단계가 축약된 근거라,
+    // Excel만 받아본 사람은 왜 단계가 적은지 확인할 방법이 없었다.
+    const headers = ['번호','결재이력세대','신청자','신청자명','원가부서(CCTR)','Title','유형',
+                     'BP코드','BP명','사업자등록번호','BP구분','Invoice Date','Purpose','Description',
+                     'DR(KRW)','CR(KRW)','상태','신청일','B1 Doc No.','Posting',
+                     'RD 승인 제외 사유','Accounting 결재라인','첨부파일 수'];
     for(let s=1;s<=maxStep;s++){
       headers.push(s+'차 역할', s+'차 결재자', s+'차 이메일', s+'차 상태', s+'차 처리일', s+'차 Comment');
     }
@@ -3937,10 +3958,17 @@ async function exportAdminExcel(){
         item.id,
         item._volLabel||'',
         f.RequesterEmail||'',
+        f.RequesterName||'',
+        f.RequesterCCTR||'',
         f.Title||'',
         f.VoucherType||'',
+        f.BPCode||'',
         f.BPName||'',
-        f.Purpose||'',
+        f.BPBizNo||'',
+        f.BPCategory||'',
+        fmtD(f.InvoiceDate),
+        xlText(f.Purpose),
+        xlText(f.Detail),
         f.TotalDR_KRW||0,
         f.TotalCR_KRW||0,
         f.Status||'',
@@ -3948,12 +3976,14 @@ async function exportAdminExcel(){
         (f.B1DocNo||'').trim(),
         // Posting은 저장값이 아니라 B1 Doc No. 유무로 판정 — 목록/상세 화면과 동일 기준
         (f.B1DocNo||'').trim() ? '완료' : '미완료',
+        xlText(f.RDExemptReason),
+        (f.AccLineSkipReason||'').trim() ? '지정 (회계 검토 단계 제외)' : '',
+        (f.AttachmentRef||'').split(';').filter(Boolean).length,
       ];
       for(let s=0;s<maxStep;s++){
         const a = aprs[s];
         if(a){
-          const cmt = (a.Comment||'').replace(/<[^>]*>/g,'').trim();
-          row.push(a.ApproverRole||'', a.ApproverName||'', a.ApproverEmail||'', a.Status||'', a.ApprovalDate?fmtX(a.ApprovalDate):'', cmt);
+          row.push(a.ApproverRole||'', a.ApproverName||'', a.ApproverEmail||'', a.Status||'', a.ApprovalDate?fmtX(a.ApprovalDate):'', xlText(a.Comment));
         } else {
           row.push('','','','','','');
         }
@@ -3962,8 +3992,9 @@ async function exportAdminExcel(){
     });
 
     const ws = XLSX.utils.aoa_to_sheet(rows);
-    const colW = [6,10,28,24,12,24,28,14,14,10,18];
-    for(let s=0;s<maxStep;s++) colW.push(16,16,28,10,18,30);
+    // 열 너비는 헤더 수와 반드시 같아야 한다. 이전에는 기본 13열에 11개만 지정되어 뒤쪽이 밀렸다.
+    const colW = [6,10,28,14,20,24,12,14,24,18,12,14,30,30,14,14,10,18,16,10,26,24,10];
+    for(let s=0;s<maxStep;s++) colW.push(16,16,28,12,18,30);
     ws['!cols'] = colW.map(w=>({wch:w}));
 
     const wb = XLSX.utils.book_new();
