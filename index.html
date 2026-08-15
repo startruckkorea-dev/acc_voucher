@@ -1366,8 +1366,6 @@ async function boot(account) {
   document.getElementById('user-name').textContent=(account.name||account.username)+' ('+(account.username)+')';
   document.getElementById('v-requester').value = account.name||account.username;
   document.getElementById('v-date').value = new Date(new Date().getTime()+9*3600*1000).toISOString().slice(0,10);
-  const _uatModal = document.getElementById('uat-notice-modal');
-  if (_uatModal) _uatModal.style.display = 'flex';
   renderApproval();
   applyFixedLines();
   switchTab('new');
@@ -3431,8 +3429,6 @@ function saveLineModal() {
 }
 const _origSelectGL = window.selectGL;
 
-
-
 function toggleExtraRates() {
   const el = document.getElementById('extra-rates');
   const btn = el.previousElementSibling.querySelector('button');
@@ -5458,26 +5454,6 @@ window.addEventListener('load',async()=>{
       </div>
     </div>
     <button onclick="document.getElementById('no-auth-modal').style.display='none'" style="background:#0078d4;color:#fff;border:none;border-radius:8px;padding:10px 32px;font-size:.88rem;font-weight:600;cursor:pointer;font-family:inherit">확인</button>
-  </div>
-</div>
-
-<!-- UAT 안내 모달 -->
-<div id="uat-notice-modal" onclick="if(event.target===this) this.style.display='none'" style="display:none;position:fixed;inset:0;background:rgba(16,27,52,.45);z-index:999;align-items:center;justify-content:center">
-  <div style="background:#fff;border-radius:14px;padding:32px 30px 26px;max-width:380px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.3);text-align:center">
-    <div style="font-size:15px;font-weight:800;color:#101B34;margin-bottom:6px">ACC Voucher Go-Live 안내</div>
-    <div style="font-size:11.5px;color:#8a94a6;margin-bottom:16px">Accounting Voucher · STK 회계 전표 시스템</div>
-    <div style="background:#f0f6ff;border:1px solid #c7e0f4;border-radius:10px;padding:14px 12px;margin-bottom:16px">
-      <div style="font-size:11px;color:#0b5fa5;font-weight:700;letter-spacing:.3px;margin-bottom:4px">GO-LIVE DATE</div>
-      <div style="font-size:15px;font-weight:800;color:#0078d4;line-height:1.5">2026년 8월 18일(화) 07:00<br>
-        <span style="font-size:11px;font-weight:600;color:#0b5fa5">18 Aug 2026 (Tue) 07:00 KST</span>
-      </div>
-    </div>
-    <div style="font-size:11.5px;color:#475569;line-height:1.8;margin-bottom:22px">
-      위 일시부터 시스템 사용이 가능합니다.<br>
-      Go-Live 이전까지는 <b style="color:#2F7B7A">UAT(User Acceptance Test)</b> 기간으로,<br>
-      입력하신 내용은 실제 회계 처리에 반영되지 않습니다.
-    </div>
-    <button onclick="document.getElementById('uat-notice-modal').style.display='none'" style="width:100%;padding:11px 0;background:#101B34;color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">확인했습니다</button>
   </div>
 </div>
 
