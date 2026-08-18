@@ -5047,7 +5047,7 @@ async function recoverAttachments(v){
     const links = files.map(f=>f.name+'||ENC||'+btoa(unescape(encodeURIComponent(drive.id+'###'+f.id))));
     el.innerHTML = files.map(f=>
       `<div style="padding:4px 0;font-size:.8rem"><a href="#" class="file-dl-link" data-drive="${encodeURIComponent(drive.id)}" data-id="${encodeURIComponent(f.id)}" data-name="${encodeURIComponent(f.name)}" style="color:#0078d4;cursor:pointer;text-decoration:none">📎 ${escHtml(f.name)}</a></div>`
-    ).join('') + '<div style="margin-top:4px;font-size:.68rem;color:#a19f9d">업로드된 파일을 다시 연결했습니다.</div>';
+    ).join('');   // 복구는 내부 처리이므로 화면에 별도 안내를 남기지 않는다(첫 열람에만 뜨고 이후엔 안 떠 혼란을 준다)
     bindFileDownloadLinks();                         // 새로 그린 링크에 다운로드 동작 연결
     v.AttachmentRef = links.join(';');                // 캐시에도 반영
     try{
