@@ -4457,10 +4457,10 @@ async function openVoucherSP(spId, fromTab){
         </div>
       </div>
       <div style="background:#fdf6e3;border:1px solid #f0d9a0;border-radius:8px;padding:11px 14px;margin-bottom:10px">
-        <div style="font-size:.76rem;font-weight:700;color:#8a6116;margin-bottom:5px">⚠️ Posting 상태는 B1 Doc No.로만 결정됩니다</div>
+        <div style="font-size:.76rem;font-weight:700;color:#8a6116;margin-bottom:5px">⚠️ Posting status is driven by the B1 Doc No.</div>
         <div style="font-size:.73rem;color:#8a6116;line-height:1.75">
-          B1 Doc No.가 <b>비어 있으면 미완료</b>(기본값), <b>값이 입력되어 있으면 완료</b>로 자동 처리됩니다.
-          Posting은 직접 선택할 수 없으며, 입력하는 즉시 자동으로 바뀝니다.
+          Leave the B1 Doc No. empty and the status stays <b>미완료</b> (default); enter a value and it turns <b>완료</b>.
+          Posting cannot be set manually — it updates automatically as soon as the document number is saved.
         </div>
       </div>
       <div style="display:flex;align-items:center;justify-content:flex-end">
@@ -4482,10 +4482,10 @@ async function openVoucherSP(spId, fromTab){
         <button onclick="submitAdminComment('${v._spId}')" style="padding:7px 16px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:.78rem;cursor:pointer;white-space:nowrap;height:fit-content">등록</button>
       </div>
       <div style="background:#fdf6e3;border:1px solid #f0d9a0;border-radius:8px;padding:11px 14px;margin-top:10px">
-        <div style="font-size:.76rem;font-weight:700;color:#8a6116;margin-bottom:5px">⚠️ 결재 의견은 지정된 담당자만 입력할 수 있습니다</div>
+        <div style="font-size:.76rem;font-weight:700;color:#8a6116;margin-bottom:5px">⚠️ Comments are limited to assigned reviewers</div>
         <div style="font-size:.73rem;color:#8a6116;line-height:1.75">
-          <b>ACC Voucher 관리자</b>와 이 전표가 연결된 <b>SSC 티켓의 PKF 담당자</b>만 열람·입력이 가능합니다.
-          <b>승인완료·철회된 전표</b>에는 의견을 추가할 수 없으며, 등록된 의견에는 작성자와 작성 시각이 함께 기록됩니다.
+          Only <b>ACC Voucher administrators</b> and the <b>PKF reviewer of the SSC ticket linked to this voucher</b> can view and post comments.
+          Comments cannot be added once a voucher is <b>fully approved or withdrawn</b>, and each entry is recorded with its author and timestamp.
         </div>
       </div>
       <div id="admin-comment-closed" style="display:none;font-size:.78rem;color:#a19f9d;padding:8px 0">승인완료된 전표는 의견을 입력할 수 없습니다.</div>
