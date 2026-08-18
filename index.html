@@ -5768,21 +5768,29 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
     '</table>'+
     '<table style="width:100%;border-collapse:collapse;border:1px solid #000;margin-top:8px;table-layout:fixed">'+
       '<colgroup><col style="width:12%"><col style="width:56%"><col style="width:9%"><col style="width:23%"></colgroup>'+
-      '<tr>'+
-        '<td colspan="2" style="'+lblB+';text-align:left">Purpose</td>'+
-        '<td style="'+lblB+'">Currency</td><td style="'+lblB+'">Total Amount</td>'+
-      '</tr>'+
-      '<tr>'+
-        '<td colspan="2" style="'+cellB+';padding:7px 8px;white-space:pre-wrap;min-height:34px">'+
-                  // 라벨은 'Purpose' 하나뿐이라 제목과 본문이 그냥 이어지면 구분이 안 된다.
-                  // 표 구조는 건드리지 않고, 셀 안에서만 제목 → 옅은 구분선 → 본문 순으로 위계를 준다.
-                  (v.PurposeTitle
-                    ? '<div style="font-weight:700;font-size:11.5px;line-height:1.35">'+esc(spText(v.PurposeTitle))+'</div>'
-                      +'<div style="border-top:1px dotted #bbb;margin:4px 0 5px"></div>'
-                    : '')+
-                  '<div style="font-size:10.5px;line-height:1.5;color:#222">'+(esc(v.Purpose)||'-')+'</div>'+'</td>'+
-        '<td style="'+cellB+'">'+hdrCurrency+'</td><td style="'+cellB+';text-align:right;font-weight:700">'+hdrTotalAmount+'</td>'+
-      '</tr>'+
+      // Purpose Title이 있으면 라벨을 나눠 두 행으로 표시한다.
+      // 한 칸에 몰아넣으면 표에 'Purpose'만 적혀 있어 무엇이 제목인지 알 수 없다.
+      // Currency/Total Amount는 rowspan으로 두 행에 걸쳐 기존 배치를 유지한다.
+      (v.PurposeTitle
+        ? '<tr>'+
+            '<td style="'+lblB+';text-align:left">Purpose Title</td>'+
+            '<td style="'+cellB+';padding:6px 8px;font-weight:700">'+esc(spText(v.PurposeTitle))+'</td>'+
+            '<td style="'+lblB+'">Currency</td><td style="'+lblB+'">Total Amount</td>'+
+          '</tr>'+
+          '<tr>'+
+            '<td style="'+lblB+';text-align:left">Purpose</td>'+
+            '<td style="'+cellB+';padding:7px 8px;white-space:pre-wrap;min-height:30px;line-height:1.5">'+(esc(v.Purpose)||'-')+'</td>'+
+            '<td style="'+cellB+'">'+hdrCurrency+'</td><td style="'+cellB+';text-align:right;font-weight:700">'+hdrTotalAmount+'</td>'+
+          '</tr>'
+        : '<tr>'+
+            '<td colspan="2" style="'+lblB+';text-align:left">Purpose</td>'+
+            '<td style="'+lblB+'">Currency</td><td style="'+lblB+'">Total Amount</td>'+
+          '</tr>'+
+          '<tr>'+
+            '<td colspan="2" style="'+cellB+';padding:8px;white-space:pre-wrap;min-height:34px">'+(esc(v.Purpose)||'-')+'</td>'+
+            '<td style="'+cellB+'">'+hdrCurrency+'</td><td style="'+cellB+';text-align:right;font-weight:700">'+hdrTotalAmount+'</td>'+
+          '</tr>'
+      )+
       '<tr>'+
         '<td style="'+lblB+'">Exchange rate</td><td style="'+cellB+';font-size:8.5px;padding:3px 6px;line-height:1.4">'+exRateDisplay+' <span style="color:#c0392b;font-size:8px;white-space:nowrap">◀제출 당시 입력된 환율(ex. EUR)이 기입되며, 미입력시 기입되지 않습니다.</span></td>'+
         '<td style="'+lblB+';font-size:9.5px;padding:4px 3px">KRW TOTAL</td><td style="'+cellB+';text-align:right;font-weight:700">'+fmtK(v.TotalDR_KRW)+'</td>'+
