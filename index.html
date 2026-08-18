@@ -409,7 +409,7 @@ if (new URLSearchParams(location.search).get('openId')) {
           </div>
           <div id="v-type-contact-edit" style="display:none;margin-top:6px">
             <select id="vc-person" onchange="contactPersonChange()" style="width:100%">
-              <option value="">-- AP/AR/GL 담당자 중 선택 --</option>
+              <option value="">-- AP/AR/GL 담당자 · Accounting Head 중 선택 --</option>
             </select>
           </div>
         </div>
@@ -2116,25 +2116,7 @@ function renderApproval() {
         ? `<span style="font-size:10px;color:#8a6914;background:#fff4ce;border-radius:10px;padding:1px 6px;margin-left:4px">수동 변경됨</span>`
         : `<span style="font-size:10px;color:#107c10;background:#dff6dd;border-radius:10px;padding:1px 6px;margin-left:4px">자동 지정</span>`;
       const resetBtn = accOverride ? `<span class="btn-change btn-change-reset" onclick="accResetOverride()">↺ 기본값으로</span>` : '';
-      const _accApOpt   = cfgVal(cfg,'ACC-Voucher_AP',{name:'',email:''});
-      const _accArOpt   = cfgVal(cfg,'ACC-Voucher_AR',{name:'',email:''});
-      const _accGlOpt   = cfgVal(cfg,'ACC-Voucher_GL',{name:'',email:''});
-      const _accHeadOpt = cfgVal(cfg,'ACC-Voucher_ACCOUNTING',{name:'',email:''});
-      // 같은 이메일이 두 번 뜨지 않도록 중복 제거(예: AP 담당자와 Accounting Head가 동일인으로 등록된 경우)
-      const _seenAcc = new Set();
-      const accCandidates = [
-        _accApOpt.email   ? {cat:'AP', ..._accApOpt}   : null,
-        _accArOpt.email   ? {cat:'AR', ..._accArOpt}   : null,
-        _accGlOpt.email   ? {cat:'GL', ..._accGlOpt}   : null,
-        _accHeadOpt.email ? {cat:'Accounting Head', ..._accHeadOpt} : null,
-      ].filter(Boolean).filter(c=>{
-        const k=(c.email||'').toLowerCase();
-        if(_seenAcc.has(k)) return false;
-        _seenAcc.add(k); return true;
-      });
-      const accOptionsHtml = accCandidates.map(c =>
-        `<option value="${c.email}" data-name="${c.name}" ${accOverride && accOverride.email===c.email ? 'selected' : ''}>${c.name} (${c.cat==='Accounting Head' ? 'Accounting Head' : c.cat+' 담당자'}, ${c.email})</option>`
-      ).join('');
+      const accOptionsHtml = accCandidateOptions(); // 상단 배지 단축 변경과 동일한 후보 목록
       // Accounting Head를 3차 담당자로 지정하면 4차와 같은 사람이 연달아 결재하게 되므로 그 자리에서 알려준다
       const _dupWarn = (accOverride && AMGR.email && accOverride.email.toLowerCase()===AMGR.email.toLowerCase())
         ? `<div style="margin-top:7px;font-size:11px;line-height:1.6;color:#8a6116;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:6px;padding:7px 10px">
@@ -2153,7 +2135,7 @@ function renderApproval() {
         ${_dupWarn}
         <div id="acc-manual-view-${order}" style="display:none;margin-top:6px">
           <select id="ga${order}-person" onchange="accApplyOverrideFromSelect(${order})" style="width:100%">
-            <option value="">-- AP/AR/GL 담당자 · Accounting Head 중 선택 --</option>
+            <option value="">${ACC_PICK_PLACEHOLDER}</option>
             ${accOptionsHtml}
           </select>
         </div></div>`;
@@ -2217,6 +2199,29 @@ function accResetOverride(){
   onTypeChange();
 }
 
+// ── Accounting 담당자 선택 후보 ───────────────────────────────────
+// 상단 배지 옆 단축 변경과 결재라인 6번 섹션 두 곳에서 같은 목록을 쓴다.
+// 예전에는 두 곳이 각자 목록을 만들어, 한쪽만 고치면 다른 쪽이 그대로 남는 문제가 있었다.
+// 후보: ACC-Voucher_AP / _AR / _GL / _ACCOUNTING (같은 이메일은 앞선 키 기준으로 1회만)
+function accCandidateList(){
+  const cfg = _sysConfig||{};
+  const seen = new Set();
+  return [
+    ['AP',              cfgVal(cfg,'ACC-Voucher_AP',{name:'',email:''})],
+    ['AR',              cfgVal(cfg,'ACC-Voucher_AR',{name:'',email:''})],
+    ['GL',              cfgVal(cfg,'ACC-Voucher_GL',{name:'',email:''})],
+    ['Accounting Head', cfgVal(cfg,'ACC-Voucher_ACCOUNTING',{name:'',email:''})],
+  ].filter(([,p])=>p && p.email)
+   .filter(([,p])=>{ const k=p.email.toLowerCase(); if(seen.has(k)) return false; seen.add(k); return true; })
+   .map(([cat,p])=>({cat, name:p.name, email:p.email}));
+}
+function accCandidateOptions(){
+  return accCandidateList().map(c =>
+    `<option value="${c.email}" data-name="${c.name}" ${accOverride && accOverride.email===c.email ? 'selected' : ''}>${c.name} (${c.cat==='Accounting Head' ? 'Accounting Head' : c.cat+' 담당자'}, ${c.email})</option>`
+  ).join('');
+}
+const ACC_PICK_PLACEHOLDER = '-- AP/AR/GL 담당자 · Accounting Head 중 선택 --';
+
 // ── 상단 "Accounting 처리 담당자" 배지 옆 "✎ 변경" — 결재라인(6번 섹션)까지 안 내려가도 여기서 바로 변경 가능 ──
 function contactToggleManual(){
   const editRow = document.getElementById('v-type-contact-edit');
@@ -2224,18 +2229,8 @@ function contactToggleManual(){
   if(!editRow) return;
   const opening = editRow.style.display === 'none';
   if(opening){
-    const cfg = _sysConfig||{};
-    const _ap = cfgVal(cfg,'ACC-Voucher_AP',{name:'',email:''});
-    const _ar = cfgVal(cfg,'ACC-Voucher_AR',{name:'',email:''});
-    const _gl = cfgVal(cfg,'ACC-Voucher_GL',{name:'',email:''});
-    const candidates = [
-      _ap.email ? {cat:'AP', ..._ap} : null,
-      _ar.email ? {cat:'AR', ..._ar} : null,
-      _gl.email ? {cat:'GL', ..._gl} : null,
-    ].filter(Boolean);
     const pSel = document.getElementById('vc-person');
-    pSel.innerHTML = '<option value="">-- AP/AR/GL 담당자 중 선택 --</option>' +
-      candidates.map(c => `<option value="${c.email}" data-name="${c.name}" ${accOverride && accOverride.email===c.email ? 'selected' : ''}>${c.name} (${c.cat} 담당자, ${c.email})</option>`).join('');
+    pSel.innerHTML = `<option value="">${ACC_PICK_PLACEHOLDER}</option>` + accCandidateOptions();
     editRow.style.display = 'block';
     if(toggleEl) toggleEl.textContent = '✕ 취소';
   } else {
