@@ -5836,7 +5836,8 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
       '</tr>'+
       '<tr><td style="'+lblB+'">(E) Signature<br>&amp; Date</td>'+apprRow('sig')+'</tr>'+
       '<tr><td style="'+lblB+'">Name</td>'+apprRow('name')+'</tr>'+
-      '<tr style="line-height:1.1"><td style="'+lblB+';font-size:8.5px;line-height:1.1;padding:2px 4px">Approval Conditions</td>'+
+      // 라벨 열이 좁아 한 줄로는 잘린다. lblB의 nowrap을 이 셀에서만 풀고 두 줄로 표시한다.
+      '<tr style="line-height:1.1"><td style="'+lblB+';font-size:8.5px;line-height:1.15;padding:2px 4px;white-space:normal;word-break:keep-all">Approval<br>Conditions</td>'+
         roleCols.map(rc=>{
           const role=rc[0];
           const rules = APPROVAL_RULES[v.VoucherType]||{};
