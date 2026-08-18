@@ -5341,7 +5341,13 @@ async function loadApprovalHistory(spId){
     // 아래 EXTRA는 표기 변경 전 UAT 테스트로 생성된 행을 위해 남겨둔다.
     EXTRA:'Extra Approver'
   };
-  const fmtDate = s => s ? new Date(s).toLocaleString('ko-KR',{year:'2-digit',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}) : '';
+  const fmtDate = s => {
+    if(!s) return '';
+    // PC 시간대와 무관하게 항상 KST로 표시한다(+9h 보정 후 UTC 게터로 읽기).
+    const d = new Date(new Date(s).getTime()+9*3600*1000);
+    const p = n=>String(n).padStart(2,'0');
+    return `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+  };
   try{
     const list = await fetchApprovalListDirect(v);
     window._currentApprovalList = list; // No.14: PDF 출력용 캐시 (참고용 - exportVoucherPdf는 이제 이 캐시에 의존하지 않고 직접 재조회함)
