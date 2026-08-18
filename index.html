@@ -694,10 +694,10 @@ if (new URLSearchParams(location.search).get('openId')) {
   <div class="card" style="padding:0;overflow-x:auto">
     <table class="list-table">
       <thead><tr>
-        <th style="width:40px">번호</th><th>신청자</th><th>Title</th><th>유형</th><th>BP명</th><th>Purpose</th><th style="text-align:right">DR(KRW Total)</th><th style="text-align:right">CR(KRW Total)</th><th>Status</th><th>신청일</th><th>처리</th>
+        <th style="width:40px">번호</th><th>신청자</th><th>Title</th><th>유형</th><th>BP명</th><th>Purpose Title</th><th>Purpose</th><th style="text-align:right">DR(KRW Total)</th><th style="text-align:right">CR(KRW Total)</th><th>Status</th><th>신청일</th><th>처리</th>
       </tr></thead>
       <tbody id="appr-body">
-        <tr><td colspan="11" style="text-align:center;padding:40px;color:#a19f9d">결재 대기 중인 전표가 없습니다.</td></tr>
+        <tr><td colspan="12" style="text-align:center;padding:40px;color:#a19f9d">결재 대기 중인 전표가 없습니다.</td></tr>
       </tbody>
     </table>
   </div>
@@ -4215,7 +4215,7 @@ let approvalQueueCache = [];
 function renderApprovalQueue() {
   const tbody = document.getElementById('appr-body');
   if(!approvalQueueCache.length){
-    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:40px;color:#a19f9d">결재 대기 중인 전표가 없습니다.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:40px;color:#a19f9d">결재 대기 중인 전표가 없습니다.</td></tr>';
     return;
   }
   const stMap={'대기':'badge-대기','대기(잠김)':'badge-대기잠김','승인완료':'badge-승인완료','반려':'badge-반려','철회':'badge-철회'};
@@ -4235,7 +4235,8 @@ function renderApprovalQueue() {
       <td style="font-size:.78rem;color:#605e5c">${v.RequesterEmail||'-'}</td>
       <td style="font-size:.75rem;color:#0078d4">${v.Title||'-'}</td>
       <td><span class="type-badge t-${v.VoucherType}">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span></td>
-      <td style="font-size:.78rem;color:#605e5c">${v.BPName||'-'}</td>
+      <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem;color:#605e5c" title="${escHtmlAttr(v.BPName||'')}">${escHtml(v.BPName)||'-'}</td>
+      <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem" title="${escHtmlAttr(spText(v.PurposeTitle||''))}">${escHtml(spText(v.PurposeTitle))||'-'}</td>
       <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem">${escHtml(spText(v.Purpose))||'-'}</td>
       <td style="text-align:right;font-weight:700;color:#0078d4;font-size:.78rem">${fmtK(v.TotalDR_KRW)}</td>
       <td style="text-align:right;font-weight:700;color:#c0392b;font-size:.78rem">${fmtK(v.TotalCR_KRW)}</td>
@@ -5757,7 +5758,9 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
         '<td style="'+lblB+'">Currency</td><td style="'+lblB+'">Total Amount</td>'+
       '</tr>'+
       '<tr>'+
-        '<td colspan="2" style="'+cellB+';padding:8px;white-space:pre-wrap;min-height:34px">'+(esc(v.Purpose)||'-')+'</td>'+
+        '<td colspan="2" style="'+cellB+';padding:8px;white-space:pre-wrap;min-height:34px">'+
+                  (v.PurposeTitle ? '<div style="font-weight:700;margin-bottom:3px">'+esc(spText(v.PurposeTitle))+'</div>' : '')+
+                  (esc(v.Purpose)||'-')+'</td>'+
         '<td style="'+cellB+'">'+hdrCurrency+'</td><td style="'+cellB+';text-align:right;font-weight:700">'+hdrTotalAmount+'</td>'+
       '</tr>'+
       '<tr>'+
