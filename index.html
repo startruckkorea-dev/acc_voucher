@@ -5841,24 +5841,36 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
           const role=rc[0];
           const rules = APPROVAL_RULES[v.VoucherType]||{};
           let ruleText;
+          // 결재 단계가 늘면 열 폭이 좁아져 긴 문구가 두 줄로 접히고 행 높이가 들쭉날쭉해진다.
+          // 표에 담기는 값은 짧게 두고, 자세한 설명은 표 아래 각주에서 보완한다.
           // 추가 결재자는 금액 기준이 아니라 신청자가 직접 지정한 단계다.
-          if(rc[2]) ruleText='Added by requester';
+          if(rc[2]) ruleText='Requester';
           else if(role==='ACC'||role==='AMGR') ruleText='Required'; // 항상 결재라인에 포함 (needed() 체크 없이 무조건 push)
           else {
             const rv = rules[role];
             // RD가 사유를 들어 제외된 건은 조건 자체가 적용되지 않았음을 명시
-            if(role==='RD' && isRdExempted) ruleText='Exempted by approved reason';
+            if(role==='RD' && isRdExempted) ruleText='Exempted';
             // 회계팀 상신 건은 조건 충족 여부와 무관하게 단계 자체가 제외된 것이므로 그렇게 표기
-            else if(isAccLineSkippedDoc && ACC_SKIP_ROLES.includes(role)) ruleText='Skipped — Accounting Approval Line';
+            else if(isAccLineSkippedDoc && ACC_SKIP_ROLES.includes(role)) ruleText='Skipped';
             else if(!rv || rv==='-') ruleText='Not Required';
             else if(rv==='필수') ruleText='Required';
             else if(rv==='필요시') ruleText='If necessary';
-            else ruleText=rv; // 예: '>= 1,000,000', '> 50,000,000' 등 실제 임계값 그대로 표기
+            // 금액 임계값은 회계 근거이므로 값 자체는 바꾸지 않고, 자릿수만 K/M 단위로 줄인다.
+            // 1,000,000 → 1M / 10,000,000 → 10M / 500,000 → 500K
+            else ruleText = String(rv).replace(/([\d,]+)/g, (mm) => {
+              const n = parseInt(mm.replace(/,/g,''),10);
+              if(!isFinite(n)) return mm;
+              if(n >= 1000000 && n % 1000000 === 0) return (n/1000000)+'M';
+              if(n >= 1000 && n % 1000 === 0) return (n/1000)+'K';
+              return mm;
+            });
           }
-          return '<td style="'+cellB+';font-size:7.5px;line-height:1.1;padding:2px 4px">'+esc(ruleText)+'</td>';
+          return '<td style="'+cellB+';font-size:7.5px;line-height:1.15;padding:2px 3px;white-space:nowrap">'+esc(ruleText)+'</td>';
         }).join('')+
       '</tr>'+
     '</table>'+
+    // 표에 담기는 값을 짧게 줄인 대신, 의미는 각주로 남겨 감사 시 해석이 어긋나지 않게 한다.
+    '<div style="font-size:8px;color:#666;margin-top:2px">* Requester: 신청자가 직접 지정한 결재 단계 · Exempted: 승인된 사유로 제외 · Skipped: Accounting 결재라인으로 단계 제외 · 금액은 K=천, M=백만 단위 표기</div>'+
     // 회계팀 담당자가 직접 상신한 건은 회계 담당자 결재 단계가 빠지므로 그 근거를 양식에 남긴다.
     (isAccLineSkippedDoc
       ? '<div style="margin-top:4px;border:1px solid #b6d7f2;background:#eaf3fd;border-radius:3px;padding:6px 9px;font-size:8.5px;color:#0b5fa5;line-height:1.55">'+
