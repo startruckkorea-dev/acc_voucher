@@ -2711,7 +2711,11 @@ function recalcApImsVat(type, currency){
 }
 function applyFixedLines() {
   const type = document.getElementById('v-type')?.value||'';
-  const isSpecial = type !== 'GL' && type !== 'FA';
+  // GL·FA는 BP 코드가 필수가 아닐 뿐, 넣을 수 없는 것은 아니다.
+  // 유형만으로 막아두면 GL에서 BP를 골라도 회계 라인에 BP 라인이 만들어지지 않아
+  // 사용자가 직접 계정을 입력해야 했다. 판단 기준을 "BP를 실제로 넣었는가"로 바꾼다.
+  const _bpCodeNow = document.getElementById('v-bp-code')?.value||'';
+  const isSpecial = (type !== 'GL' && type !== 'FA') || !!_bpCodeNow || extraBPs.length > 0;
 
   // 기존 BP 예약 라인들을 uid로 찾을 수 있도록 맵으로 보존해둔다.
   // (코드 값으로 매칭하면 동일 BP 코드가 중복 추가된 경우 서로 뒤섞여서 DR/CR·금액이 엉뚱하게 섞이는 문제가 있었음)
@@ -2779,7 +2783,8 @@ function renderExtraBPs() {
   const el = document.getElementById('extra-bp-list');
   if(!el) return;
   const type = document.getElementById('v-type')?.value||'';
-  if((type==='GL'||type==='FA') || !extraBPs.length) { el.innerHTML=''; return; }
+  // GL·FA도 BP를 넣었다면 추가 BP 목록을 보여준다(넣지 않았으면 그대로 공란)
+  if(!extraBPs.length) { el.innerHTML=''; return; }
   const cellStyle = 'padding:8px 10px;font-size:12.5px;color:#323130;border-bottom:1px solid #edebe9';
   const hdrStyle = 'padding:6px 10px;font-size:11px;font-weight:600;color:#605e5c;background:#f3f2f1;text-align:left;white-space:nowrap';
   el.innerHTML = '<div style="font-size:12px;color:#605e5c;margin-bottom:6px">추가 BP <span style="color:#0078d4">(각 BP마다 회계 라인이 하나씩 자동으로 추가됩니다)</span></div>' +
