@@ -5770,9 +5770,9 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
     // Purpose Title은 표 안에 넣으면 Currency/Total Amount와 세로가 어긋난다.
     // 이 양식이 이미 쓰고 있는 '표 위 제목 줄' 방식(Requester Info. / Authorization)을 따른다.
     (v.PurposeTitle
-      ? '<div style="margin-top:10px;padding:3px 2px 4px;border-bottom:1.5px solid #000;font-size:11px;line-height:1.4">'+
-          '<span style="font-weight:700">Purpose Title</span>'+
-          '<span style="margin-left:10px">'+esc(spText(v.PurposeTitle))+'</span>'+
+      ? '<div style="margin-top:10px;padding:2px 3px 4px;border-bottom:1px solid #000;font-size:11.5px;line-height:1.4">'+
+          '<span style="font-weight:700">Purpose Title :</span>'+
+          '<span style="margin-left:6px">'+esc(spText(v.PurposeTitle))+'</span>'+
         '</div>'
       : '')+
     '<table style="width:100%;border-collapse:collapse;border:1px solid #000;margin-top:'+(v.PurposeTitle?'4':'8')+'px;table-layout:fixed">'+
