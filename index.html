@@ -5622,7 +5622,36 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
 
   // 2026-08-11: CEO 결재 라인은 2026-07-25자로 전 유형에서 제거되어 결재라인에 포함되지 않는다.
   // 공식 양식 표에만 열이 남아 항상 NOT REQUIRED로 출력되고 있어, 실제 결재 구조와 맞도록 열 자체를 제거한다.
-  const roleCols=[['TL','Team Leader'],['MC','MC'],['RD','RD'],['ACC','Acc. Specialist'],['AMGR','Acc. Manager'],['CFO','CFO']];
+  // 기본 결재 단계. 신청자가 BU 승인 구간에 끼워 넣은 추가 결재자는 아래에서 실제 순서 위치에 삽입한다.
+  const BASE_ROLE_COLS=[['TL','Team Leader'],['MC','MC'],['RD','RD'],['ACC','Acc. Specialist'],['AMGR','Acc. Manager'],['CFO','CFO']];
+  // 추가 결재자는 여러 명이 같은 ApproverRole('Extra Approver')을 갖는다.
+  // role을 키로 쓰면 서로 덮어써지므로, 결재 이력의 ApprovalOrder를 기준으로 개별 처리한다.
+  const _extraAprs = (apprList||[])
+    .filter(a => a.ApproverRole === EXTRA_ROLE || a.ApproverRole === 'EXTRA')
+    .sort((a,b) => (a.ApprovalOrder||0) - (b.ApprovalOrder||0))
+    .map(a => ({...a}));
+  const roleCols = (() => {
+    if(!_extraAprs.length) return BASE_ROLE_COLS.slice();
+    // 기본 단계는 원래 순서를 그대로 유지한다.
+    // RD 제외·회계라인 제외처럼 결재라인에 없는 단계도 NOT REQUIRED 열로 남아야 하므로
+    // 정렬로 위치를 바꾸지 않고, 추가 결재자만 알맞은 자리에 끼워 넣는다.
+    const out = [];
+    BASE_ROLE_COLS.forEach(rc => {
+      const a = (apprList||[]).find(x => x.ApproverRole === rc[0]);
+      const myOrder = a ? (a.ApprovalOrder||0) : null;
+      if(myOrder !== null){
+        _extraAprs.forEach(ex => {
+          if(!ex._placed && (ex.ApprovalOrder||0) < myOrder){
+            ex._placed = true;
+            out.push(['__EX'+out.length, 'Additional', ex]);
+          }
+        });
+      }
+      out.push([rc[0], rc[1]]);
+    });
+    _extraAprs.forEach(ex => { if(!ex._placed){ ex._placed = true; out.push(['__EX'+out.length,'Additional',ex]); } });
+    return out;
+  })();
   const NA_BADGE='<span style="display:inline-block;background:#e1dfdd;color:#484644;font-size:8.5px;font-weight:800;padding:2px 7px;border-radius:3px;letter-spacing:.3px">NOT REQUIRED</span>';
   // RD 승인 제외로 빠진 경우는 "원래 불필요한 단계"와 구분되어야 한다.
   // 금액 기준상 RD가 필요한데도 사유를 들어 제외한 건이므로, 표기와 색을 달리해 눈에 띄게 한다.
@@ -5670,7 +5699,9 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
 
   // 결재 완료 항목은 "전자결재" 도장 스타일로 표시 (담당자명 + 승인 일시), 미결재는 공란
   const apprRow=(type)=>roleCols.map(rc=>{
-    const role=rc[0]; const a=apprByRole[role];
+    const role=rc[0];
+    // 추가 결재자 열은 rc[2]에 해당 결재 행이 직접 담겨 있다(같은 role이 여러 명이라 맵으로 찾을 수 없음)
+    const a = rc[2] || apprByRole[role];
     let val='';
     if(type==='sig'){
       if(a && a.ApprovalDate){
@@ -5796,7 +5827,9 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
           const role=rc[0];
           const rules = APPROVAL_RULES[v.VoucherType]||{};
           let ruleText;
-          if(role==='ACC'||role==='AMGR') ruleText='Required'; // 항상 결재라인에 포함 (needed() 체크 없이 무조건 push)
+          // 추가 결재자는 금액 기준이 아니라 신청자가 직접 지정한 단계다.
+          if(rc[2]) ruleText='Added by requester';
+          else if(role==='ACC'||role==='AMGR') ruleText='Required'; // 항상 결재라인에 포함 (needed() 체크 없이 무조건 push)
           else {
             const rv = rules[role];
             // RD가 사유를 들어 제외된 건은 조건 자체가 적용되지 않았음을 명시
