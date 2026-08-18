@@ -5700,6 +5700,15 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
   const drSum=(lines_data||[]).filter(l=>l.drcr==='DR').reduce((s,l)=>s+(parseFloat(l.amount)||0),0);
   const crSum=(lines_data||[]).filter(l=>l.drcr==='CR').reduce((s,l)=>s+(parseFloat(l.amount)||0),0);
 
+  // 결재 단계가 많아지면 한 열의 폭이 줄어 도장이 셀 밖으로 밀린다.
+  // 760px 표에서 9열이면 열당 약 70px인데 도장은 이름·일시 때문에 최소 86px이 필요하다.
+  // 열 수에 맞춰 좌측 라벨 열과 도장 글자 크기를 함께 줄여 폭 안에 들어오게 한다.
+  const _nCol = roleCols.length;
+  const _lblW = _nCol >= 9 ? 10 : (_nCol >= 8 ? 11 : 13);      // Title 열 폭(%)
+  const _sScale = _nCol >= 9 ? 0.82 : (_nCol >= 8 ? 0.90 : 1); // 도장 글자 축소율
+  const _sz = (base) => (base * _sScale).toFixed(1);
+  const _pad = _nCol >= 9 ? '1px 2px' : (_nCol >= 8 ? '2px 3px' : '2px 5px');
+
   // 결재 완료 항목은 "전자결재" 도장 스타일로 표시 (담당자명 + 승인 일시), 미결재는 공란
   const apprRow=(type)=>roleCols.map(rc=>{
     const role=rc[0];
@@ -5711,10 +5720,10 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
         const isRejected = a.Status==='반려';
         const stampColor = isRejected ? '#a4262c' : '#0078d4';
         const stampLabel = isRejected ? '❌ 반려' : '✅ 전자결재';
-        val='<div style="display:inline-block;border:1.1px solid '+stampColor+';border-radius:4px;padding:2px 5px;line-height:1.35">'+
-              '<div style="font-size:8px;font-weight:700;color:'+stampColor+';white-space:nowrap">'+stampLabel+'</div>'+
-              '<div style="font-size:7.5px;color:#333;white-space:nowrap">'+esc(a.ApproverName||'')+'</div>'+
-              '<div style="font-size:7px;color:#666;white-space:nowrap">'+fmtApprDateTime(a.ApprovalDate)+'</div>'+
+        val='<div style="display:inline-block;border:1.1px solid '+stampColor+';border-radius:4px;padding:'+_pad+';line-height:1.3;max-width:100%;box-sizing:border-box">'+
+              '<div style="font-size:'+_sz(8)+'px;font-weight:700;color:'+stampColor+';white-space:nowrap">'+stampLabel+'</div>'+
+              '<div style="font-size:'+_sz(7.5)+'px;color:#333;line-height:1.2">'+esc(a.ApproverName||'')+'</div>'+
+              '<div style="font-size:'+_sz(7)+'px;color:#666;white-space:nowrap">'+fmtApprDateTime(a.ApprovalDate)+'</div>'+
             '</div>';
       } else if(!a){
         val = (role==='RD' && isRdExempted) ? EXEMPT_BADGE
@@ -5726,7 +5735,7 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
           : (isAccLineSkippedDoc && ACC_SKIP_ROLES.includes(role)) ? SKIPPED_BADGE
           : NA_BADGE;
     }
-    return '<td style="'+cellB+';text-align:center;font-size:9px">'+val+'</td>';
+    return '<td style="'+cellB+';text-align:center;font-size:'+_sz(9)+'px;padding:'+(_nCol>=9?'3px 2px':(_nCol>=8?'3px 4px':'4px 6px'))+';word-break:keep-all">'+val+'</td>';
   }).join('');
 
   return ''+
@@ -5821,7 +5830,7 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
 
     '<div style="font-weight:700;margin-top:12px;padding:4px 2px;border-bottom:2px solid #000">Authorization</div>'+
     '<table style="width:100%;border-collapse:collapse;border:1px solid #000;font-size:10px;text-align:center;table-layout:fixed">'+
-      '<colgroup><col style="width:13%">'+roleCols.map(()=>'<col style="width:'+(87/roleCols.length).toFixed(2)+'%">').join('')+'</colgroup>'+
+      '<colgroup><col style="width:'+_lblW+'%">'+roleCols.map(()=>'<col style="width:'+((100-_lblW)/roleCols.length).toFixed(2)+'%">').join('')+'</colgroup>'+
       '<tr style="background:#f0f0f0">'+
         '<td style="'+lblB+'">Title</td>'+roleCols.map(rc=>'<td style="'+cellB+';font-weight:600">'+rc[1]+'</td>').join('')+
       '</tr>'+
