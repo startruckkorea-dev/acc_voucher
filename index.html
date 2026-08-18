@@ -4571,7 +4571,7 @@ async function exportAdminExcel(){
     // 특히 RD 승인 제외 사유와 Accounting 결재라인 지정은 결재 단계가 축약된 근거라,
     // Excel만 받아본 사람은 왜 단계가 적은지 확인할 방법이 없었다.
     const headers = ['번호','결재이력세대','신청자','신청자명','원가부서(CCTR)','Title','유형',
-                     'BP코드','BP명','사업자등록번호','BP구분','Invoice Date','Purpose','Description',
+                     'BP코드','BP명','사업자등록번호','BP구분','Invoice Date','Purpose Title','Purpose','Description',
                      'DR(KRW)','CR(KRW)','상태','신청일','B1 Doc No.','Posting',
                      'RD 승인 제외 사유','Accounting 결재라인','첨부파일 수','첨부파일명'];
     for(let s=1;s<=maxStep;s++){
@@ -4595,6 +4595,7 @@ async function exportAdminExcel(){
         f.BPBizNo||'',
         f.BPCategory||'',
         fmtD(f.InvoiceDate),
+        xlText(f.PurposeTitle),
         xlText(f.Purpose),
         xlText(f.Detail),
         f.TotalDR_KRW||0,
@@ -4636,7 +4637,7 @@ async function exportAdminExcel(){
     }
 
     // 열 너비는 헤더 수와 반드시 같아야 한다. 이전에는 기본 13열에 11개만 지정되어 뒤쪽이 밀렸다.
-    const colW = [6,10,28,14,20,24,12,14,24,18,12,14,30,30,16,16,10,18,16,10,26,24,10,40];
+    const colW = [6,10,28,14,20,24,12,14,24,18,12,14,28,30,30,16,16,10,18,16,10,26,24,10,40];
     for(let s=0;s<maxStep;s++) colW.push(16,16,28,12,18,30);
     ws['!cols'] = colW.map(w=>({wch:w}));
 
