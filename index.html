@@ -595,6 +595,18 @@ if (new URLSearchParams(location.search).get('openId')) {
       <div class="section-title">3. Purpose / Description</div>
       <div class="form-row full">
         <div class="form-group">
+          <label>Purpose Title <span class="req">*</span>
+            <span style="font-size:11px;color:#a19f9d;font-weight:400;margin-left:4px">한 줄 요약 · 최대 80자</span>
+          </label>
+          <input type="text" id="v-purpose-title" maxlength="80"
+            placeholder="한 줄로 요약해주세요 (예: 2026년 5월 Daimler 부품 대금 지급)"
+            oninput="onPurposeTitleInput()" onpaste="setTimeout(onPurposeTitleInput,0)"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();}">
+          <div id="v-purpose-title-count" style="font-size:11px;color:#a19f9d;margin-top:3px;text-align:right">0 / 80</div>
+        </div>
+      </div>
+      <div class="form-row full">
+        <div class="form-group">
           <label>Purpose <span class="req">*</span></label>
           <textarea id="v-purpose" rows="2" placeholder="구체적으로 작성해주세요 (예: Order S May 2026 - Daimler 부품 대금)"></textarea>
         </div>
@@ -3316,6 +3328,25 @@ function closeSubmitProgress(){
 // 처리 중 이탈 방지 — 중간에 닫으면 교착 전표가 남는다
 window.addEventListener('beforeunload', e=>{ if(_spActive){ e.preventDefault(); e.returnValue=''; } });
 
+// Purpose Title은 한 줄 요약이다. 붙여넣기로 여러 줄이 들어오면 목록·상세에서 줄이 깨지므로
+// 줄바꿈은 공백으로 바꾸고, 남은 글자 수를 실시간으로 보여준다.
+function onPurposeTitleInput(){
+  const el = document.getElementById('v-purpose-title');
+  if(!el) return;
+  const cleaned = el.value.replace(/[\r\n\t]+/g,' ').replace(/\s{2,}/g,' ');
+  if(cleaned !== el.value){
+    const pos = el.selectionStart;
+    el.value = cleaned;
+    try { el.setSelectionRange(pos, pos); } catch(e){}
+  }
+  const c = document.getElementById('v-purpose-title-count');
+  if(c){
+    const n = el.value.length;
+    c.textContent = n + ' / 80';
+    c.style.color = n >= 80 ? '#a4262c' : (n >= 70 ? '#8a6116' : '#a19f9d');
+  }
+}
+
 async function saveVoucher(status) {
   await loadVolumeConfig();
   applyCurrentVolume(); // 신규 전표는 항상 "현재 활성 볼륨"에 저장 — 직전에 다른 볼륨 전표를 조회/처리했더라도 여기서 다시 현재 볼륨으로 고정
@@ -3327,6 +3358,9 @@ async function saveVoucher(status) {
     document.getElementById('rd-exempt-reason')?.focus();
     return;
   }
+  const purposeTitle=(document.getElementById('v-purpose-title')?.value||'').replace(/[\r\n\t]+/g,' ').trim();
+  if(!purposeTitle){alert('Purpose Title을 입력하세요.\n\n전표 목록에서 한눈에 구분할 수 있도록 한 줄로 요약해 주세요.');document.getElementById('v-purpose-title')?.focus();return;}
+  if(purposeTitle.length>80){alert('Purpose Title은 80자를 넘을 수 없습니다. (현재 '+purposeTitle.length+'자)');document.getElementById('v-purpose-title')?.focus();return;}
   const purpose=document.getElementById('v-purpose').value.trim();
   if(!purpose){alert('Purpose를 입력하세요.');return;}
   if(!lines.length){alert('회계 라인을 1개 이상 추가하세요.');return;}
@@ -3427,6 +3461,7 @@ async function saveVoucher(status) {
           'JPY:' + (parseFloat(document.getElementById('v-exrate-jpy')?.value)||0),
           'CNY:' + (parseFloat(document.getElementById('v-exrate-cny')?.value)||0),
         ].join(','),
+        PurposeTitle: purposeTitle,
         Purpose: purpose,
         LinesJSON: JSON.stringify(lines),
         TotalDR_KRW: drKrw,
@@ -4043,6 +4078,8 @@ async function loadExistingVoucher() {
     // Purpose — HTML 태그 제거
     const rawPurpose = f.Purpose||'';
     document.getElementById('v-purpose').value = rawPurpose.replace(/<[^>]*>/g,'').trim();
+  const _pt = document.getElementById('v-purpose-title');
+  if(_pt){ _pt.value = String(f.PurposeTitle||'').replace(/<[^>]*>/g,'').replace(/[\r\n\t]+/g,' ').trim(); onPurposeTitleInput(); }
     // 라인 복원
     try { lines = JSON.parse(f.LinesJSON||'[]'); } catch(e){ lines=[]; }
     renderLines();
@@ -4066,6 +4103,7 @@ function resetForm(){
   extraBPs=[]; _lineClipboard=null;
   // 추가 결재자도 반드시 초기화한다. 남겨두면 다음 전표에 이전 결재라인이 그대로 따라붙는다.
   extraApprovers=[]; _exSeq=0;
+  const _ptEl=document.getElementById('v-purpose-title'); if(_ptEl){ _ptEl.value=''; onPurposeTitleInput(); }
   _baseSel={};   // 보관해 둔 결재자 선택도 함께 비운다. 남겨두면 다음 전표에 그대로 따라붙는다.
   const pasteBtn=document.getElementById('btn-paste-line'); if(pasteBtn) pasteBtn.style.display='none';
   // RD 승인 제외 상태도 반드시 초기화한다.
@@ -5014,6 +5052,7 @@ async function openVoucherSP(spId, fromTab){
     })()}
 
     <div class="det-sec">Purpose / Description</div>
+    ${v.PurposeTitle ? row('Purpose Title', `<span style="font-weight:600">${escHtml(spText(v.PurposeTitle))}</span>`) : ''}
     ${row('Purpose', `<span style="white-space:pre-wrap">${escHtml(spText(v.Purpose))||'-'}</span>`)}
     ${v.RDExemptReason ? row('RD Approval Exemption — Reason Requested', `<span style="color:#8a6116;font-weight:600">${escHtml(spText(v.RDExemptReason).replace(/^RD\s*승인\s*제외\s*[—\-:]?\s*/,'').trim())}</span><div style="font-size:.7rem;color:#a19f9d;margin-top:2px">Requested by the requester; the RD approval step was excluded for this voucher.</div>`) : ''}
 
