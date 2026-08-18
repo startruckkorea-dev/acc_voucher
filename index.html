@@ -1144,10 +1144,14 @@ async function loadPkfAllowedAccIds() {
     (res.value || []).forEach(it => {
       const f = it.fields || {};
       if (!(f.PKFAssignees || '').toLowerCase().includes(me)) return;
-      const detail = String(f.Detail || '');
+      // SSC는 관련 티켓 참조를 RelatedTickets 전용 컬럼으로 옮겼다.
+      // (UAT/운영이 같은 리스트를 써서 Detail 본문에 토큰이 그대로 노출되던 문제 때문)
+      // SSC 자신도 'RelatedTickets || Detail' 순으로 읽으므로 같은 기준을 쓴다.
+      // 전용 컬럼 저장이 실패했을 때 Detail로 되살리는 3차 폴백도 있어, 두 곳을 모두 봐야 누락이 없다.
+      const src = String(f.RelatedTickets || '') + '\n' + String(f.Detail || '');
       const re = /\[[^:\]]+:ACC:(\d+)\]/g;
       let m;
-      while ((m = re.exec(detail)) !== null) ids.add(String(m[1]));
+      while ((m = re.exec(src)) !== null) ids.add(String(m[1]));
     });
     _pkfAllowedAccIds = ids;
   } catch (e) {
