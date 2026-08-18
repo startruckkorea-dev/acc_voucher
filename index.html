@@ -2111,7 +2111,8 @@ function mergeApprovalLine(apLine){
 }
 function addExtraApprover(anchor){
   if(extraApprovers.length >= MAX_EXTRA) return;  // 상한 도달 — 삽입선도 비활성 상태
-  extraApprovers.push({ uid:'ex'+(++_exSeq), after:anchor, name:'', email:'' });
+  // dept/team도 함께 보관한다. 보관하지 않으면 재렌더링 때 부서·팀 선택이 초기값으로 돌아간다.
+  extraApprovers.push({ uid:'ex'+(++_exSeq), after:anchor, dept:'', team:'', name:'', email:'' });
   renderApproval();
 }
 function removeExtraApprover(uid){
@@ -2127,6 +2128,7 @@ function exDeptChange(uid){
   teamSel.innerHTML='<option value="">팀</option>'+teams.map(t=>`<option value="${escHtmlAttr(t)}">${escHtmlAttr(t)}</option>`).join('');
   teamSel.disabled=!dept;
   perSel.innerHTML='<option value="">직원 선택</option>'; perSel.disabled=true;
+  const _x=extraApprovers.find(e=>e.uid===uid); if(_x){ _x.dept=dept; _x.team=''; }
   _exSet(uid,'','');
 }
 function exTeamChange(uid){
@@ -2136,6 +2138,7 @@ function exTeamChange(uid){
   const people=(window._employeeData||[]).filter(e=>e.dept===dept&&e.team===team);
   perSel.innerHTML='<option value="">직원 선택</option>'+people.map(p=>`<option value="${escHtmlAttr(p.email)}" data-name="${escHtmlAttr(p.name)}">${escHtmlAttr(p.name)}</option>`).join('');
   perSel.disabled=!team;
+  const _x=extraApprovers.find(e=>e.uid===uid); if(_x){ _x.team=team; }
   _exSet(uid,'','');
 }
 function exPersonChange(uid){
@@ -2413,7 +2416,8 @@ function renderApproval() {
     }
   });
   container.innerHTML = html;
-  restoreBaseSel();   // 다시 그리면서 지워진 TL/MC 선택을 되돌린다
+  restoreBaseSel();    // 다시 그리면서 지워진 TL/MC 선택을 되돌린다
+  restoreExtraSel();   // 추가 결재자의 부서·팀·직원 선택도 함께 되돌린다
 }
 // 기본 결재자 선택이 바뀌면 추가 결재자의 중복 안내만 갱신하면 되지만,
 // 중복 판정이 결재라인 전체를 보므로 renderApproval을 그대로 재사용한다.
@@ -2522,6 +2526,30 @@ function _saveBaseSel(order){
 }
 // 다시 그린 뒤 보관해 둔 선택을 되돌린다. 부서 → 팀 → 직원 순서대로 목록을 채워야 하므로
 // 화면에서 사용자가 고를 때와 같은 함수를 그대로 호출한다.
+// 추가 결재자의 부서/팀/직원 선택 복원. 기본 결재자와 같은 이유로, 보관값에서 되살린다.
+// 여기서는 exDeptChange 등을 호출하지 않는다 — 그 함수들이 선택을 비우고 재렌더를 부르기 때문이다.
+function restoreExtraSel(){
+  const EMP = window._employeeData || [];
+  extraApprovers.forEach(x => {
+    const dSel = document.getElementById(x.uid+'-dept');
+    const tSel = document.getElementById(x.uid+'-team');
+    const pSel = document.getElementById(x.uid+'-person');
+    if(!dSel || !tSel || !pSel || !x.dept) return;
+    dSel.value = x.dept;
+    const teams = [...new Set(EMP.filter(e=>e.dept===x.dept).map(e=>e.team))].sort();
+    tSel.innerHTML = '<option value="">팀</option>' +
+      teams.map(t=>`<option value="${escHtmlAttr(t)}">${escHtmlAttr(t)}</option>`).join('');
+    tSel.disabled = false;
+    if(!x.team) return;
+    tSel.value = x.team;
+    const people = EMP.filter(e=>e.dept===x.dept && e.team===x.team);
+    pSel.innerHTML = '<option value="">직원 선택</option>' +
+      people.map(p=>`<option value="${escHtmlAttr(p.email)}" data-name="${escHtmlAttr(p.name)}">${escHtmlAttr(p.name)}</option>`).join('');
+    pSel.disabled = false;
+    if(x.email) pSel.value = x.email;
+  });
+}
+
 function restoreBaseSel(){
   Object.keys(_baseSel).forEach(role => {
     const idx = _apRoles.indexOf(role);
