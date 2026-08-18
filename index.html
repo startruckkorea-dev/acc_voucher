@@ -693,9 +693,10 @@ if (new URLSearchParams(location.search).get('openId')) {
 
 <!-- ── 관리자 ── -->
 <div id="tab-admin" style="display:none">
-  <div id="it-vol-tools" style="display:none;justify-content:flex-end;align-items:center;margin-bottom:10px;gap:10px">
-    <div id="apr-vol-status" style="font-size:.76rem;color:#605e5c;background:#f3f2f1;border-radius:4px;padding:6px 12px;display:flex;align-items:center;gap:6px;white-space:nowrap">📦 결재이력 세대: 불러오는 중...</div>
-    <button id="btn-vol-manage" onclick="openVolumeModal()" style="padding:6px 14px;background:#5c2d91;color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer;white-space:nowrap">📦 Approvals 세대 관리</button>
+  <div id="it-vol-tools" style="display:none;justify-content:flex-end;align-items:center;margin-bottom:8px;gap:8px">
+    <span id="apr-vol-status" style="font-size:.72rem;color:#a19f9d;white-space:nowrap">불러오는 중...</span>
+    <button id="btn-vol-manage" onclick="openVolumeModal()" title="Approvals 리스트 세대를 추가하거나 전환합니다"
+      style="padding:3px 10px;background:#fff;color:#605e5c;border:1px solid #d2d0ce;border-radius:4px;font-size:.72rem;cursor:pointer;white-space:nowrap;font-family:inherit">세대 관리</button>
   </div>
   <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
     <select id="admin-status" onchange="applyAdminFilters()" style="border:1px solid #d2d0ce;border-radius:4px;padding:6px 10px;font-size:.72rem;font-family:inherit">
@@ -4296,8 +4297,10 @@ async function refreshVolStatusBar() {
     await loadVolumeConfig();
     const cur = getCurrentAprVolume();
     const n = (VOL_CONFIG.aprVolumes||[]).length;
-    el.textContent = `📦 결재이력 세대: ${cur ? (cur.label || cur.code) : '-'} (전체 ${n}개 세대 등록됨)`;
-  } catch(e) { el.textContent = '📦 결재이력 세대: 불러오기 실패'; }
+    // 이 줄은 IT 담당자에게만 보이는 참고 정보다. 눈에 띄면 오히려 목록에 방해가 되므로
+    // 아이콘·박스 없이 회색 한 줄로만 둔다.
+    el.textContent = `결재이력 ${cur ? (cur.label || cur.code) : '-'}${n>1 ? ` · 세대 ${n}` : ''}`;
+  } catch(e) { el.textContent = '결재이력 세대 확인 실패'; }
 }
 
 let _siteListsForVolume = null;
