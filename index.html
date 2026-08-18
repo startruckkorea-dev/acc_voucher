@@ -5064,9 +5064,9 @@ async function openVoucherSP(spId, fromTab){
           <div id="modal-posting-pending" style="display:none;font-size:.7rem;color:#8a6116;font-weight:600;margin-top:3px"></div>
         </div>
       </div>
-      <div style="background:#fdf6e3;border:1px solid #f0d9a0;border-radius:8px;padding:11px 14px;margin-bottom:10px">
-        <div style="font-size:.76rem;font-weight:700;color:#8a6116;margin-bottom:5px">⚠️ Posting status is driven by the B1 Doc No.</div>
-        <div style="font-size:.73rem;color:#8a6116;line-height:1.75">
+      <div style="background:#fdf6e3;border:1px solid #f0d9a0;border-radius:8px;padding:8px 12px;margin-bottom:8px">
+        <div style="font-size:.71rem;font-weight:700;color:#8a6116;margin-bottom:2px">⚠️ Posting status is driven by the B1 Doc No.</div>
+        <div style="font-size:.68rem;color:#8a6116;line-height:1.5">
           Leave the B1 Doc No. empty and the status stays <b>미완료</b> (default); enter a value and it turns <b>완료</b>.
           Posting cannot be set manually — it updates automatically as soon as the document number is saved.
         </div>
@@ -5089,9 +5089,9 @@ async function openVoucherSP(spId, fromTab){
         <textarea id="admin-comment-text" placeholder="의견을 입력해주세요..." rows="2" style="flex:1;border:1px solid #d2d0ce;border-radius:4px;padding:8px 10px;font-size:.78rem;font-family:inherit;resize:vertical"></textarea>
         <button onclick="submitAdminComment('${v._spId}')" style="padding:7px 16px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:.78rem;cursor:pointer;white-space:nowrap;height:fit-content">등록</button>
       </div>
-      <div style="background:#fdf6e3;border:1px solid #f0d9a0;border-radius:8px;padding:11px 14px;margin-top:10px">
-        <div style="font-size:.76rem;font-weight:700;color:#8a6116;margin-bottom:5px">⚠️ Comments are limited to assigned reviewers</div>
-        <div style="font-size:.73rem;color:#8a6116;line-height:1.75">
+      <div style="background:#fdf6e3;border:1px solid #f0d9a0;border-radius:8px;padding:8px 12px;margin-top:8px">
+        <div style="font-size:.71rem;font-weight:700;color:#8a6116;margin-bottom:2px">⚠️ Comments are limited to assigned reviewers</div>
+        <div style="font-size:.68rem;color:#8a6116;line-height:1.5">
           Only <b>ACC Voucher administrators</b> and the <b>PKF reviewer of the SSC ticket linked to this voucher</b> can view and post comments.
           Comments cannot be added once a voucher is <b>fully approved or withdrawn</b>, and each entry is recorded with its author and timestamp.
         </div>
