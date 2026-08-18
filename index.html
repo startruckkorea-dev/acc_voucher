@@ -144,6 +144,35 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 .line-step { display:inline-flex; align-items:center; gap:4px; margin-right:4px; }
 .line-step-badge { background:#0078d4; color:#fff; border-radius:10px; padding:1px 8px; font-size:11px; font-weight:700; }
 .line-step-badge.fixed { background:#107c10; }
+/* ── 추가 결재자 삽입선 ── */
+.appr-insert{
+  display:flex; align-items:center; gap:10px;
+  margin:2px 0 6px; padding:5px 2px; cursor:pointer;
+  border-radius:6px; transition:background .12s ease;
+}
+.appr-insert-line{
+  flex:1; height:0; border-top:2px dashed #b9c6d6; transition:border-color .12s ease;
+}
+.appr-insert-btn{
+  display:inline-flex; align-items:center; gap:5px; white-space:nowrap;
+  background:#fff; color:#0078d4; border:1.5px dashed #7fb4e0; border-radius:14px;
+  padding:3px 12px; font-size:11px; font-weight:700; letter-spacing:.2px;
+  transition:all .12s ease;
+}
+.appr-insert.is-full{ cursor:default; }
+.appr-insert.is-full .appr-insert-line{ border-top-color:#e1e1e1; }
+.appr-insert.is-full .appr-insert-btn{ color:#a19f9d; border-color:#dcdcdc; border-style:solid; font-weight:600; }
+.appr-insert.is-full:hover{ background:transparent; }
+.appr-insert:not(.is-full):hover{ background:#f0f6ff; }
+.appr-insert:hover .appr-insert-line{ border-top-color:#0078d4; }
+.appr-insert:hover .appr-insert-btn{ background:#0078d4; color:#fff; border-color:#0078d4; border-style:solid; }
+.appr-insert-plus{ font-size:14px; line-height:1; font-weight:800; }
+.appr-block.appr-extra{ background:#fffdf5; border-color:#e8cf8f; border-left:3px solid #d9a41a; }
+.btn-exdel{
+  float:right; background:#fff; color:#a4262c; border:1px solid #e6b3b3; border-radius:5px;
+  padding:3px 16px; font-size:10px; font-weight:600; cursor:pointer; line-height:1.4;
+}
+.btn-exdel:hover{ background:#a4262c; color:#fff; border-color:#a4262c; }
 .line-arrow { color:#a19f9d; font-size:13px; }
 
 /* ── Approval ── */
@@ -285,7 +314,6 @@ if (new URLSearchParams(location.search).get('openId')) {
   <div class="sl-text">상세 내용을 불러오는 중입니다</div>
   <div class="sl-sub">잠시만 기다려 주세요</div>
 </div>
-
 <div id="login-screen">
   <div class="login-card">
     <div class="login-logo">📝</div>
@@ -866,6 +894,23 @@ let lines  = Array.from({length:6}, () => ({drcr:'',gl:'',glName:'',cctr:'',cctr
 let currentGlIdx = null;
 let extraBPs = []; // "+BP 추가"로 넣은 추가 BP 목록 [{code,name,bizNo,category,_uid}]
 let accOverride = null; // Accounting 담당자를 수동으로 변경했을 때 {name,email} — null이면 AP/AR/GL 기본값 그대로 사용
+// ── 추가 결재자 (UAT 전용) ──────────────────────────────────────────
+// 부서마다 추가 결재 조건이 달라, 자동 구성된 BU 승인 구간에 결재자를 끼워 넣을 수 있게 한다.
+// after: 앞에 오는 BU 단계의 role. 1차(Team Lead) 앞에는 넣을 수 없고, 반드시 어떤 단계 뒤에만 붙는다.
+//        배열 순서가 같은 위치 안에서의 순서가 된다.
+// 값은 DOM이 아니라 이 배열에 보관한다 — 재렌더링해도 입력한 내용이 유지되도록.
+let extraApprovers = [];
+let _exSeq = 0;
+const BU_ROLES = ['TL','MC','CEO','RD']; // 추가 삽입이 허용되는 구간(회계 검토 구간은 규정상 고정)
+// RD는 BU 승인의 최종 단계다. 그 뒤는 회계 검토 구간으로 넘어가는 경계라 결재자를 끼워 넣을 수 없다.
+// 단, RD 승인 제외로 RD가 빠지면 그때의 마지막 BU 단계(보통 Department Head) 뒤에는 추가할 수 있어야 한다.
+const NO_INSERT_AFTER = ['RD'];
+// 추가 결재자 상한. 결재 단계가 지나치게 길어지는 것을 막기 위해 전표당 3명까지만 허용한다.
+const MAX_EXTRA = 3;
+const canInsertAfter = role => BU_ROLES.includes(role) && !NO_INSERT_AFTER.includes(role);
+// Approvals.ApproverRole 에 저장되는 값. 이 컬럼은 평문(단일 텍스트)이라 코드가 아닌 표기 문구를 그대로 넣는다.
+// 다른 역할은 TL/MC 같은 짧은 코드지만, 추가 결재자는 알림 메일과 APS 포털에서 별도 매핑 없이 읽혀야 하므로 예외를 둔다.
+const EXTRA_ROLE = 'Extra Approver';
 // 날짜전용 필드(InvoiceDate 등)를 KST 보정 후 YYYY-MM-DD로 표시 — SharePoint가 순수 날짜를 UTC 자정으로 해석해 저장하는 경우
 // 단순 slice(0,10)만 하면 하루 당겨져 보일 수 있어(SSC에서 동일 버그 발견/수정 이력 있음), 항상 이 함수를 통해 표시
 function fmtDateOnly(iso){
@@ -2028,6 +2073,96 @@ function evaluateBpCategoryWarning() {
   }
 }
 
+// ── 추가 결재자: 공통 로직 ─────────────────────────────────────────
+// 자동 구성된 라인(apLine)과 사용자가 끼워 넣은 결재자를 하나의 순서로 합친다.
+// renderApproval()과 buildApprovers()가 같은 함수를 쓰기 때문에 화면과 실제 상신 결과가 어긋나지 않는다.
+// 삽입이 허용되는 마지막 단계(= 앵커가 사라졌을 때 옮겨 붙일 자리). RD는 제외된다.
+function _buLast(apLine){
+  let last=null;
+  apLine.forEach(a=>{ if(canInsertAfter(a.role)) last=a.role; });
+  return last;
+}
+function mergeApprovalLine(apLine){
+  // 추가 결재자는 반드시 어떤 BU 단계 "뒤"에만 들어간다. 1차(Team Lead) 앞에는 넣을 수 없다.
+  // 앵커로 잡아둔 BU 단계가 사라진 경우(예: RD 제외 선택) 그 위치의 추가 결재자는
+  // 남아 있는 마지막 BU 단계 뒤로 옮겨 붙인다. 입력해 둔 내용이 조용히 사라지지 않도록.
+  const present = new Set(apLine.filter(a=>canInsertAfter(a.role)).map(a=>a.role));
+  const fallback = _buLast(apLine);
+  const at = anchor => extraApprovers.filter(x=>{
+    const a = present.has(x.after) ? x.after : fallback;
+    return a === anchor;
+  });
+  const out=[];
+  apLine.forEach((a,bi)=>{
+    out.push({kind:'base', a, baseIdx:bi+1});
+    if(canInsertAfter(a.role)) at(a.role).forEach(x=>out.push({kind:'extra', ex:x}));
+  });
+  return out;
+}
+function addExtraApprover(anchor){
+  if(extraApprovers.length >= MAX_EXTRA) return;  // 상한 도달 — 삽입선도 비활성 상태
+  extraApprovers.push({ uid:'ex'+(++_exSeq), after:anchor, name:'', email:'' });
+  renderApproval();
+}
+function removeExtraApprover(uid){
+  extraApprovers = extraApprovers.filter(x=>x.uid!==uid);
+  renderApproval();
+}
+// 추가 결재자 부서/팀/직원 3단 선택 — 기존 gwDeptChange 계열과 동일한 동작을 uid 기준으로 처리
+function exDeptChange(uid){
+  const dept=document.getElementById(uid+'-dept').value;
+  const teamSel=document.getElementById(uid+'-team');
+  const perSel=document.getElementById(uid+'-person');
+  const teams=[...new Set((window._employeeData||[]).filter(e=>e.dept===dept).map(e=>e.team))].sort();
+  teamSel.innerHTML='<option value="">팀</option>'+teams.map(t=>`<option value="${escHtmlAttr(t)}">${escHtmlAttr(t)}</option>`).join('');
+  teamSel.disabled=!dept;
+  perSel.innerHTML='<option value="">직원 선택</option>'; perSel.disabled=true;
+  _exSet(uid,'','');
+}
+function exTeamChange(uid){
+  const dept=document.getElementById(uid+'-dept').value;
+  const team=document.getElementById(uid+'-team').value;
+  const perSel=document.getElementById(uid+'-person');
+  const people=(window._employeeData||[]).filter(e=>e.dept===dept&&e.team===team);
+  perSel.innerHTML='<option value="">직원 선택</option>'+people.map(p=>`<option value="${escHtmlAttr(p.email)}" data-name="${escHtmlAttr(p.name)}">${escHtmlAttr(p.name)}</option>`).join('');
+  perSel.disabled=!team;
+  _exSet(uid,'','');
+}
+function exPersonChange(uid){
+  const sel=document.getElementById(uid+'-person');
+  const email=sel.value||'';
+  const name=sel.options[sel.selectedIndex]?.dataset.name||'';
+  _exSet(uid,name,email);
+}
+function _exSet(uid,name,email){
+  const x=extraApprovers.find(e=>e.uid===uid);
+  if(!x) return;
+  x.name=name; x.email=email;
+  const n=document.getElementById(uid+'-name'); if(n) n.value=name;
+  const m=document.getElementById(uid+'-email'); if(m) m.value=email;
+}
+function escHtmlAttr(s){
+  return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+// 삽입선 — 클릭하면 해당 위치에 결재자가 추가된다
+function _insertBar(anchor, label){
+  // 상한에 도달하면 선을 없애지 않고 비활성 상태로 남긴다.
+  // 갑자기 사라지면 사용자는 자리가 없어진 줄 알지만, 남겨두면 왜 못 누르는지 바로 알 수 있다.
+  const full = extraApprovers.length >= MAX_EXTRA;
+  if(full){
+    return `<div class="appr-insert is-full" title="추가 결재자는 최대 ${MAX_EXTRA}명까지 지정할 수 있습니다">
+      <span class="appr-insert-line"></span>
+      <span class="appr-insert-btn">Maximum ${MAX_EXTRA} reached</span>
+      <span class="appr-insert-line"></span>
+    </div>`;
+  }
+  return `<div class="appr-insert" onclick="addExtraApprover('${anchor}')" title="${escHtmlAttr(label)}">
+    <span class="appr-insert-line"></span>
+    <span class="appr-insert-btn"><span class="appr-insert-plus">+</span> 결재자 추가</span>
+    <span class="appr-insert-line"></span>
+  </div>`;
+}
+
 function renderApproval() {
   const type = document.getElementById('v-type').value;
   const rules = APPROVAL_RULES[type]||{};
@@ -2094,18 +2229,53 @@ function renderApproval() {
   }
 
   preview.style.display='block';
+  const merged = mergeApprovalLine(apLine);
   previewContent.innerHTML =
     `<div style="font-weight:600;color:#0078d4;margin-bottom:6px">📋 결재 라인 (Voucher Type & 금액 기준 자동 구성)</div>`+
     `<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">`+
-    apLine.map((a,i)=>
-      `<span class="line-step"><span class="line-step-badge ${a.fixed?'fixed':''}">${i+1}차</span><span style="font-size:.75rem">${a.label}</span>${i<apLine.length-1?'<span class="line-arrow">→</span>':''}</span>`
-    ).join('')+
-    `</div>`;
+    merged.map((m,i)=>{
+      const isEx = m.kind==='extra';
+      const label = isEx ? (m.ex.name ? escHtmlAttr(m.ex.name)+' (추가)' : '추가 결재자 (미지정)') : m.a.label;
+      const cls = isEx ? 'extra' : (m.a.fixed ? 'fixed' : '');
+      return `<span class="line-step"><span class="line-step-badge ${cls}" ${isEx?'style="background:#d9a41a"':''}>${i+1}차</span><span style="font-size:.75rem">${label}</span>${i<merged.length-1?'<span class="line-arrow">→</span>':''}</span>`;
+    }).join('')+
+    `</div>`+
+    `<div style="margin-top:9px;padding-top:8px;border-top:1px dashed #c7e0f4;font-size:11px;line-height:1.55;color:#605e5c">
+      <div style="font-weight:700;color:#0b5fa5;margin-bottom:2px">Adding an Additional Approver</div>
+      <div style="margin-bottom:5px">Approval requirements differ by department. If your department requires approval beyond the standard line above,
+      click the dashed <span style="color:#0078d4;font-weight:700">＋ 결재자 추가</span> line below to insert an additional approver at that exact position.</div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px;line-height:1.5">
+        <tr><td style="padding:4px 10px 4px 0;border-bottom:1px solid #dbe7f3;vertical-align:top;white-space:nowrap;font-weight:700;color:#0b5fa5">Where</td><td style="padding:4px 8px;border-bottom:1px solid #dbe7f3;vertical-align:top">Within BU approval only — after Team Lead, and up to the step before RD. Accounting review steps are fixed by policy.</td></tr>
+        <tr><td style="padding:4px 10px 4px 0;border-bottom:1px solid #dbe7f3;vertical-align:top;white-space:nowrap;font-weight:700;color:#0b5fa5">How</td><td style="padding:4px 8px;border-bottom:1px solid #dbe7f3;vertical-align:top">Select Department → Team → Employee, the same way as the 1st and 2nd approver.</td></tr>
+        <tr><td style="padding:4px 10px 4px 0;border-bottom:1px solid #dbe7f3;vertical-align:top;white-space:nowrap;font-weight:700;color:#0b5fa5">Order</td><td style="padding:4px 8px;border-bottom:1px solid #dbe7f3;vertical-align:top">Approval runs top to bottom. Later steps shift down by one, and each approver is notified only after the previous step is approved.</td></tr>
+        <tr><td style="padding:4px 10px 4px 0;border-bottom:1px solid #dbe7f3;vertical-align:top;white-space:nowrap;font-weight:700;color:#0b5fa5">Scope</td><td style="padding:4px 8px;border-bottom:1px solid #dbe7f3;vertical-align:top">Applies to this voucher only. Use <span style="color:#a4262c;font-weight:700">✕ 삭제</span> to remove it before submitting.</td></tr><tr><td style="padding:4px 10px 4px 0;border-bottom:1px solid #dbe7f3;vertical-align:top;white-space:nowrap;font-weight:700;color:#0b5fa5">Limit</td><td style="padding:4px 8px;border-bottom:1px solid #dbe7f3;vertical-align:topborder-bottom:none">Up to <b>${MAX_EXTRA}</b> additional approvers per voucher (<b>${extraApprovers.length} of ${MAX_EXTRA}</b> used). Once the limit is reached, the dashed lines are disabled until you remove one.</td></tr>
+      </table>
+    </div>`;
 
   const depts=[...new Set((window._employeeData||[]).map(e=>e.dept))].sort();
-  const deptOpts=depts.map(d=>`<option value="${d}">${d}</option>`).join('');
-  container.innerHTML = apLine.map((a,i)=>{
-    const order=i+1;
+  const deptOpts=depts.map(d=>`<option value="${escHtmlAttr(d)}">${escHtmlAttr(d)}</option>`).join('');
+
+  // 추가 결재자 칸 — 부서/팀/직원 3단 선택은 기본 결재자와 동일한 방식
+  const renderExtra=(x,disp)=>{
+    const dSel = x.name ? '' : '';
+    return `<div class="appr-block appr-extra">
+      <div class="appr-block-title">${disp}차 결재자 <span class="req-mark">*</span>
+        <span style="font-size:10px;color:#8a6116;background:#fdf3d6;border-radius:10px;padding:1px 6px;margin-left:4px">추가 지정</span>
+        <span class="hint">— 부서 추가 결재</span>
+        <span class="btn-exdel" onclick="removeExtraApprover('${x.uid}')">✕ 삭제</span>
+      </div>
+      <div class="appr-select-row">
+        <select id="${x.uid}-dept" onchange="exDeptChange('${x.uid}')"><option value="">부서</option>${deptOpts}</select>
+        <select id="${x.uid}-team" onchange="exTeamChange('${x.uid}')" disabled><option value="">팀</option></select>
+        <select id="${x.uid}-person" onchange="exPersonChange('${x.uid}')" disabled><option value="">직원 선택</option></select>
+      </div>
+      <div class="appr-info">
+        <input type="text"  id="${x.uid}-name"  value="${escHtmlAttr(x.name)}"  readonly placeholder="이름">
+        <input type="email" id="${x.uid}-email" value="${escHtmlAttr(x.email)}" readonly placeholder="이메일">
+      </div></div>`;
+  };
+
+  const renderBase=(a,order,disp)=>{
     const fixedTag = a.fixed
       ? `<span style="font-size:10px;color:#107c10;background:#dff6dd;border-radius:10px;padding:1px 6px;margin-left:4px">자동 지정</span>`
       : `<span style="font-size:10px;color:#8a6914;background:#fff4ce;border-radius:10px;padding:1px 6px;margin-left:4px">직접 선택</span>`;
@@ -2121,12 +2291,12 @@ function renderApproval() {
       const _dupWarn = (accOverride && AMGR.email && accOverride.email.toLowerCase()===AMGR.email.toLowerCase())
         ? `<div style="margin-top:7px;font-size:11px;line-height:1.6;color:#8a6116;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:6px;padding:7px 10px">
              <b>⚠️ Duplicate approval</b> — this person is also the Accounting Head, so the same person would approve
-             at step ${order} and again at the next step. Select a different member, or use
+             at step ${disp} and again at the next step. Select a different member, or use
              <b>[Accounting Approval Line]</b> above if this voucher is submitted by the Accounting team.
            </div>`
         : '';
       return `<div class="appr-block appr-fixed">
-        <div class="appr-block-title">${order}차 결재자${overrideTag} <span class="hint">— ${a.label}</span>
+        <div class="appr-block-title">${disp}차 결재자${overrideTag} <span class="hint">— ${a.label}</span>
           <span class="btn-change" id="acc-change-btn-${order}" onclick="accToggleManual(${order})">✎ 담당자 변경</span>${resetBtn}
         </div>
         <div class="appr-info" id="acc-fixed-view-${order}">
@@ -2142,14 +2312,14 @@ function renderApproval() {
         </div></div>`;
     } else if(a.fixed){
       return `<div class="appr-block appr-fixed">
-        <div class="appr-block-title">${order}차 결재자${fixedTag} <span class="hint">— ${a.label}</span></div>
+        <div class="appr-block-title">${disp}차 결재자${fixedTag} <span class="hint">— ${a.label}</span></div>
         <div class="appr-info">
           <input type="text"  value="${a.person.name}"  readonly placeholder="이름">
           <input type="email" value="${a.person.email}" readonly placeholder="이메일">
         </div></div>`;
     } else {
       return `<div class="appr-block">
-        <div class="appr-block-title">${order}차 결재자 <span class="req-mark">*</span>${fixedTag} <span class="hint">— ${a.label}</span></div>
+        <div class="appr-block-title">${disp}차 결재자 <span class="req-mark">*</span>${fixedTag} <span class="hint">— ${a.label}</span></div>
         <div class="appr-select-row">
           <select id="ga${order}-dept" onchange="gwDeptChange(${order})"><option value="">부서</option>${deptOpts}</select>
           <select id="ga${order}-team" onchange="gwTeamChange(${order})" disabled><option value="">팀</option></select>
@@ -2160,7 +2330,27 @@ function renderApproval() {
           <input type="email" id="ga${order}-email" readonly placeholder="이메일">
         </div></div>`;
     }
-  }).join('');
+  };
+
+  // 화면 조립 — 기본 결재자의 id는 자동 구성 라인에서의 순번(order)을 그대로 유지한다.
+  // 추가 결재자가 끼어들어도 gwDeptChange/buildApprovers가 참조하는 id가 흔들리지 않게 하기 위함이며,
+  // 사용자에게 보이는 차수(disp)만 합쳐진 순서로 표시한다.
+  const _present = new Set(apLine.filter(a=>canInsertAfter(a.role)).map(a=>a.role));
+  const _fallback = _buLast(apLine);
+  const _at = anchor => extraApprovers.filter(x=>{
+    const t = _present.has(x.after) ? x.after : _fallback;
+    return t === anchor;
+  });
+  let html=''; let disp=0;
+  apLine.forEach((a,bi)=>{
+    disp++;
+    html += renderBase(a, bi+1, disp);
+    if(canInsertAfter(a.role)){
+      _at(a.role).forEach(x=>{ disp++; html += renderExtra(x,disp); });
+      html += _insertBar(a.role, a.label+' 다음에 결재자 추가');
+    }
+  });
+  container.innerHTML = html;
 }
 
 // Accounting 담당자 "직접 변경" 토글 — 자동표시 뷰 숨기고 부서/팀/직원 선택 뷰 노출
@@ -2944,6 +3134,13 @@ async function saveVoucher(status) {
   if(status==='대기'){
     const missing = approvers.filter(a=>!a.email);
     if(missing.length){
+      // 추가 결재자는 사용자가 직접 넣은 칸이므로, 원인을 바로 알 수 있게 따로 안내한다.
+      const exMissing = missing.filter(a=>a.role===EXTRA_ROLE);
+      if(exMissing.length){
+        alert('추가한 결재자 '+exMissing.length+'명의 직원 선택이 비어 있습니다.\n\n'
+          +exMissing.map(a=>a.order+'차').join(', ')+' 칸에서 부서 → 팀 → 직원을 선택하거나, 필요 없으면 ✕ 삭제해 주세요.');
+        return;
+      }
       alert('다음 결재자 정보를 불러오지 못해 제출할 수 없습니다: '+missing.map(a=>a.role).join(', ')+
         '\n\nTL/MC는 결재라인에서 직접 선택해주세요.\nRD/Accounting/CFO 및 AP·AR·GL 담당자는 system_config_final.xlsx 설정을 확인하거나 관리자에게 문의해주세요.');
       return;
@@ -3143,14 +3340,23 @@ function buildApprovers() {
     apLine.push({fixed:true,role:'AMGR',person:AMGR});
     if(needed(rules.CFO,drKrw)) apLine.push({fixed:true,role:'CFO',person:CFO});
   }
+  // 화면(renderApproval)과 동일한 병합 로직을 써서, 보이는 순서와 실제 저장되는 순서가 어긋나지 않게 한다.
+  const merged = mergeApprovalLine(apLine);
   const result=[];
-  apLine.forEach((a,i)=>{
+  merged.forEach((m,i)=>{
     const order=i+1;
+    if(m.kind==='extra'){
+      // ApproverRole은 평문 컬럼이라 코드 대신 표기 문구를 그대로 저장한다.
+      // Power Automate 알림 메일의 "Your Role:"과 APS 통합 포털에 별도 매핑 없이 그대로 노출된다.
+      result.push({role: EXTRA_ROLE, name:m.ex.name||'TBD', email:m.ex.email||'', order});
+      return;
+    }
+    const a=m.a, baseOrder=m.baseIdx;
     if(a.fixed){
       result.push({role:a.role,name:a.person.name||'',email:a.person.email||'',order});
     } else {
-      const nm=(document.getElementById('ga'+order+'-name')||{}).value||'';
-      const em=(document.getElementById('ga'+order+'-email')||{}).value||'';
+      const nm=(document.getElementById('ga'+baseOrder+'-name')||{}).value||'';
+      const em=(document.getElementById('ga'+baseOrder+'-email')||{}).value||'';
       result.push({role:a.role,name:nm||'TBD',email:em,order});
     }
   });
@@ -3528,6 +3734,8 @@ function resetForm(){
   document.getElementById('voucher-id-badge').textContent='';
   accFiles=[]; renderAccFiles();
   extraBPs=[]; _lineClipboard=null;
+  // 추가 결재자도 반드시 초기화한다. 남겨두면 다음 전표에 이전 결재라인이 그대로 따라붙는다.
+  extraApprovers=[]; _exSeq=0;
   const pasteBtn=document.getElementById('btn-paste-line'); if(pasteBtn) pasteBtn.style.display='none';
   // RD 승인 제외 상태도 반드시 초기화한다.
   // 빠뜨리면 이전 전표에서 켜둔 제외가 다음 전표에 그대로 남아,
@@ -4627,7 +4835,11 @@ async function loadApprovalHistory(spId){
     // Approvals에는 ApproverRole='CEO' 행이 남아 있어 결재 이력 표시를 위해 매핑을 유지한다.
     CEO:'CEO', RD:'RD', CTRL:'Controlling Head',
     AMGR:'Accounting Head', CFO:'CFO',
-    ACC_AP:'AP 담당자', ACC_AR:'AR 담당자', ACC_GL:'GL 담당자', ACC:'담당자'
+    ACC_AP:'AP 담당자', ACC_AR:'AR 담당자', ACC_GL:'GL 담당자', ACC:'담당자',
+    // 신청자가 BU 승인 구간에 직접 끼워 넣은 결재자
+    // 'Extra Approver'는 저장값 자체가 표기 문구라 매핑 없이 그대로 표시된다.
+    // 아래 EXTRA는 표기 변경 전 UAT 테스트로 생성된 행을 위해 남겨둔다.
+    EXTRA:'Extra Approver'
   };
   const fmtDate = s => s ? new Date(s).toLocaleString('ko-KR',{year:'2-digit',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}) : '';
   try{
