@@ -5773,9 +5773,14 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
         '<td style="'+lblB+'">Currency</td><td style="'+lblB+'">Total Amount</td>'+
       '</tr>'+
       '<tr>'+
-        '<td colspan="2" style="'+cellB+';padding:8px;white-space:pre-wrap;min-height:34px">'+
-                  (v.PurposeTitle ? '<div style="font-weight:700;margin-bottom:3px">'+esc(spText(v.PurposeTitle))+'</div>' : '')+
-                  (esc(v.Purpose)||'-')+'</td>'+
+        '<td colspan="2" style="'+cellB+';padding:7px 8px;white-space:pre-wrap;min-height:34px">'+
+                  // 라벨은 'Purpose' 하나뿐이라 제목과 본문이 그냥 이어지면 구분이 안 된다.
+                  // 표 구조는 건드리지 않고, 셀 안에서만 제목 → 옅은 구분선 → 본문 순으로 위계를 준다.
+                  (v.PurposeTitle
+                    ? '<div style="font-weight:700;font-size:11.5px;line-height:1.35">'+esc(spText(v.PurposeTitle))+'</div>'
+                      +'<div style="border-top:1px dotted #bbb;margin:4px 0 5px"></div>'
+                    : '')+
+                  '<div style="font-size:10.5px;line-height:1.5;color:#222">'+(esc(v.Purpose)||'-')+'</div>'+'</td>'+
         '<td style="'+cellB+'">'+hdrCurrency+'</td><td style="'+cellB+';text-align:right;font-weight:700">'+hdrTotalAmount+'</td>'+
       '</tr>'+
       '<tr>'+
