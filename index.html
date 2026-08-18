@@ -295,6 +295,35 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 .spinner { width: 32px; height: 32px; border: 3px solid #edebe9; border-top: 3px solid #0078d4; border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ── 상신 진행 모달 ── */
+/* 상신은 쓰기가 12번 나뉘어 있어 중간에 끊기면 전표만 남고 결재선이 없는 상태가 된다.
+   어느 단계에서 멈췄는지 사용자와 IT가 바로 알 수 있도록 단계별로 보여준다. */
+#submit-progress { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:1200;
+  align-items:center; justify-content:center; }
+#submit-progress.show { display:flex; }
+.sp-box { background:#fff; border-radius:10px; padding:24px 26px 20px; width:400px; max-width:92%;
+  box-shadow:0 4px 24px rgba(0,0,0,.2); }
+.sp-title { font-size:1rem; font-weight:700; color:#323130; display:flex; align-items:center; gap:8px; }
+.sp-sub { font-size:.72rem; color:#605e5c; margin-top:3px; }
+.sp-steps { margin:16px 0 4px; }
+.sp-step { display:flex; align-items:center; gap:9px; padding:6px 0; font-size:.8rem; color:#a19f9d; }
+.sp-step .ic { width:16px; text-align:center; flex:0 0 16px; font-size:.8rem; }
+.sp-step .nm { flex:1; }
+.sp-step .ct { font-size:.72rem; color:#a19f9d; font-variant-numeric:tabular-nums; }
+.sp-step.run { color:#323130; font-weight:600; }
+.sp-step.ok  { color:#605e5c; }
+.sp-step.ok .ic { color:#107c10; }
+.sp-step.err { color:#a4262c; font-weight:600; }
+.sp-step.err .ic { color:#a4262c; }
+.sp-spin { width:13px; height:13px; border:2px solid #edebe9; border-top:2px solid #0078d4;
+  border-radius:50%; animation:spin .7s linear infinite; display:inline-block; }
+.sp-note { font-size:.72rem; line-height:1.6; border-radius:6px; padding:9px 11px; margin-top:12px; }
+.sp-note.warn { background:#fdf6e3; border:1px solid #f0d9a0; color:#8a6116; }
+.sp-note.info { background:#f0f6ff; border:1px solid #c7e0f4; color:#0b5fa5; }
+.sp-btn { margin-top:14px; text-align:right; }
+.sp-btn button { background:#0078d4; color:#fff; border:none; border-radius:5px; padding:7px 18px;
+  font-size:.8rem; cursor:pointer; font-family:inherit; }
+
 @media (max-width: 600px) {
   .form-row { grid-template-columns: 1fr; }
   .form-row.three, .form-row.four { grid-template-columns: 1fr 1fr; }
@@ -878,6 +907,17 @@ if (new URLSearchParams(location.search).get('openId')) {
 </div>
 
 <div id="dyn-loading"><div class="spinner"></div><span style="font-size:13px;color:#605e5c">처리 중...</span></div>
+
+<!-- 상신 진행 모달 — 처리 중에는 화면을 덮어 다른 조작을 막고, 단계별 진행을 보여준다 -->
+<div id="submit-progress">
+  <div class="sp-box">
+    <div class="sp-title"><span id="sp-icon">📤</span><span id="sp-heading">전표 상신 중</span></div>
+    <div class="sp-sub" id="sp-vid">&nbsp;</div>
+    <div class="sp-steps" id="sp-steps"></div>
+    <div id="sp-note"></div>
+    <div class="sp-btn" id="sp-close" style="display:none"><button onclick="closeSubmitProgress()">확인</button></div>
+  </div>
+</div>
 
 <!-- ── 결재함 ── -->
 
@@ -3183,6 +3223,98 @@ function renderAccFiles(){
 }
 
 
+// 결재선이 불완전하게 만들어진 전표를 결재 흐름에서 빼낸다.
+// 삭제하지 않는 이유: 감사 흔적을 남기고, 이미 올라간 첨부파일도 그대로 보존하기 위함.
+// '철회'는 기존에 쓰던 상태값이라 APS·목록·통계가 이미 종료 상태로 처리한다.
+async function rollbackIncompleteVoucher(requestId, voucherId, made, total){
+  let ok = false;
+  try {
+    // 만들어진 결재 행을 먼저 잠가 결재자에게 노출되지 않게 한다
+    try {
+      const rows = await apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_APPROVALS}/items?$expand=fields&$top=50&$filter=fields/RequestID eq ${parseInt(requestId)}`);
+      for(const it of (rows.value||[])){
+        await api(`/sites/${siteId}/lists/${LIST_APPROVALS}/items/${it.id}/fields`, 'PATCH', {Status:'철회(잠김)'});
+      }
+    } catch(e){ console.warn('[상신] 결재 행 잠금 실패:', e && e.message); }
+    // 처리 경위를 남긴다
+    try {
+      const cur = await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${requestId}/fields`);
+      let log = []; try { log = JSON.parse(cur.AdminComments||'[]'); } catch(_){ log = []; }
+      const n = new Date(new Date().getTime()+9*3600*1000);
+      const p = x=>String(x).padStart(2,'0');
+      log.push({ kind:'withdraw', email:user?.email||user?.username||'',
+        date:`${n.getUTCFullYear()}-${p(n.getUTCMonth()+1)}-${p(n.getUTCDate())} ${p(n.getUTCHours())}:${p(n.getUTCMinutes())}`,
+        text:`Auto-withdrawn: approval line was incomplete (${made} of ${total} steps created).` });
+      await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${requestId}/fields`, 'PATCH', {AdminComments: JSON.stringify(log)});
+    } catch(e){ console.warn('[상신] 처리 경위 기록 실패:', e && e.message); }
+    await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${requestId}/fields`, 'PATCH', {Status:'철회'});
+    ok = true;
+  } catch(e){ console.error('[상신] 자동 철회 실패:', e && e.message); }
+
+  spDone(false, ok
+    ? `결재선이 ${made}/${total}단계만 만들어져 이 전표(<b>${voucherId}</b>)는 자동으로 <b>철회</b> 처리했습니다.<br>`
+      + '결재는 시작되지 않았으니 <b>다시 상신해 주세요.</b> 입력하신 내용은 화면에 그대로 남아 있습니다.'
+    : `결재선이 ${made}/${total}단계만 만들어졌고 자동 철회에도 실패했습니다.<br>`
+      + `<b>다시 상신하지 마시고</b> IT팀(stk_it@hyosung.com)에 <b>${voucherId}</b>를 알려주세요.`);
+}
+
+// ══ 상신 진행 모달 ═══════════════════════════════════════════════════
+// 상신은 전표 생성 → 번호 확정 → 첨부 업로드 → 첨부 연결 → 결재선 생성으로 이어지는
+// 여러 번의 쓰기다. 중간에 끊기면 전표만 남고 결재선이 없는 교착 상태가 되므로,
+// 진행 중에는 화면을 덮어 다른 조작을 막고 어느 단계에서 멈췄는지 보여준다.
+const SP_STEPS = [
+  { key:'req',  name:'전표 생성' },
+  { key:'id',   name:'전표 번호 확정' },
+  { key:'file', name:'첨부파일 업로드' },
+  { key:'link', name:'첨부파일 연결' },
+  { key:'appr', name:'결재선 생성' },
+];
+let _spState = {};
+let _spActive = false;
+
+function _spRender(){
+  const el = document.getElementById('sp-steps');
+  if(!el) return;
+  el.innerHTML = SP_STEPS.map(s=>{
+    const st = _spState[s.key] || {};
+    if(st.skip) return '';
+    const cls = st.status==='ok'?'ok':st.status==='run'?'run':st.status==='err'?'err':'';
+    const ic  = st.status==='ok'?'✅':st.status==='err'?'❌'
+              : st.status==='run'?'<span class="sp-spin"></span>':'○';
+    return `<div class="sp-step ${cls}"><span class="ic">${ic}</span><span class="nm">${s.name}</span><span class="ct">${st.count||''}</span></div>`;
+  }).join('');
+}
+function spStart(){
+  _spState = {}; _spActive = true;
+  document.getElementById('sp-icon').textContent = '📤';
+  document.getElementById('sp-heading').textContent = '전표 상신 중';
+  document.getElementById('sp-vid').innerHTML = '&nbsp;';
+  document.getElementById('sp-note').innerHTML =
+    '<div class="sp-note info">처리가 끝날 때까지 창을 닫거나 새로고침하지 마세요.</div>';
+  document.getElementById('sp-close').style.display = 'none';
+  _spRender();
+  document.getElementById('submit-progress').classList.add('show');
+}
+function spStep(key, status, count){
+  _spState[key] = { ...(_spState[key]||{}), status, ...(count!==undefined?{count}:{}) };
+  _spRender();
+}
+function spSkip(key){ _spState[key] = { skip:true }; _spRender(); }
+function spVid(v){ const el=document.getElementById('sp-vid'); if(el) el.textContent = v||''; }
+// 성공/실패 마무리 — 실패 시에는 이미 만들어진 전표를 어떻게 했는지까지 알려준다
+function spDone(ok, note){
+  _spActive = false;
+  document.getElementById('sp-icon').textContent = ok ? '✅' : '⚠️';
+  document.getElementById('sp-heading').textContent = ok ? '상신이 완료되었습니다' : '상신을 완료하지 못했습니다';
+  document.getElementById('sp-note').innerHTML = note ? `<div class="sp-note ${ok?'info':'warn'}">${note}</div>` : '';
+  document.getElementById('sp-close').style.display = 'block';
+}
+function closeSubmitProgress(){
+  document.getElementById('submit-progress').classList.remove('show');
+}
+// 처리 중 이탈 방지 — 중간에 닫으면 교착 전표가 남는다
+window.addEventListener('beforeunload', e=>{ if(_spActive){ e.preventDefault(); e.returnValue=''; } });
+
 async function saveVoucher(status) {
   await loadVolumeConfig();
   applyCurrentVolume(); // 신규 전표는 항상 "현재 활성 볼륨"에 저장 — 직전에 다른 볼륨 전표를 조회/처리했더라도 여기서 다시 현재 볼륨으로 고정
@@ -3303,12 +3435,17 @@ async function saveVoucher(status) {
         TotalSteps: status==='대기'?approvers.length:0
       }
     };
+    if(status==='대기') spStart();
+    if(status==='대기') spStep('req','run');
     const reqRes = await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items`, 'POST', reqBody);
     const requestId = reqRes.id;
+    if(status==='대기') spStep('req','ok');
 
     // Title을 GW 방식(ACC-Voucher-YYYY-MM-DD_ID-{itemId})으로 재설정
+    if(status==='대기') spStep('id','run');
     voucherId = 'ACC-Voucher-'+dateStr+'_ID-'+requestId;
     await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${requestId}/fields`, 'PATCH', {Title: voucherId});
+    if(status==='대기'){ spStep('id','ok'); spVid('Voucher ID: '+voucherId); }
 
     // Accounting 결재라인 지정(회계 담당자 단계 제외) 기록 — RD 제외와 동일하게 감사 근거로 남긴다.
     if (isAccLineSkipped()) {
@@ -3365,8 +3502,10 @@ async function saveVoucher(status) {
     //    업로드는 됐는데 연결만 실패하면 라이브러리에 파일은 있고 화면엔 "첨부파일 없음"으로 보인다.
     //    예전에는 이 실패를 콘솔에만 남겨 사용자가 알 방법이 없었다. 이제는 상신 완료 안내에 함께 알린다.
     let _attWarn = '';
+    if(!accFiles.length && status==='대기'){ spSkip('file'); spSkip('link'); }
     if(accFiles.length){
       const _failedUploads = [];
+      if(status==='대기') spStep('file','run', '0 / '+accFiles.length);
       try{
         const drivesData=await api(`/sites/${siteId}/drives`);
         const drive=drivesData.value.find(d=>d.name==='AttachedFiles')||drivesData.value[0];
@@ -3383,16 +3522,21 @@ async function saveVoucher(status) {
               const u=await res.json();
               const safeKey=btoa(unescape(encodeURIComponent(drive.id+'###'+u.id)));
               links.push(file.name+'||ENC||'+safeKey);
+              if(status==='대기') spStep('file','run', links.length+' / '+accFiles.length);
             } else {
               _failedUploads.push(file.name);
               console.error('[첨부] 업로드 실패:', file.name, res.status);
             }
           }catch(fe){ _failedUploads.push(file.name); console.error('[첨부] 업로드 오류:', file.name, fe && fe.message); }
         }
+        if(status==='대기') spStep('file', _failedUploads.length?'err':'ok', links.length+' / '+accFiles.length);
         if(links.length){
+          if(status==='대기') spStep('link','run');
           try{
             await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${requestId}/fields`,'PATCH',{AttachmentRef:links.join(';')});
+            if(status==='대기') spStep('link','ok');
           }catch(pe){
+            if(status==='대기') spStep('link','err');
             // 파일은 올라갔는데 전표 연결만 실패한 경우 — 데이터는 남아 있으므로 복구 가능하다.
             console.error('[첨부] 전표 연결 실패:', pe && pe.message);
             _attWarn = `파일 ${links.length}건은 업로드됐지만 전표에 연결되지 않았습니다.\n`
@@ -3410,30 +3554,72 @@ async function saveVoucher(status) {
     }
 
     // 3. 대기 상태면 Approvals에 결재자 행 INSERT (1번째만 '대기', 나머지는 '대기(잠김)')
+    //    여기서 중간에 끊기면 결재선이 불완전해진다. 그 상태로 두면 마지막에 생성된 단계까지만
+    //    결재가 진행된 뒤 '승인완료'로 마감되어, 남은 결재자를 건너뛴 채 승인된 전표가 된다.
+    //    그래서 실패하면 전표를 철회 처리해 결재 흐름에서 빼고 재상신을 안내한다.
     if(status==='대기') {
-      for(let i=0;i<approvers.length;i++){
-        const ap=approvers[i];
-        await api(`/sites/${siteId}/lists/${LIST_APPROVALS}/items`, 'POST', {
-          fields: {
-            Title: voucherId+'_'+(i+1),
-            RequestID: parseInt(requestId),
-            VoucherID: voucherId,
-            ApproverEmail: ap.email,
-            ApproverName: ap.name,
-            ApproverRole: ap.role,
-            ApprovalOrder: i+1,
-            Status: i===0 ? '대기' : '대기(잠김)'
-          }
-        });
+      spStep('appr','run','0 / '+approvers.length);
+      let _made = 0;
+      try {
+        for(let i=0;i<approvers.length;i++){
+          const ap=approvers[i];
+          await api(`/sites/${siteId}/lists/${LIST_APPROVALS}/items`, 'POST', {
+            fields: {
+              Title: voucherId+'_'+(i+1),
+              RequestID: parseInt(requestId),
+              VoucherID: voucherId,
+              ApproverEmail: ap.email,
+              ApproverName: ap.name,
+              ApproverRole: ap.role,
+              ApprovalOrder: i+1,
+              Status: i===0 ? '대기' : '대기(잠김)'
+            }
+          });
+          _made++;
+          spStep('appr','run', _made+' / '+approvers.length);
+        }
+      } catch(ae) {
+        spStep('appr','err', _made+' / '+approvers.length);
+        console.error('[상신] 결재선 생성 실패:', ae && ae.message);
+        await rollbackIncompleteVoucher(requestId, voucherId, _made, approvers.length);
+        if(btn){btn.disabled=false; btn.textContent='Submit';}
+        return;   // 완료 안내로 넘어가지 않는다
+      }
+      // 만들어진 행 수를 서버에서 다시 세어 확인한다. POST가 200을 받고도 반영되지 않는 경우를 잡는다.
+      try {
+        const _chk = await apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_APPROVALS}/items?$expand=fields&$top=50&$filter=fields/RequestID eq ${parseInt(requestId)}`);
+        const _cnt = (_chk.value||[]).length;
+        if(_cnt < approvers.length){
+          spStep('appr','err', _cnt+' / '+approvers.length);
+          console.error('[상신] 결재선 개수 불일치:', _cnt, '/', approvers.length);
+          await rollbackIncompleteVoucher(requestId, voucherId, _cnt, approvers.length);
+          if(btn){btn.disabled=false; btn.textContent='Submit';}
+          return;
+        }
+        spStep('appr','ok', _cnt+' / '+approvers.length);
+      } catch(ce) {
+        // 검증 조회 자체가 실패한 경우 — 생성은 됐을 수 있으므로 되돌리지 않고 그대로 둔다
+        console.warn('[상신] 결재선 검증 조회 실패(생성은 완료됨):', ce && ce.message);
+        spStep('appr','ok', _made+' / '+approvers.length);
       }
     }
 
-    showAccAlert(_attWarn ? '상신되었으나 첨부파일 확인이 필요합니다.' : '결재 요청이 완료되었습니다.',
-      'Voucher ID: '+voucherId + (_attWarn ? '\n\n⚠️ '+_attWarn : ''), _attWarn ? '⚠️' : '✅');
+    if(status==='대기'){
+      spDone(true, _attWarn
+        ? '⚠️ '+_attWarn.replace(/\n/g,'<br>')
+        : '결재선이 정상적으로 생성되었습니다. 1차 결재자에게 알림이 발송됩니다.');
+    } else {
+      showAccAlert('저장되었습니다.', 'Voucher ID: '+voucherId, '✅');
+    }
     resetForm(); await loadMyList(); switchTab('list');
   } catch(e) {
     console.error('saveVoucher error:', e);
-    showAccAlert('오류가 발생했습니다.', e.message, '⚠️');
+    // 진행 모달이 떠 있으면 그 안에서 마무리한다(전표가 이미 만들어졌을 수 있어 재상신 여부를 알려야 함)
+    if(_spActive) spDone(false,
+      '처리 중 오류가 발생했습니다: '+((e&&e.message)||'')+'<br>'
+      + '전표가 이미 만들어졌을 수 있으니 <b>[내 전표 목록]을 먼저 확인</b>하시고, '
+      + '목록에 없으면 다시 상신해 주세요.');
+    else showAccAlert('오류가 발생했습니다.', e.message, '⚠️');
   } finally {
     if(btn){btn.disabled=false; btn.textContent='Submit';}
   }
