@@ -159,6 +159,23 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
   padding:3px 12px; font-size:11px; font-weight:700; letter-spacing:.2px;
   transition:all .12s ease;
 }
+/* ── 추가 결재자 안내 (접이식) ── */
+.appr-help{ margin-top:9px; padding-top:8px; border-top:1px dashed #c7e0f4; }
+.appr-help > summary{
+  list-style:none; cursor:pointer; display:flex; align-items:center; gap:6px;
+  font-size:11px; font-weight:700; color:#0b5fa5; user-select:none; padding:1px 0;
+}
+.appr-help > summary::-webkit-details-marker{ display:none; }
+.appr-help > summary:hover{ text-decoration:underline; }
+.appr-help .chev{ font-size:9px; line-height:1; transition:transform .15s ease; display:inline-block; }
+.appr-help[open] .chev{ transform:rotate(90deg); }
+.appr-help .used{ margin-left:auto; font-weight:600; color:#8a6116; background:#fdf6e3;
+  border:1px solid #f0d9a0; border-radius:9px; padding:1px 8px; font-size:10px; }
+.appr-help-body{ margin-top:7px; font-size:11px; line-height:1.55; color:#605e5c; }
+.appr-help-body table{ width:100%; border-collapse:collapse; font-size:11px; line-height:1.5; }
+.appr-help-body td{ padding:4px 8px; border-bottom:1px solid #dbe7f3; vertical-align:top; }
+.appr-help-body td.k{ padding:4px 10px 4px 0; white-space:nowrap; font-weight:700; color:#0b5fa5; }
+.appr-help-body tr:last-child td{ border-bottom:none; }
 .appr-insert.is-full{ cursor:default; }
 .appr-insert.is-full .appr-insert-line{ border-top-color:#e1e1e1; }
 .appr-insert.is-full .appr-insert-btn{ color:#a19f9d; border-color:#dcdcdc; border-style:solid; font-weight:600; }
@@ -911,6 +928,10 @@ const canInsertAfter = role => BU_ROLES.includes(role) && !NO_INSERT_AFTER.inclu
 // Approvals.ApproverRole 에 저장되는 값. 이 컬럼은 평문(단일 텍스트)이라 코드가 아닌 표기 문구를 그대로 넣는다.
 // 다른 역할은 TL/MC 같은 짧은 코드지만, 추가 결재자는 알림 메일과 APS 포털에서 별도 매핑 없이 읽혀야 하므로 예외를 둔다.
 const EXTRA_ROLE = 'Extra Approver';
+// 안내 펼침 상태. renderApproval()이 자주 다시 그리므로 보관해 두지 않으면 매번 접힌다.
+let _apprHelpOpen = false;
+// 관리자 목록에서 "진행이 멈춘" 전표의 SharePoint ID 집합 (전표는 대기인데 대기 결재 행이 없는 건)
+let _stuckReqIds = new Set();
 // 날짜전용 필드(InvoiceDate 등)를 KST 보정 후 YYYY-MM-DD로 표시 — SharePoint가 순수 날짜를 UTC 자정으로 해석해 저장하는 경우
 // 단순 slice(0,10)만 하면 하루 당겨져 보일 수 있어(SSC에서 동일 버그 발견/수정 이력 있음), 항상 이 함수를 통해 표시
 function fmtDateOnly(iso){
@@ -1298,11 +1319,21 @@ async function token() {
     throw e;
   }
 }
-async function api(path,method='GET',body=null) {
+async function api(path,method='GET',body=null,_retry=0) {
   const t=await token();
   const opts={method,headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'}};
   if(body) opts.body=JSON.stringify(body);
   const res=await fetch(GRAPH+path,opts);
+  // SharePoint 스로틀(429)·일시 장애(503/504)는 잠시 뒤 다시 시도한다.
+  // 재시도가 없으면 철회·승인처럼 여러 건을 연속 PATCH하는 작업이 중간에 끊겨
+  // 결재 이력만 일부 바뀐 어중간한 상태로 남는다.
+  if(!res.ok && [429,503,504].includes(res.status) && _retry < 3) {
+    const ra = parseInt(res.headers.get('Retry-After')||'0',10);
+    const wait = ra>0 ? ra*1000 : Math.pow(2,_retry)*800;   // 0.8s → 1.6s → 3.2s
+    console.warn(`[API] ${res.status} 재시도 ${_retry+1}/3 (${wait}ms 후): ${path.slice(0,60)}`);
+    await new Promise(r=>setTimeout(r,wait));
+    return api(path,method,body,_retry+1);
+  }
   if(!res.ok) throw new Error((await res.json()).error?.message||res.status);
   return method==='DELETE'?null:res.json();
 }
@@ -1397,6 +1428,17 @@ function isMe(email) {
 
 async function boot(account) {
   user = account;
+  // 로그인 계정의 실제 메일 주소를 Graph에서 확인한다.
+  // account.username은 UPN이라, 외부 게스트(B2B)는 name_domain#EXT#@tenant.onmicrosoft.com 형태가 되어
+  // system_config의 명단(회사 메일 형식)과 대조되지 않는다. me.mail을 우선 채택해 내부·외부 계정을 같은 방식으로 다룬다.
+  // 실패해도 기존 동작(UPN 사용)으로 떨어지므로 내부 계정에는 영향이 없다.
+  try {
+    const _me = await api('/me?$select=mail,userPrincipalName,displayName');
+    user.email = ((_me && (_me.mail || _me.userPrincipalName)) || account.username || '').toLowerCase();
+  } catch(e) {
+    console.warn('[Auth] Graph /me 조회 실패, UPN으로 대체:', e && e.message);
+    user.email = (account.username || '').toLowerCase();
+  }
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='block';
   // ?openId= 단독 모드: 인증이 끝나는 즉시 로더를 띄운다.
@@ -1408,7 +1450,8 @@ async function boot(account) {
 
   document.getElementById('app').style.maxWidth='960px';
   document.getElementById('app-header').style.display='flex';
-  document.getElementById('user-name').textContent=(account.name||account.username)+' ('+(account.username)+')';
+  // 괄호 안은 권한 판정에 실제로 쓰이는 주소를 보여준다(게스트는 UPN이 아닌 외부 실주소)
+  document.getElementById('user-name').textContent=(account.name||account.username)+' ('+(user.email||account.username)+')';
   document.getElementById('v-requester').value = account.name||account.username;
   document.getElementById('v-date').value = new Date(new Date().getTime()+9*3600*1000).toISOString().slice(0,10);
   renderApproval();
@@ -2275,54 +2318,27 @@ function renderApproval() {
       return `<span class="line-step"><span class="line-step-badge ${cls}" ${isEx?'style="background:#d9a41a"':''}>${i+1}차</span><span style="font-size:.75rem">${label}</span>${i<merged.length-1?'<span class="line-arrow">→</span>':''}</span>`;
     }).join('')+
     `</div>`+
-    `<div style="margin-top:9px;padding-top:8px;border-top:1px dashed #c7e0f4;font-size:11px;line-height:1.55;color:#605e5c">
-      <div style="font-weight:700;color:#0b5fa5;margin-bottom:2px">Adding an Additional Approver</div>
-      <div style="margin-bottom:5px">Approval requirements differ by department. If your department requires approval beyond the standard line above,
-      click the dashed <span style="color:#0078d4;font-weight:700">＋ 결재자 추가</span> line below to insert an additional approver at that exact position.</div>
-      <table style="width:100%;border-collapse:collapse;font-size:11px;line-height:1.5">
-        <tr><td style="padding:4px 10px 4px 0;border-bottom:1px solid #dbe7f3;vertical-align:top;white-space:nowrap;font-weight:700;color:#0b5fa5">Where</td><td style="padding:4px 8px;border-bottom:1px solid #dbe7f3;vertical-align:top">Within BU approval only — after Team Lead, and up to the step before RD. Accounting review steps are fixed by policy.</td></tr>
-        <tr><td style="padding:4px 10px 4px 0;border-bottom:1px solid #dbe7f3;vertical-align:top;white-space:nowrap;font-weight:700;color:#0b5fa5">How</td><td style="padding:4px 8px;border-bottom:1px solid #dbe7f3;vertical-align:top">Select Department → Team → Employee, the same way as the 1st and 2nd approver.</td></tr>
-        <tr><td style="padding:4px 10px 4px 0;border-bottom:1px solid #dbe7f3;vertical-align:top;white-space:nowrap;font-weight:700;color:#0b5fa5">Order</td><td style="padding:4px 8px;border-bottom:1px solid #dbe7f3;vertical-align:top">Approval runs top to bottom. Later steps shift down by one, and each approver is notified only after the previous step is approved.</td></tr>
-        <tr><td style="padding:4px 10px 4px 0;border-bottom:1px solid #dbe7f3;vertical-align:top;white-space:nowrap;font-weight:700;color:#0b5fa5">Scope</td><td style="padding:4px 8px;border-bottom:1px solid #dbe7f3;vertical-align:top">Applies to this voucher only. Use <span style="color:#a4262c;font-weight:700">✕ 삭제</span> to remove it before submitting.</td></tr><tr><td style="padding:4px 10px 4px 0;border-bottom:1px solid #dbe7f3;vertical-align:top;white-space:nowrap;font-weight:700;color:#0b5fa5">Limit</td><td style="padding:4px 8px;border-bottom:1px solid #dbe7f3;vertical-align:topborder-bottom:none">Up to <b>${MAX_EXTRA}</b> additional approvers per voucher (<b>${extraApprovers.length} of ${MAX_EXTRA}</b> used). Once the limit is reached, the dashed lines are disabled until you remove one.</td></tr>
-      </table>
-    </div>`;
+    `<details class="appr-help" ${_apprHelpOpen?'open':''} ontoggle="_apprHelpOpen=this.open">
+      <summary><span class="chev">▶</span>Adding an Additional Approver
+        <span class="used">${extraApprovers.length} of ${MAX_EXTRA} used</span></summary>
+      <div class="appr-help-body">
+        <div style="margin-bottom:5px">Approval requirements differ by department. If your department requires approval beyond the standard line above,
+        click the dashed <span style="color:#0078d4;font-weight:700">＋ 결재자 추가</span> line below to insert an additional approver at that exact position.</div>
+        <table>
+          <tr><td class="k">Where</td><td>Within BU approval only — after Team Lead, and up to the step before RD. Accounting review steps are fixed by policy.</td></tr>
+          <tr><td class="k">How</td><td>Select Department → Team → Employee, the same way as the 1st and 2nd approver.</td></tr>
+          <tr><td class="k">Order</td><td>Approval runs top to bottom. Later steps shift down by one, and each approver is notified only after the previous step is approved.</td></tr>
+          <tr><td class="k">Scope</td><td>Applies to this voucher only. Use <span style="color:#a4262c;font-weight:700">✕ 삭제</span> to remove it before submitting.</td></tr>
+          <tr><td class="k">Limit</td><td>Up to <b>${MAX_EXTRA}</b> additional approvers per voucher. Once the limit is reached, the dashed lines are disabled until you remove one.</td></tr>
+        </table>
+      </div>
+    </details>`;
 
   const depts=[...new Set((window._employeeData||[]).map(e=>e.dept))].sort();
   const deptOpts=depts.map(d=>`<option value="${escHtmlAttr(d)}">${escHtmlAttr(d)}</option>`).join('');
 
   // 추가 결재자 칸 — 부서/팀/직원 3단 선택은 기본 결재자와 동일한 방식
-  // 추가 결재자가 이미 결재라인에 있는 사람인지, 신청자 본인인지, 다른 추가 칸과 겹치는지 확인한다.
-  // 막지는 않는다 — 의도적으로 같은 사람을 한 번 더 거치게 하는 경우가 있을 수 있어,
-  // 판단은 신청자에게 맡기고 그 자리에서 사실만 알려준다.
-  const _dupReason = (x) => {
-    const me = (x.email||'').trim().toLowerCase();
-    if(!me) return '';
-    const requester = (user?.email || user?.username || '').trim().toLowerCase();
-    if(me === requester) return '신청자 본인입니다.';
-    // 자동 구성된 결재라인(고정 결재자 + 직접 선택한 TL/MC)과 대조
-    for(const a of apLine){
-      let em = '';
-      if(a.fixed) em = (a.person?.email||'').trim().toLowerCase();
-      else {
-        const bi = apLine.indexOf(a) + 1;
-        em = ((document.getElementById('ga'+bi+'-email')||{}).value||'').trim().toLowerCase();
-      }
-      if(em && em === me) return `이미 결재라인에 있습니다 (${a.label}).`;
-    }
-    // 다른 추가 결재자 칸과 대조
-    const others = extraApprovers.filter(o => o.uid !== x.uid && (o.email||'').trim().toLowerCase() === me);
-    if(others.length) return '다른 추가 결재자 칸에 이미 지정되어 있습니다.';
-    return '';
-  };
-
   const renderExtra=(x,disp)=>{
-    const _dup = _dupReason(x);
-    const _dupBox = _dup
-      ? `<div style="margin-top:7px;font-size:11px;line-height:1.6;color:#8a6116;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:6px;padding:7px 10px">
-           <b>⚠️ Duplicate approver</b> — ${escHtml(_dup)} 같은 사람이 두 번 결재하게 됩니다.
-           의도한 것이 아니라면 다른 직원을 선택하거나 <b>✕ 삭제</b>해 주세요.
-         </div>`
-      : '';
     return `<div class="appr-block appr-extra">
       <div class="appr-block-title">${disp}차 결재자 <span class="req-mark">*</span>
         <span style="font-size:10px;color:#8a6116;background:#fdf3d6;border-radius:10px;padding:1px 6px;margin-left:4px">추가 지정</span>
@@ -2337,7 +2353,7 @@ function renderApproval() {
       <div class="appr-info">
         <input type="text"  id="${x.uid}-name"  value="${escHtmlAttr(x.name)}"  readonly placeholder="이름">
         <input type="email" id="${x.uid}-email" value="${escHtmlAttr(x.email)}" readonly placeholder="이메일">
-      </div>${_dupBox}</div>`;
+      </div></div>`;
   };
 
   const renderBase=(a,order,disp)=>{
@@ -2419,17 +2435,6 @@ function renderApproval() {
   restoreBaseSel();    // 다시 그리면서 지워진 TL/MC 선택을 되돌린다
   restoreExtraSel();   // 추가 결재자의 부서·팀·직원 선택도 함께 되돌린다
 }
-// 기본 결재자 선택이 바뀌면 추가 결재자의 중복 안내만 갱신하면 되지만,
-// 중복 판정이 결재라인 전체를 보므로 renderApproval을 그대로 재사용한다.
-// (renderApproval → restoreBaseSel 순서라 선택값은 유지된다)
-let _rerenderLock = false;
-function _rerenderExtras(){
-  if(_rerenderLock) return;            // gwPersonChange ↔ renderApproval 재귀 방지
-  if(!extraApprovers.length) return;   // 추가 결재자가 없으면 다시 그릴 이유가 없다
-  _rerenderLock = true;
-  try { renderApproval(); } finally { _rerenderLock = false; }
-}
-
 // Accounting 담당자 "직접 변경" 토글 — 자동표시 뷰 숨기고 부서/팀/직원 선택 뷰 노출
 function accToggleManual(order){
   const fixedView = document.getElementById('acc-fixed-view-'+order);
@@ -2594,8 +2599,6 @@ function gwPersonChange(order){
   document.getElementById('ga'+order+'-name').value=p?p.name:'';
   document.getElementById('ga'+order+'-email').value=p?p.email:'';
   _saveBaseSel(order);
-  // 추가 결재자 중복 안내가 기본 결재자 선택에 따라 달라지므로 다시 그린다
-  if(typeof _rerenderExtras === 'function') _rerenderExtras();
 }
 
 // ── Account Lines ──
@@ -3349,7 +3352,12 @@ async function saveVoucher(status) {
     }
 
     // 2. 첨부파일 업로드 → AttachedFiles/ACC-Voucher_AttachedFiles/{voucherId}/
+    //    파일 업로드(라이브러리)와 전표 연결(AttachmentRef PATCH)은 별개 호출이라,
+    //    업로드는 됐는데 연결만 실패하면 라이브러리에 파일은 있고 화면엔 "첨부파일 없음"으로 보인다.
+    //    예전에는 이 실패를 콘솔에만 남겨 사용자가 알 방법이 없었다. 이제는 상신 완료 안내에 함께 알린다.
+    let _attWarn = '';
     if(accFiles.length){
+      const _failedUploads = [];
       try{
         const drivesData=await api(`/sites/${siteId}/drives`);
         const drive=drivesData.value.find(d=>d.name==='AttachedFiles')||drivesData.value[0];
@@ -3366,13 +3374,30 @@ async function saveVoucher(status) {
               const u=await res.json();
               const safeKey=btoa(unescape(encodeURIComponent(drive.id+'###'+u.id)));
               links.push(file.name+'||ENC||'+safeKey);
+            } else {
+              _failedUploads.push(file.name);
+              console.error('[첨부] 업로드 실패:', file.name, res.status);
             }
-          }catch(fe){console.error('File upload error:',fe);}
+          }catch(fe){ _failedUploads.push(file.name); console.error('[첨부] 업로드 오류:', file.name, fe && fe.message); }
         }
         if(links.length){
-          await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${requestId}/fields`,'PATCH',{AttachmentRef:links.join(';')});
+          try{
+            await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${requestId}/fields`,'PATCH',{AttachmentRef:links.join(';')});
+          }catch(pe){
+            // 파일은 올라갔는데 전표 연결만 실패한 경우 — 데이터는 남아 있으므로 복구 가능하다.
+            console.error('[첨부] 전표 연결 실패:', pe && pe.message);
+            _attWarn = `파일 ${links.length}건은 업로드됐지만 전표에 연결되지 않았습니다.\n`
+                     + `상세보기에 "첨부파일 없음"으로 표시됩니다. IT팀(stk_it@hyosung.com)에 Voucher ID를 알려주세요.`;
+          }
         }
-      }catch(fe){console.error('Drive error:',fe);}
+        if(_failedUploads.length){
+          _attWarn = (_attWarn ? _attWarn + '\n\n' : '')
+                   + `다음 파일은 업로드되지 않았습니다: ${_failedUploads.join(', ')}\n다시 첨부해 주세요.`;
+        }
+      }catch(fe){
+        console.error('[첨부] 처리 실패:', fe && fe.message);
+        _attWarn = '첨부파일이 저장되지 않았습니다. 전표는 정상 상신되었으니 IT팀에 문의해 주세요.';
+      }
     }
 
     // 3. 대기 상태면 Approvals에 결재자 행 INSERT (1번째만 '대기', 나머지는 '대기(잠김)')
@@ -3394,7 +3419,8 @@ async function saveVoucher(status) {
       }
     }
 
-    showAccAlert('결재 요청이 완료되었습니다.', 'Voucher ID: '+voucherId, '✅');
+    showAccAlert(_attWarn ? '상신되었으나 첨부파일 확인이 필요합니다.' : '결재 요청이 완료되었습니다.',
+      'Voucher ID: '+voucherId + (_attWarn ? '\n\n⚠️ '+_attWarn : ''), _attWarn ? '⚠️' : '✅');
     resetForm(); await loadMyList(); switchTab('list');
   } catch(e) {
     console.error('saveVoucher error:', e);
@@ -4027,6 +4053,18 @@ async function processApproval(apprId, action, reqId, comment='', aprCode='') {
       loadApprovalQueue();
       return;
     }
+    // 전표 자체가 이미 철회·반려된 경우 방어.
+    // 결재함은 Approvals의 '대기' 행만 보고 목록을 만들기 때문에, 철회 처리가 중간에 끊겨
+    // 전표만 철회되고 결재 행이 '대기'로 남아 있으면 결재자에게 계속 보인다. 그때 승인되면 상태가 꼬인다.
+    try {
+      const reqCur = await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${reqId}?$expand=fields`);
+      const reqSt = (reqCur?.fields?.Status || '').trim();
+      if(reqSt === '철회' || reqSt === '반려') {
+        showAccAlert('처리할 수 없습니다.', `이 전표는 이미 ${reqSt} 상태입니다.`, '⚠️');
+        loadApprovalQueue();
+        return;
+      }
+    } catch(e) { console.warn('[결재] 전표 상태 확인 실패, 진행:', e && e.message); }
     await api(`/sites/${siteId}/lists/${LIST_APPROVALS}/items/${apprId}/fields`, 'PATCH', {
       Status: action==='승인' ? '승인' : '반려',
       Comment: comment,
@@ -4176,6 +4214,25 @@ async function loadAdminList() {
     adminListRaw = data.value
       .map(item=>({_spId:item.id,...item.fields}))
       .sort((a,b)=>new Date(b.SubmittedDate||0)-new Date(a.SubmittedDate||0));
+    // 진행이 멈춘 전표 식별 — 전표는 '대기'인데 '대기' 결재 행이 하나도 없는 건.
+    // 철회가 중간에 끊기면 생기며, 겉으로는 정상 대기처럼 보여 방치되기 쉽다.
+    // 표식은 IT 담당자(config: ACC-Voucher_IT)에게만 보이므로, 대상이 아니면 조회 자체를 생략한다.
+    const _itForStuck = IT_EMAILS.map(e=>e.toLowerCase())
+      .includes((user?.email||user?.username||'').trim().toLowerCase());
+    if(!_itForStuck) { _stuckReqIds = new Set(); }
+    else try {
+      const pend = new Set();
+      await _forEachAprVolume(async (vol) => {
+        const d = await apiAll(`${GRAPH}/sites/${siteId}/lists/${vol.id}/items?$expand=fields&$filter=fields/Status eq '대기'&$top=999`);
+        d.value.forEach(i => pend.add(String(i.fields.RequestID)));
+        return [];
+      });
+      _stuckReqIds = new Set(
+        adminListRaw.filter(v => (v.Status||'').trim()==='대기' && !pend.has(String(v._spId)))
+                    .map(v => String(v._spId))
+      );
+      if(_stuckReqIds.size) console.warn('[관리자] 진행이 멈춘 전표:', [..._stuckReqIds].join(', '));
+    } catch(e) { _stuckReqIds = new Set(); console.warn('[관리자] 진행 상태 점검 실패:', e && e.message); }
   } catch(e) {
     console.error('loadAdminList error:', e);
     adminListRaw = [];
@@ -4449,6 +4506,10 @@ function renderAdminList(){
     Pending:'badge-대기',Draft:'badge-대기잠김',Approved:'badge-승인완료',Rejected:'badge-반려'};
   const stLabel={'대기':'대기','대기(잠김)':'대기(잠김)','승인완료':'승인완료','반려':'반려','철회':'철회',
     Pending:'대기',Draft:'임시저장',Approved:'승인완료',Rejected:'반려'};
+  // 진행이 멈춘 전표는 상태 옆에 표식을 붙인다. 목록만 봐도 찾을 수 있어야 방치되지 않는다.
+  const stuckMark = v => _stuckReqIds.has(String(v._spId))
+    ? '<span title="결재 대기 단계가 없어 진행이 멈춘 전표입니다. 상세보기에서 정리하세요." style="margin-left:4px;color:#a4262c;font-weight:700;cursor:help">⚠</span>'
+    : '';
   const fmtK=n=>Math.round(n||0).toLocaleString('ko-KR');
   const fmtDate = s => {
     if(!s) return '-';
@@ -4479,7 +4540,7 @@ function renderAdminList(){
     <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem">${escHtml(spText(v.Purpose))||'-'}</td>
     <td style="text-align:right;font-weight:700;color:#0078d4;font-size:.78rem">${fmtK(v.TotalDR_KRW)}</td>
     <td style="text-align:right;font-weight:700;color:#c0392b;font-size:.78rem">${fmtK(v.TotalCR_KRW)}</td>
-    <td><span class="${stMap[v.Status]||'badge-대기'}">${stLabel[v.Status]||v.Status}</span></td>
+    <td><span class="${stMap[v.Status]||'badge-대기'}">${stLabel[v.Status]||v.Status}</span>${stuckMark(v)}</td>
     <td style="font-size:.78rem;color:#605e5c">${fmtDate(v.SubmittedDate)}</td>
     <td style="font-size:.75rem;color:#323130">
       ${b1DocNo || '<span style="color:#a19f9d">-</span>'}
@@ -4558,18 +4619,52 @@ async function withdrawRequest(spId) {
     const apprData = await apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_APPROVALS}/items?$expand=fields&$filter=fields/RequestID eq ${parseInt(spId)}&$top=50`);
     const items = apprData.value.sort((a,b)=>(a.fields.ApprovalOrder||0)-(b.fields.ApprovalOrder||0));
     const first = items[0];
-    if(first && first.fields.Status !== '대기') {
+    const firstSt = (first?.fields?.Status || '').trim();
+    // 철회 가능 여부는 "결재가 실제로 진행됐는가"로 판단한다.
+    //  · '대기'      → 아직 아무도 처리하지 않음. 정상 철회
+    //  · '철회(잠김)' → 이전 철회가 중간에 끊긴 상태. 남은 단계를 마저 처리해 복구한다.
+    //  · '승인'/'반려' → 이미 결재가 진행됨. 철회 불가
+    // 예전에는 '대기'가 아니면 무조건 막아, 철회가 끊긴 전표를 신청자가 스스로 되돌릴 방법이 없었다.
+    const RESUMABLE = ['대기', '철회(잠김)'];
+    if(first && !RESUMABLE.includes(firstSt)) {
       showAccAlert('철회할 수 없습니다.', '이미 1차 결재가 진행되어 철회가 불가능합니다.', '⚠️');
       loadMyList();
       return;
     }
+    const _resuming = firstSt === '철회(잠김)';
+    // Step 0. 누가 언제 철회했는지 먼저 남긴다.
+    //         Requests가 '철회'로 바뀌면 의견 등록이 막히므로 반드시 이 시점에 기록해야 한다.
+    //         기록 실패가 철회 자체를 막지는 않는다.
+    try {
+      const _cur = await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${spId}/fields`);
+      let _log = [];
+      try { _log = JSON.parse(_cur.AdminComments||'[]'); } catch(_e){ _log = []; }
+      const _n = new Date(new Date().getTime()+9*3600*1000);
+      const _p = n=>String(n).padStart(2,'0');
+      _log.push({
+        kind: 'withdraw',
+        email: user?.email || user?.username || '',
+        date: `${_n.getUTCFullYear()}-${_p(_n.getUTCMonth()+1)}-${_p(_n.getUTCDate())} ${_p(_n.getUTCHours())}:${_p(_n.getUTCMinutes())}`,
+        text: _resuming
+          ? 'Completed an interrupted withdrawal. Remaining approval steps were cleared.'
+          : 'Withdrew the voucher. All approval steps were locked.'
+      });
+      await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${spId}/fields`, 'PATCH', {
+        AdminComments: JSON.stringify(_log)
+      });
+    } catch(e) { console.warn('[철회] 처리 이력 기록 실패(철회는 계속 진행):', e && e.message); }
     // Step 1. Approvals 전체 → '철회(잠김)' (결재자 차단 먼저)
+    //         이미 처리된 행은 건너뛴다 — 중단분만 이어서 처리하므로 몇 번을 다시 눌러도 결과가 같다.
+    let _patched = 0;
     for(const it of items) {
+      if((it.fields?.Status||'').trim() === '철회(잠김)') continue;
       await api(`/sites/${siteId}/lists/${LIST_APPROVALS}/items/${it.id}/fields`, 'PATCH', {Status:'철회(잠김)'});
+      _patched++;
     }
     // Step 2. Requests → '철회'
     await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${spId}/fields`, 'PATCH', {Status:'철회'});
-    showAccAlert('전표가 철회되었습니다.', '', '✅');
+    showAccAlert('전표가 철회되었습니다.',
+      _resuming ? `이전에 중단된 철회를 마무리했습니다. (결재 단계 ${_patched}건 정리)` : '', '✅');
     loadMyList();
   } catch(e) {
     console.error('withdrawRequest error:', e);
@@ -4578,6 +4673,7 @@ async function withdrawRequest(spId) {
 }
 
 async function openVoucherSP(spId, fromTab){
+  _detailFromTab = fromTab || '';
   let v = voucherListCache.find(x=>x._spId===spId)
     || adminListCache.find(x=>x._spId===spId)
     || (approvalQueueCache.find(x=>x._voucher?._spId===spId)?._voucher);
@@ -4666,7 +4762,7 @@ async function openVoucherSP(spId, fromTab){
         const sepIdx = decoded.indexOf('###');
         driveId = decoded.substring(0, sepIdx);
         itemId = decoded.substring(sepIdx+3);
-      }catch(e){}
+      }catch(e){ console.warn('[첨부] 링크 키 해석 실패:', e && e.message); }
       return `<div style="padding:4px 0;font-size:.8rem"><a href="#" class="file-dl-link" data-drive="${encodeURIComponent(driveId)}" data-id="${encodeURIComponent(itemId)}" data-name="${encodeURIComponent(name)}" style="color:#0078d4;cursor:pointer;text-decoration:none">📎 ${name}</a></div>`;
     }).join('');
   }
@@ -4921,6 +5017,8 @@ async function fetchApprovalListDirect(v){
   return data.value.map(i=>({...i.fields, _apprId:i.id})).sort((a,b)=>(a.ApprovalOrder||0)-(b.ApprovalOrder||0));
 }
 
+// 상세보기를 어느 탭에서 열었는지 — 진행 불가 안내를 관리자 탭으로 한정하는 데 사용
+let _detailFromTab = '';
 async function loadApprovalHistory(spId){
   // ?openId= 로 바로 진입한 경우 목록 탭을 거치지 않아 3개 캐시가 모두 비어 있다.
   // openVoucherSP()가 SharePoint에서 직접 조회해 _currentVoucherDetail에 담아두므로 그걸 최후 fallback으로 사용.
@@ -4975,7 +5073,47 @@ async function loadApprovalHistory(spId){
         <span class="${cls}">${stText}</span>
       </div>`;
     }).join('');
-    document.getElementById('voucher-appr-history').innerHTML = html;
+    // ── 철회 처리 이력 ────────────────────────────────────────────────
+    // 진행 불가 안내와 같은 기준(관리자 탭 · ACC-Voucher_IT)으로 한정한다.
+    // 데이터 정리 근거로 쓰는 정보이고, Excel 내보내기에도 포함하지 않는다.
+    let _wdBox = '';
+    try {
+      const _itOnly = _detailFromTab === 'admin' &&
+        IT_EMAILS.map(e=>e.toLowerCase()).includes((user?.email||user?.username||'').trim().toLowerCase());
+      const _log = _itOnly ? JSON.parse(v.AdminComments || '[]').filter(c => c.kind === 'withdraw') : [];
+      if(_log.length) {
+        _wdBox = `<div style="margin-top:8px;background:#fdf2f2;border:1px solid #f0c8c8;border-radius:6px;padding:8px 12px;font-size:.72rem;line-height:1.6;color:#a4262c">
+          <b>Withdrawal record</b>` +
+          _log.map(c => `<div style="margin-top:3px;color:#605e5c">
+            <span style="color:#a19f9d">${escHtml(c.date||'')}</span> ·
+            <b style="color:#323130">${escHtml(c.email||'')}</b><br>
+            <span style="color:#a4262c">${escHtml(c.text||'')}</span>
+          </div>`).join('') + `</div>`;
+      }
+    } catch(e) { /* 이력 파싱 실패는 화면에 영향 주지 않는다 */ }
+
+    // ── 진행 불가 상태 감지 ──────────────────────────────────────────
+    // 전표는 '대기'인데 결재 행 중 '대기'가 하나도 없으면 아무에게도 뜨지 않아 영원히 멈춘다.
+    // 철회 처리가 중간에 끊겼을 때 생기는 상태이며, 겉으로는 정상 대기처럼 보여 방치되기 쉽다.
+    // 일반 사용자에게는 원인을 설명해도 할 수 있는 일이 없고 불안만 준다.
+    // 데이터를 직접 정리해야 하는 IT 담당자(config: ACC-Voucher_IT)에게만, 그것도 관리자 탭에서만 노출한다.
+    const _me = (user?.email || user?.username || '').trim().toLowerCase();
+    const _isIt = IT_EMAILS.map(e=>e.toLowerCase()).includes(_me);
+    const _reqSt = (v.Status||'').trim();
+    const _hasPending = list.some(af => (af.Status||'').trim() === '대기');
+    const _hasWithdrawn = list.some(af => (af.Status||'').trim() === '철회(잠김)');
+    let _stuckBox = '';
+    if(_detailFromTab === 'admin' && _isIt && _reqSt === '대기' && !_hasPending) {
+      _stuckBox = `<div style="margin-top:8px;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:6px;padding:9px 12px;font-size:.75rem;line-height:1.6;color:#8a6116">
+        <b>⚠️ This voucher is stuck</b><br>
+        ${_hasWithdrawn
+          ? 'A withdrawal was interrupted partway, so the voucher is still marked as 대기 but no next approver was assigned.'
+          : 'No approval step is currently waiting, so the voucher cannot move forward.'}
+        It does not appear in anyone's approval box — please clear it below.
+        <button onclick="confirmWithdraw('${v._spId}')" style="margin-top:7px;background:#a4262c;color:#fff;border:none;border-radius:4px;padding:5px 14px;font-size:.75rem;cursor:pointer;font-family:inherit">Complete withdrawal</button>
+      </div>`;
+    }
+    document.getElementById('voucher-appr-history').innerHTML = html + _wdBox + _stuckBox;
 
     // 내 결재 대기 건이면 GW와 동일하게 결재 이력 아래에 승인/반려 버튼 표시
     const myPending = list.find(af=>isMe(af.ApproverEmail) && af.Status==='대기');
@@ -5075,7 +5213,8 @@ async function saveB1DocFromModal() {
     updatePostingBadge();
     const cached = adminListCache.find(x=>x._spId===v._spId);
     if(cached){ cached.B1DocNo = savedB1; cached.PostingDone = v.PostingDone; }
-    try { if(typeof renderAdminList==='function' && adminListCache.length) renderAdminList(); } catch(e){}
+    try { if(typeof renderAdminList==='function' && adminListCache.length) renderAdminList(); }
+    catch(e){ console.warn('[관리자] 목록 재렌더 실패:', e && e.message); }
     showAccAlert('저장되었습니다',
       'B1 Doc No.: ' + (savedB1 || '(없음)') + '\nPosting: ' + (savedB1 ? '완료' : '미완료'), '✅');
   } catch(e) {
@@ -5103,8 +5242,8 @@ async function loadAdminComments(reqSpId) {
       comments.map((c,i,arr)=>
         '<div style="padding:8px 12px;'+(i===arr.length-1?'':'border-bottom:1px solid #c7e0f4')+'">' +
           '<div style="font-size:.68rem;color:#a19f9d">'+(c.date||'')+'</div>' +
-          '<div style="font-size:.72rem;color:#323130;margin-top:2px">작성자: <b>'+(c.email||'')+'</b></div>' +
-          '<div style="font-size:.72rem;color:#323130;margin-top:2px">결재 의견: <span style="font-weight:700;color:#0078d4;white-space:pre-wrap">'+(c.text||'')+'</span></div>' +
+          '<div style="font-size:.72rem;color:#323130;margin-top:2px">'+(c.kind==='withdraw'?'Processed by':'작성자')+': <b>'+escHtml(c.email||'')+'</b></div>' +
+          '<div style="font-size:.72rem;color:#323130;margin-top:2px">'+(c.kind==='withdraw'?'Withdrawal':'결재 의견')+': <span style="font-weight:700;color:'+(c.kind==='withdraw'?'#a4262c':'#0078d4')+';white-space:pre-wrap">'+escHtml(c.text||'')+'</span></div>' +
         '</div>'
       ).join('') +
       '</div>';
