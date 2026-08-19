@@ -5194,6 +5194,10 @@ async function openVoucherSP(spId, fromTab){
     <div id="voucher-appr-history" style="background:#f9f9f9;border-radius:4px;border:1px solid #edebe9">
       <div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력을 불러오는 중...</div>
     </div>
+    <!-- RD 제외 사유·철회 이력·진행불가 안내는 결재 이력 카드 "밖"에 둔다.
+         카드 안에 넣으면 회색 배경이 그대로 이어져 마지막 결재자 줄에 붙은 것처럼 보인다.
+         아래 Accounting Approval Line 안내(파란 박스)와 같은 위치·간격 규칙을 따른다. -->
+    <div id="voucher-appr-extra"></div>
     ${v.AccLineSkipReason ? `
       <div style="margin-top:10px;background:#eaf3fd;border:1px solid #b6d7f2;border-radius:6px;padding:10px 12px;line-height:1.6">
         <div style="font-size:.76rem;font-weight:700;color:#0b5fa5;margin-bottom:3px">Accounting Approval Line — Duplicate accounting review excluded</div>
@@ -5346,6 +5350,12 @@ async function recoverAttachments(v){
 
 // 상세보기를 어느 탭에서 열었는지 — 진행 불가 안내를 관리자 탭으로 한정하는 데 사용
 let _detailFromTab = '';
+// 결재 이력 카드 뒤에 붙는 부가 안내(RD 제외·철회 이력·진행불가)를 채운다.
+// 카드 안이 아니라 밖에 그려야 회색 배경이 이어져 보이지 않는다.
+function _setApprExtra(html) {
+  const el = document.getElementById('voucher-appr-extra');
+  if (el) el.innerHTML = html || '';
+}
 async function loadApprovalHistory(spId){
   // ?openId= 로 바로 진입한 경우 목록 탭을 거치지 않아 3개 캐시가 모두 비어 있다.
   // openVoucherSP()가 SharePoint에서 직접 조회해 _currentVoucherDetail에 담아두므로 그걸 최후 fallback으로 사용.
@@ -5392,7 +5402,7 @@ async function loadApprovalHistory(spId){
     const _rdLbl = t => '<span style="display:inline-block;min-width:46px;text-align:right;color:#a8842e;font-weight:600">' + t + '</span>'
       + '<span style="display:inline-block;width:15px;text-align:center;color:#c2a25a;font-weight:600">:</span>';
     const _rdExemptBox = v.RDExemptReason
-      ? '<div style="margin-top:8px;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:6px;padding:8px 11px">'
+      ? '<div style="margin-top:10px;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:6px;padding:9px 12px">'
         + '<div style="font-size:.66rem;font-weight:700;color:#8a6116;margin-bottom:5px">RD Approval Exemption — Reason Requested</div>'
         + '<div style="font-size:.68rem;color:#8a6116;line-height:1.65">'
         + _rdLbl('신청자') + '<span style="font-weight:600">' + escHtml(v.RequesterEmail || v.RequesterName || '-') + '</span><br>'
@@ -5403,7 +5413,8 @@ async function loadApprovalHistory(spId){
         + '</div>'
       : '';
     if(!list.length){
-      document.getElementById('voucher-appr-history').innerHTML = '<div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력이 없습니다.</div>' + _rdExemptBox;
+      document.getElementById('voucher-appr-history').innerHTML = '<div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력이 없습니다.</div>';
+      _setApprExtra(_rdExemptBox);
       return;
     }
     // ACC 역할은 Voucher Type에 따라 AP/AR/GL 담당자로 표시
@@ -5463,7 +5474,8 @@ async function loadApprovalHistory(spId){
         <button onclick="confirmWithdraw('${v._spId}')" style="margin-top:7px;background:#a4262c;color:#fff;border:none;border-radius:4px;padding:5px 14px;font-size:.75rem;cursor:pointer;font-family:inherit">Complete withdrawal</button>
       </div>`;
     }
-    document.getElementById('voucher-appr-history').innerHTML = html + _rdExemptBox + _wdBox + _stuckBox;
+    document.getElementById('voucher-appr-history').innerHTML = html;
+    _setApprExtra(_rdExemptBox + _wdBox + _stuckBox);
 
     // 내 결재 대기 건이면 GW와 동일하게 결재 이력 아래에 승인/반려 버튼 표시
     const myPending = list.find(af=>isMe(af.ApproverEmail) && af.Status==='대기');
@@ -5477,6 +5489,7 @@ async function loadApprovalHistory(spId){
   }catch(e){
     console.error('loadApprovalHistory error:', e);
     document.getElementById('voucher-appr-history').innerHTML = '<div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력을 불러올 수 없습니다.</div>';
+    _setApprExtra('');
   }
 }
 // Posting 뱃지는 "저장된 상태"를 보여준다.
