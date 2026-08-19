@@ -2254,6 +2254,14 @@ function _exSet(uid,name,email){
   const n=document.getElementById(uid+'-name'); if(n) n.value=name;
   const m=document.getElementById(uid+'-email'); if(m) m.value=email;
 }
+// 코드와 이름을 함께 표기한다. 전표 기입에는 숫자 코드가 필요하고,
+// 확인에는 이름이 필요해 둘 다 있어야 한다. 한쪽만 있으면 있는 쪽만 낸다.
+function codeName(code, name){
+  const c = String(code==null?'':code).trim();
+  const n = String(name==null?'':name).trim();
+  if(c && n) return c + ' ' + n;
+  return c || n || '';
+}
 function escHtmlAttr(s){
   return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
@@ -4988,7 +4996,7 @@ async function openVoucherSP(spId, fromTab){
       <td style="padding:6px 7px;font-size:.74rem">${l.glName||'-'}</td>
       <td style="padding:6px 7px;font-size:.74rem">${l.gl||'-'}</td>
       <td style="padding:6px 7px;font-size:.74rem">${cpTxt}</td>
-      <td style="padding:6px 7px;font-size:.74rem">${l.subpcName||l.subpc||'-'}</td>
+      <td style="padding:6px 7px;font-size:.74rem">${codeName(l.subpc,l.subpcName)||'-'}</td>
       <td style="padding:6px 7px;font-size:.74rem;max-width:120px;overflow:hidden;text-overflow:ellipsis">${l.lineDesc||'-'}</td>
       <td style="padding:6px 7px;font-size:.74rem">${l.currency||'-'}</td>
       <td style="padding:6px 7px;text-align:right;font-weight:600;font-size:.74rem">${drTxt}</td>
@@ -5700,8 +5708,9 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
     return '<tr>'+
       '<td style="'+cellThin+bg+bold+bottomThick+'">'+esc(l.glName)+'</td>'+
       '<td style="'+cellThin+bg+bold+bottomThick+'">'+esc(l.gl)+'</td>'+
-      '<td style="'+cellThin+bgFixedOnly+bottomThick+'">'+esc(l.cctrName||l.cctr||l.pcName||l.pc)+'</td>'+
-      '<td style="'+cellThin+bgFixedOnly+bottomThick+'">'+esc(l.subpcName||l.subpc)+'</td>'+
+      // 전표 기입을 위해 코드와 이름을 함께 낸다. 값이 길어지므로 이 두 칸만 글자를 줄인다.
+      '<td style="'+cellThin+bgFixedOnly+bottomThick+';font-size:8px;line-height:1.25">'+esc(codeName(l.cctr,l.cctrName)||codeName(l.pc,l.pcName))+'</td>'+
+      '<td style="'+cellThin+bgFixedOnly+bottomThick+';font-size:8px;line-height:1.25">'+esc(codeName(l.subpc,l.subpcName))+'</td>'+
       '<td style="'+cellThin+bottomThick+'">'+esc(l.lineDesc)+'</td>'+
       '<td style="'+cellThin+bottomThick+';text-align:center">'+esc(l.currency)+'</td>'+
       '<td style="'+cellThin+bottomThick+';text-align:right">'+(l.drcr==='DR'?(l.currency==='KRW'?fmtK(l.amount):fmt2(l.amount)):'')+'</td>'+
@@ -6045,9 +6054,9 @@ function buildAccountLinesTableHTML(v, lines_data) {
       '<td style="'+cellB+';text-align:center;font-weight:700;color:'+(l.drcr==='DR'?'#0078d4':'#c0392b')+'">'+(esc(l.drcr)||'-')+'</td>'+
       '<td style="'+cellB+'">'+esc(l.gl)+'</td>'+
       '<td style="'+cellB+'">'+esc(l.glName)+'</td>'+
-      '<td style="'+cellB+'">'+esc(l.cctrName||l.cctr)+'</td>'+
-      '<td style="'+cellB+'">'+esc(l.pcName||l.pc)+'</td>'+
-      '<td style="'+cellB+'">'+esc(l.subpcName||l.subpc)+'</td>'+
+      '<td style="'+cellB+';font-size:8px;line-height:1.25">'+esc(codeName(l.cctr,l.cctrName))+'</td>'+
+      '<td style="'+cellB+';font-size:8px;line-height:1.25">'+esc(codeName(l.pc,l.pcName))+'</td>'+
+      '<td style="'+cellB+';font-size:8px;line-height:1.25">'+esc(codeName(l.subpc,l.subpcName))+'</td>'+
       '<td style="'+cellB+'">'+esc(l.lineDesc)+'</td>'+
       '<td style="'+cellB+';text-align:center">'+esc(l.currency)+'</td>'+
       '<td style="'+cellB+';text-align:right;font-weight:600">'+(l.drcr==='DR'?(l.currency==='KRW'?fmtK(l.amount):fmt2(l.amount)):'')+'</td>'+
