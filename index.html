@@ -5074,7 +5074,6 @@ async function openVoucherSP(spId, fromTab){
     <div class="det-sec">Purpose / Description</div>
     ${v.PurposeTitle ? row('Purpose Title', `<span style="font-weight:600">${escHtml(spText(v.PurposeTitle))}</span>`) : ''}
     ${row('Purpose', `<span style="white-space:pre-wrap">${escHtml(spText(v.Purpose))||'-'}</span>`)}
-    ${v.RDExemptReason ? row('RD Approval Exemption — Reason Requested', `<span style="color:#8a6116;font-weight:600">${escHtml(spText(v.RDExemptReason).replace(/^RD\s*승인\s*제외\s*[—\-:]?\s*/,'').trim())}</span><div style="font-size:.7rem;color:#a19f9d;margin-top:2px">Requested by the requester; the RD approval step was excluded for this voucher.</div>`) : ''}
 
     <div class="det-sec">첨부파일</div>
     <div id="voucher-att-list" style="padding:4px 0;font-size:.78rem">${attHtml}</div>
@@ -5359,8 +5358,19 @@ async function loadApprovalHistory(spId){
   try{
     const list = await fetchApprovalListDirect(v);
     window._currentApprovalList = list; // No.14: PDF 출력용 캐시 (참고용 - exportVoucherPdf는 이제 이 캐시에 의존하지 않고 직접 재조회함)
+    // RD 승인 제외는 전표 내용이 아니라 '결재선이 왜 한 단계 짧은지'에 대한 설명이므로
+    // Purpose 아래가 아니라 결재 이력 바로 아래에 둔다.
+    // 저장값에 옛 접두어가 붙어 있을 수 있어 제거 후 표시한다.
+    const _rdExemptBox = v.RDExemptReason
+      ? '<div style="margin-top:8px;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:6px;padding:9px 12px">'
+        + '<div style="font-size:.75rem;font-weight:700;color:#8a6116;margin-bottom:3px">RD Approval Exemption — Reason Requested</div>'
+        + '<div style="font-size:.78rem;color:#8a6116;font-weight:600">'
+        + escHtml(spText(v.RDExemptReason).replace(/^RD\s*승인\s*제외\s*[—\-:]?\s*/,'').trim()) + '</div>'
+        + '<div style="font-size:.7rem;color:#a19f9d;margin-top:3px">Requested by the requester; the RD approval step was excluded for this voucher.</div>'
+        + '</div>'
+      : '';
     if(!list.length){
-      document.getElementById('voucher-appr-history').innerHTML = '<div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력이 없습니다.</div>';
+      document.getElementById('voucher-appr-history').innerHTML = '<div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력이 없습니다.</div>' + _rdExemptBox;
       return;
     }
     // ACC 역할은 Voucher Type에 따라 AP/AR/GL 담당자로 표시
@@ -5420,7 +5430,7 @@ async function loadApprovalHistory(spId){
         <button onclick="confirmWithdraw('${v._spId}')" style="margin-top:7px;background:#a4262c;color:#fff;border:none;border-radius:4px;padding:5px 14px;font-size:.75rem;cursor:pointer;font-family:inherit">Complete withdrawal</button>
       </div>`;
     }
-    document.getElementById('voucher-appr-history').innerHTML = html + _wdBox + _stuckBox;
+    document.getElementById('voucher-appr-history').innerHTML = html + _rdExemptBox + _wdBox + _stuckBox;
 
     // 내 결재 대기 건이면 GW와 동일하게 결재 이력 아래에 승인/반려 버튼 표시
     const myPending = list.find(af=>isMe(af.ApproverEmail) && af.Status==='대기');
