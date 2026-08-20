@@ -513,9 +513,9 @@ if (new URLSearchParams(location.search).get('openId')) {
           <label style="white-space:nowrap">Submission Date <span class="req">*</span> <span class="auto-tag">자동</span></label>
           <input type="date" id="v-date" readonly style="min-width:0">
         </div>
-        <!-- 안내 박스는 1~3열 전폭에 배치한다. 폭이 넓어 본문이 두 줄로 끝나고,
-             금액표는 접힌 상태가 기본이라 세로도 짧다. -->
-        <div id="rd-exempt-note" style="display:none;grid-column:1 / 4;font-size:.68rem;color:#8a6116;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:6px;padding:9px 12px;margin-top:2px;line-height:1.55">
+        <!-- 안내 박스는 RD Approval Removal 칸에 딸린 내용이므로 그 칸부터 시작하도록 2~3열에 둔다.
+             전폭으로 두면 한 줄이 지나치게 길어지고 표 오른쪽에 빈 공간만 남는다. -->
+        <div id="rd-exempt-note" style="display:none;grid-column:2 / 4;font-size:.68rem;color:#8a6116;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:6px;padding:9px 12px;margin-top:2px;line-height:1.55">
           <div style="font-weight:700">규정상 RD 승인이 면제되는 거래에만 사용바랍니다.
             <span style="color:#a4262c;margin-left:6px">AP &middot; AP(IMS) &middot; GL 유형만 신청할 수 있습니다.</span>
           </div>
