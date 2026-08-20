@@ -306,8 +306,15 @@ table.pt-tbl td{padding:5px 8px;border-bottom:1px solid #edebe9}
 table.pt-tbl td.r,table.pt-tbl th.r{text-align:right;font-variant-numeric:tabular-nums}
 table.pt-tbl tr.tot td{background:#f3f7fb;font-weight:700}
 table.pt-tbl tfoot td{background:#eef1f5;font-weight:700;border-top:2px solid #1F3864}
-.pt-bar{display:flex;align-items:center;gap:6px;font-weight:400;flex-wrap:wrap;margin:-6px 0 10px;padding:8px 11px;background:#f4faf4;border:1px solid #d9ecd9;border-radius:6px}
+#pt-panel{margin:-4px 0 12px;border:1px solid #e6e6e6;border-radius:6px;background:#fafafa}
+#pt-panel>summary{cursor:pointer;list-style:none;user-select:none;padding:7px 12px;font-size:.74rem;font-weight:600;color:#605e5c;display:flex;align-items:center;gap:6px}
+#pt-panel>summary::-webkit-details-marker{display:none}
+#pt-panel>summary:hover{color:#323130}
+#pt-panel[open]>summary{border-bottom:1px solid #ececec}
+#pt-panel .pt-in{padding:11px 12px 12px}
+.pt-bar{display:flex;align-items:center;gap:6px;font-weight:400;flex-wrap:wrap;padding:9px 11px;background:#f4faf4;border:1px solid #d9ecd9;border-radius:6px}
 .pt-bar select{border:1px solid #d2d0ce;border-radius:4px;padding:5px 8px;font-size:.74rem;font-family:inherit;min-width:290px}
+.pt-hint{font-size:.68rem;color:#a19f9d;line-height:1.65;margin-top:9px}
 .spinner { width: 32px; height: 32px; border: 3px solid #edebe9; border-top: 3px solid #0078d4; border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -470,23 +477,28 @@ if (new URLSearchParams(location.search).get('openId')) {
           <button onclick="loadExistingVoucher()" style="padding:5px 12px;border:none;border-radius:4px;background:#0078d4;color:#fff;font-size:.74rem;cursor:pointer;white-space:nowrap">📥 불러오기</button>
         </div>
       </div>
-      <div class="pt-bar">
-        <span style="font-size:.72rem;color:#107c10;font-weight:600;white-space:nowrap">포인트 정산 자동 작성</span>
-        <select id="pt-preset" title="월별 원본 자료를 올리면 전표가 규칙대로 채워집니다">
-          <option value="">-- 양식 선택 --</option>
-          <option value="provision">Mercedes ServiceCard Point Provision</option>
-          <option value="redemption">Mercedes ServiceCard Point Reimbursement</option>
-        </select>
-        <button onclick="ptPickFile()" style="padding:5px 12px;border:none;border-radius:4px;background:#107c10;color:#fff;font-size:.74rem;cursor:pointer;white-space:nowrap;font-family:inherit">Excel 올리기</button>
-        <input type="file" id="pt-file" accept=".xlsx,.xlsm,.xls" style="display:none" onchange="ptOnFile(this)">
-      </div>
-      <div style="font-size:.68rem;color:#a19f9d;margin:-8px 0 14px;line-height:1.6">
-        * Invoice Date는 기존 전표 날짜로 복원됩니다 &nbsp;·&nbsp;
-        * Exchange Rate는 <b>오늘 기준 환율</b>을 그대로 사용합니다 &nbsp;·&nbsp;
-        * 첨부파일은 새로 첨부해주세요<br>
-        * <b style="color:#107c10">포인트 정산 자동 작성</b>은 월별 원본 자료(부품/통합 × 적립·소멸·사용 6개 시트)를 올리면
-        계정·금액·Purpose를 채우고 원본 Excel을 첨부까지 담습니다. 적용 전에 계산 결과를 먼저 보여드립니다.
-      </div>
+      <details id="pt-panel">
+        <summary><span style="font-size:.62rem;color:#107c10">▾</span> 포인트 정산 자동 작성 &nbsp;·&nbsp; 전표 작성 안내</summary>
+        <div class="pt-in">
+          <div class="pt-bar">
+            <span style="font-size:.72rem;color:#107c10;font-weight:600;white-space:nowrap">포인트 정산 자동 작성</span>
+            <select id="pt-preset" title="월별 원본 자료를 올리면 전표가 규칙대로 채워집니다">
+              <option value="">-- 양식 선택 --</option>
+              <option value="provision">Mercedes ServiceCard Point Provision</option>
+              <option value="redemption">Mercedes ServiceCard Point Reimbursement</option>
+            </select>
+            <button onclick="ptPickFile()" style="padding:5px 12px;border:none;border-radius:4px;background:#107c10;color:#fff;font-size:.74rem;cursor:pointer;white-space:nowrap;font-family:inherit">Excel 올리기</button>
+            <button onclick="ptDownloadTemplate()" title="원본 자료 양식(6개 시트·머리글)을 내려받습니다" style="padding:5px 12px;border:1px solid #107c10;border-radius:4px;background:#fff;color:#107c10;font-size:.74rem;cursor:pointer;white-space:nowrap;font-family:inherit">양식 다운로드</button>
+            <input type="file" id="pt-file" accept=".xlsx,.xlsm,.xls" style="display:none" onchange="ptOnFile(this)">
+          </div>
+          <div class="pt-hint">
+            * <b style="color:#107c10">포인트 정산 자동 작성</b>은 월별 원본 자료(부품/통합 × 적립·소멸·사용 6개 시트)를 올리면
+            계정·금액·Purpose를 채우고 원본 Excel을 첨부까지 담습니다. 적용 전에 계산 결과를 먼저 보여드립니다.<br>
+            * <b>양식 다운로드</b>로 받은 파일의 시트명·머리글을 그대로 유지해 주세요. 이름이 바뀌면 인식되지 않습니다.<br>
+            * <b>기존 전표 불러오기</b> — Invoice Date는 기존 전표 날짜로 복원되고, Exchange Rate는 오늘 기준 환율을 그대로 사용합니다. 첨부파일은 새로 첨부해주세요.
+          </div>
+        </div>
+      </details>
 
       <div class="section-title">1. 바우처 정보 (Voucher Information)</div>
       <!-- Voucher Type / RD Approval Removal / Submission Date 를 한 줄에 배치.
@@ -6576,6 +6588,51 @@ function ptProvLines(res){
                label: g.glName + '  (' + g.kind + ' · ' + g.subKind + ')',
                desc: g.desc, amount: res.prov.net[g.kind+'|'+g.subKind] || 0 }))
     .filter(l=>l.amount!==0 || l.map.keepZero);
+}
+
+/* ── 원본 자료 양식 다운로드 ─────────────────────────────────
+   시트명과 머리글이 인식 기준이므로, 실제 리포트와 동일한 구성을 그대로 내려준다.
+   여기 이름이 바뀌면 자동 작성이 동작하지 않는다. */
+const PT_TEMPLATE = [
+  ['부품 적립', ['순번','포인트카드번호','고객','연락처','정비번호','적립딜러','매뉴얼적립여부','포인트타입','발행일','발행여부','적립포인트','남은포인트','적립일','만료일','상태','등급']],
+  ['통합 적립', ['고객명','포인트카드번호','포인트타입','발행일','발행여부','적립포인트','남은포인트','적립일','만료일','상태','등급']],
+  ['부품 소멸', ['순번','포인트카드번호','고객','연락처','정비번호','적립딜러','매뉴얼적립여부','포인트타입','발행일','발행여부','적립포인트','남은포인트','적립일','만료일','상태','등급']],
+  ['통합 소멸', ['고객명','포인트카드번호','포인트타입','발행일','발행여부','적립포인트','남은포인트','적립일','만료일','상태','등급']],
+  ['부품 사용', ['순번','사용금액 총액','고객','포인트카드번호','정비번호','발행일','발행여부','사용일','포인트타입','사용금액(개별)','등급','Vendor Code','Dealer Name(KOR)']],
+  ['통합 사용', ['순번','고객','포인트카드번호','정비번호','발행일','발행여부','사용일','포인트타입','사용금액(개별)','등급','Vendor Code','Dealer Name(KOR)']]
+];
+const PT_TEMPLATE_GUIDE = [
+  ['MercedesServiceCard 포인트 정산 — 원본 자료 양식'],
+  [''],
+  ['· 각 시트의 1행(머리글)과 시트 이름은 바꾸지 마세요. 이 이름으로 값을 찾습니다.'],
+  ['· 데이터는 2행부터 채웁니다. 열 순서는 달라도 되지만 머리글 이름은 같아야 합니다.'],
+  ['· 시트 중간이나 끝에 합계행(SUM)이 있어도 자동으로 제외됩니다.'],
+  [''],
+  ['[계산 규칙]'],
+  ['적립','「부품 적립」·「통합 적립」의 적립포인트 합계'],
+  ['소멸','「부품 소멸」·「통합 소멸」의 남은포인트 합계 (적립포인트가 아님)'],
+  ['Provision 금액','종류(부품/통합) × 세부종류(포인트타입)별 = 적립 − 소멸'],
+  ['Reimbursement 금액','「부품 사용」을 Vendor Code 별로 합계'],
+  [''],
+  ['· 「부품 사용」 시트에 통합 포인트 사용분이 함께 들어오는 경우, 「통합 사용」 시트는 더하지 않습니다(이중 계상 방지).'],
+  ['· 계정 매핑과 딜러 목록은 acc_point_master.xlsx 에서 관리합니다. 변경이 필요하면 IT팀에 요청해 주세요.']
+];
+function ptDownloadTemplate(){
+  try{
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(PT_TEMPLATE_GUIDE), '사용안내');
+    PT_TEMPLATE.forEach(([name, hdr])=>{
+      const ws = XLSX.utils.aoa_to_sheet([hdr]);
+      ws['!cols'] = hdr.map(h=>({ wch: Math.max(10, Math.min(22, h.length*2+4)) }));
+      XLSX.utils.book_append_sheet(wb, ws, name);
+    });
+    const n = new Date(new Date().getTime()+9*3600000);
+    const p = x => String(x).padStart(2,'0');
+    XLSX.writeFile(wb, 'MB_ServiceCard_Point_원본자료_양식_' + n.getUTCFullYear() + p(n.getUTCMonth()+1) + p(n.getUTCDate()) + '.xlsx');
+  }catch(e){
+    console.error('[Point] 양식 생성 실패:', e);
+    showAccAlert('양식을 만들지 못했습니다', e.message, '⚠️');
+  }
 }
 
 /* ── 파일 선택 ───────────────────────────────────────────── */
