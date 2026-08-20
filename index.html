@@ -855,18 +855,19 @@ if (new URLSearchParams(location.search).get('openId')) {
 <div class="modal-overlay" id="volume-modal" onclick="if(event.target===this)closeVolumeModal()">
   <div class="modal" style="max-width:640px">
     <div class="modal-head">
-      <span>📦 Approvals 세대 관리</span>
+      <span>Approvals 세대 관리</span>
       <button class="modal-close" onclick="closeVolumeModal()">✕</button>
     </div>
     <div class="modal-body">
-      <div style="font-size:.74rem;color:#605e5c;background:#fff4ce;border-radius:4px;padding:8px 12px;margin-bottom:14px">
-        ⚠️ Requests(전표 자체)는 계속 하나의 목록에 쌓입니다. 여기서 나누는 건 <b>결재이력(Approvals)</b>만입니다 — 새 세대로 전환하면 그 시점 이후의 신규 전표만 새 결재이력 목록에 기록되고, 과거 전표 조회/결재 처리는 자동으로 맞는 세대를 찾아갑니다.
+      <div style="font-size:.74rem;color:#605e5c;background:#f8f9fb;border-left:3px solid #0078d4;border-radius:0 4px 4px 0;padding:10px 13px;margin-bottom:16px;line-height:1.65">
+        <div style="font-weight:700;color:#323130;margin-bottom:3px;font-size:.73rem">전표는 나뉘지 않습니다</div>
+        Requests(전표 자체)는 계속 하나의 목록에 쌓입니다. 여기서 나누는 건 <b style="color:#323130">결재이력(Approvals)</b>만입니다 — 새 세대로 전환하면 그 시점 이후의 신규 전표만 새 결재이력 목록에 기록되고, 과거 전표 조회·결재 처리는 자동으로 맞는 세대를 찾아갑니다.
       </div>
-      <div style="font-weight:600;font-size:.82rem;margin-bottom:8px">등록된 세대</div>
-      <div id="volume-list" style="margin-bottom:18px"></div>
+      <div style="font-weight:700;font-size:.78rem;color:#323130;letter-spacing:.01em;margin-bottom:9px">등록된 세대</div>
+      <div id="volume-list" style="margin-bottom:20px"></div>
 
-      <div style="font-weight:600;font-size:.82rem;margin-bottom:8px;border-top:1px solid #edebe9;padding-top:14px">새 세대 추가</div>
-      <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="font-weight:700;font-size:.78rem;color:#323130;letter-spacing:.01em;margin-bottom:10px;border-top:1px solid #edebe9;padding-top:16px">새 세대 추가</div>
+      <div style="display:flex;flex-direction:column;gap:11px;background:#fafafa;border:1px solid #f0eff0;border-radius:6px;padding:14px">
         <div>
           <label style="font-size:.72rem;color:#605e5c;display:block;margin-bottom:4px">대상 SharePoint 목록 (STK-DB 사이트 안에서 미리 동일한 컬럼 구성으로 만들어두셔야 합니다)</label>
           <select id="vol-new-list-select" style="width:100%;padding:7px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:.78rem" onfocus="if(this.options.length<=1)loadSiteListsForVolume()">
@@ -880,7 +881,7 @@ if (new URLSearchParams(location.search).get('openId')) {
         <label style="font-size:.76rem;display:flex;align-items:center;gap:6px">
           <input type="checkbox" id="vol-new-activate" checked> 등록과 동시에 이 세대를 "현재 활성 세대"로 전환 (이후 신규 전표는 여기로 기록됨)
         </label>
-        <button onclick="addAprVolume()" style="padding:9px;background:#5c2d91;color:#fff;border:none;border-radius:4px;font-size:.8rem;font-weight:600;cursor:pointer">＋ 세대 추가</button>
+        <button onclick="addAprVolume()" style="padding:9px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit">세대 추가</button>
       </div>
     </div>
   </div>
@@ -4427,12 +4428,15 @@ async function renderVolumeList() {
   const vols = VOL_CONFIG.aprVolumes || [];
   el.innerHTML = vols.map(v => {
     const isCur = v.code === VOL_CONFIG.currentApr;
-    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border:1px solid ${isCur?'#5c2d91':'#edebe9'};border-radius:6px;margin-bottom:6px;background:${isCur?'#faf9fd':'#fff'}">
-      <div>
-        <div style="font-size:.8rem;font-weight:600;color:#252423">${v.code} ${v.label?('· '+v.label):''} ${isCur?'<span style="color:#5c2d91;font-weight:700">● 현재 활성</span>':''}</div>
-        <div style="font-size:.68rem;color:#a19f9d">${v.startDate||''}</div>
+    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 13px;border:1px solid ${isCur?'#0078d4':'#edebe9'};border-radius:6px;margin-bottom:6px;background:${isCur?'#f3f9fd':'#fff'}">
+      <div style="min-width:0">
+        <div style="font-size:.8rem;font-weight:600;color:#252423;display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+          <span>${v.code}${v.label?(' · '+v.label):''}</span>
+          ${isCur?'<span style="background:#0078d4;color:#fff;border-radius:10px;padding:1px 8px;font-size:.65rem;font-weight:700;letter-spacing:.02em">현재 활성</span>':''}
+        </div>
+        <div style="font-size:.68rem;color:#a19f9d;margin-top:2px">${v.startDate||''}</div>
       </div>
-      ${isCur ? '' : `<button onclick="switchAprVolume('${v.code}')" style="padding:5px 12px;background:#fff;border:1px solid #5c2d91;color:#5c2d91;border-radius:4px;font-size:.72rem;cursor:pointer">이 세대로 전환</button>`}
+      ${isCur ? '' : `<button onclick="switchAprVolume('${v.code}')" style="flex-shrink:0;padding:5px 12px;background:#fff;border:1px solid #d2d0ce;color:#605e5c;border-radius:4px;font-size:.72rem;cursor:pointer;font-family:inherit">이 세대로 전환</button>`}
     </div>`;
   }).join('') || '<div style="color:#a19f9d;font-size:.78rem">등록된 세대가 없습니다.</div>';
 }
