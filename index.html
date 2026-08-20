@@ -465,7 +465,7 @@ if (new URLSearchParams(location.search).get('openId')) {
            RD 영역은 라벨이 길고 체크박스+드롭박스가 들어가 가장 넓게 잡는다.
            Submission Date는 자동 입력 읽기전용이라 좁혀도 무방하다.
            min-width:0 을 주지 않으면 각 칸이 min-content 아래로 못 줄어들어 비율이 틀어진다. -->
-      <div class="form-row" style="grid-template-columns:1fr 1.4fr 0.7fr">
+      <div class="form-row" style="grid-template-columns:1.3fr 1.3fr 0.65fr">
         <div class="form-group" style="min-width:0">
           <label>Voucher Type <span class="req">*</span></label>
           <select id="v-type" onchange="onTypeChange()">
@@ -481,7 +481,7 @@ if (new URLSearchParams(location.search).get('openId')) {
           </select>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap;margin-top:5px;min-width:0">
             <div id="v-type-contact" title="" style="display:none;align-items:center;gap:6px;background:#eff6fc;border:1px solid #c7e0f4;border-radius:999px;padding:4px 12px;font-size:11px;color:#0078d4;flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
-            <span id="v-type-contact-toggle" class="btn-change" style="display:none;flex-shrink:0;margin-left:0" onclick="contactToggleManual()">✎ 담당자 변경</span>
+            <span id="v-type-contact-toggle" class="btn-change" title="회계 처리 담당자 변경" style="display:none;flex-shrink:0;margin-left:0" onclick="contactToggleManual()">✎ 변경</span>
           </div>
           <div id="v-type-contact-edit" style="display:none;margin-top:6px">
             <select id="vc-person" onchange="contactPersonChange()" style="width:100%">
@@ -2185,14 +2185,14 @@ function onTypeChange() {
   renderApproval();
   applyFixedLines();
 
-  // Voucher Type별 담당(AP/AR/GL) Accounting 처리 담당자를 타원형 배지로 표시 — 결재라인의 Accounting 담당자를 수동 변경했으면 그 사람 이메일로 동기화
+  // Voucher Type별 담당(AP/AR/GL) 회계 처리 담당자를 타원형 배지로 표시 — 결재라인의 Accounting 담당자를 수동 변경했으면 그 사람 이메일로 동기화
   const contactEl = document.getElementById('v-type-contact');
   const contactToggleEl = document.getElementById('v-type-contact-toggle');
   const cat = TYPE_CONTACT_CAT[type];
   const email = accOverride ? accOverride.email : (cat ? CONTACT_EMAILS[cat] : '');
   if (email) {
-    contactEl.innerHTML = `Accounting 처리 담당자: ${email}` + (accOverride ? ' <span style="color:#8a6914">(수동 지정됨)</span>' : '');
-    contactEl.title = `Accounting 처리 담당자: ${email}`;   // 폭이 좁아 말줄임될 때 전체 확인용
+    contactEl.innerHTML = `회계 처리 담당자: ${email}` + (accOverride ? ' <span style="color:#8a6914">(수동 지정됨)</span>' : '');
+    contactEl.title = `회계 처리 담당자: ${email}`;   // 폭이 좁아 말줄임될 때 전체 확인용
     contactEl.style.display = 'flex';
     if (contactToggleEl) contactToggleEl.style.display = 'inline-flex';
   } else {
@@ -2625,7 +2625,7 @@ function accCandidateOptions(){
 }
 const ACC_PICK_PLACEHOLDER = '-- AP/AR/GL 담당자 · Accounting Head 중 선택 --';
 
-// ── 상단 "Accounting 처리 담당자" 배지 옆 "✎ 변경" — 결재라인(6번 섹션)까지 안 내려가도 여기서 바로 변경 가능 ──
+// ── 상단 "회계 처리 담당자" 배지 옆 "✎ 변경" — 결재라인(6번 섹션)까지 안 내려가도 여기서 바로 변경 가능 ──
 function contactToggleManual(){
   const editRow = document.getElementById('v-type-contact-edit');
   const toggleEl = document.getElementById('v-type-contact-toggle');
