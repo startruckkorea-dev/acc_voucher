@@ -516,14 +516,15 @@ if (new URLSearchParams(location.search).get('openId')) {
         <!-- 안내 박스는 2·3열에 걸쳐 배치한다. Submission Date 아래가 비어 있어
              그 공간을 쓰면 폭이 넓어지고 줄바꿈이 줄어 세로 길이가 짧아진다.
              안쪽은 좌(설명)·우(금액표) 2단이라, 표를 펼쳐도 높이가 합쳐지지 않는다. -->
-        <div id="rd-exempt-note" style="display:none;grid-column:2 / 4;font-size:.68rem;color:#8a6116;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:6px;padding:9px 12px;margin-top:2px;line-height:1.55">
+        <div id="rd-exempt-note" style="display:none;grid-column:1 / 4;font-size:.68rem;color:#8a6116;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:6px;padding:9px 12px;margin-top:2px;line-height:1.55">
           <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
-            <div style="flex:1 1 250px;min-width:240px">
-              <div style="font-weight:700;margin-bottom:4px">규정상 RD 승인이 면제되는 거래에만 사용바랍니다.</div>
+            <div style="flex:1 1 320px;min-width:290px">
+              <div style="font-weight:700">규정상 RD 승인이 면제되는 거래에만 사용바랍니다.</div>
+              <div style="font-weight:700;color:#a4262c;margin:1px 0 4px;font-size:.66rem">AP &middot; AP(IMS) &middot; GL 유형만 신청할 수 있습니다.</div>
               결재 라인 간소화 등의 이유로 RD 결재를 건너뛰려는 용도가 아니며, 선택할 수 있는 사유는 Voucher Type별 규정에 따라 제한됩니다.
               선택한 사유와 신청자는 전표에 기록되어 <b>결재자 승인 화면 및 상세내용에 포함</b>됩니다.
             </div>
-            <div style="flex:1 1 385px;min-width:375px">
+            <div style="flex:0 1 340px;min-width:320px">
               <details id="rd-amount-details">
                 <summary style="cursor:pointer;font-weight:700;color:#8a6116;list-style:none;display:inline-flex;align-items:center;gap:4px;user-select:none">
                   <span style="font-size:.6rem">▾</span> RD 승인 처리 금액 참고
@@ -2129,27 +2130,25 @@ function renderRdAmountTable() {
   if (!box) return;
   const cur = (document.getElementById('v-type') || {}).value || '';
   const bd = ';border-bottom:1px solid #f0e2bf';
-  const rows = Object.keys(VTYPE_LABEL)
-    .filter(k => APPROVAL_RULES[k] && APPROVAL_RULES[k].RD && APPROVAL_RULES[k].RD !== '-')
+  // 제외 신청이 가능한 유형(AP · AP(IMS) · GL)만 싣는다.
+  // 나머지 유형은 애초에 이 기능을 못 쓰므로 표에 있으면 오히려 헷갈린다.
+  // '제외 신청' 열도 함께 없애 표 가로를 크게 줄인다.
+  const rows = RD_EXEMPT_TYPES
+    .filter(k => VTYPE_LABEL[k] && APPROVAL_RULES[k] && APPROVAL_RULES[k].RD && APPROVAL_RULES[k].RD !== '-')
     .map(k => {
       const amt = String(APPROVAL_RULES[k].RD).replace('>=', '').trim();
       const on = k === cur;
-      const exempt = RD_EXEMPT_TYPES.includes(k);
       const b = on ? ';font-weight:700;color:#7a5310' : '';
-      // '현재 선택'은 유형명 옆에 붙이면 줄바꿈이 생기므로 맨 오른쪽 칸으로 뺀다.
       return '<tr style="background:' + (on ? '#fbf1d6' : 'transparent') + '">' +
-        '<td style="padding:2px 6px' + bd + b + '">' + VTYPE_LABEL[k] + '</td>' +
-        '<td style="padding:2px 6px;text-align:right;white-space:nowrap' + bd + b + '">' + amt + '원 이상</td>' +
-        '<td style="padding:2px 6px;text-align:center;font-size:.62rem' + bd + ';color:' +
-          (exempt ? '#8a6116' : '#c1b48f') + (on ? ';font-weight:700' : '') + '">' + (exempt ? '가능' : '해당 없음') + '</td>' +
+        '<td style="padding:2px 7px;white-space:nowrap' + bd + b + '">' + VTYPE_LABEL[k] + '</td>' +
+        '<td style="padding:2px 7px;text-align:right;white-space:nowrap' + bd + b + '">' + amt + '원 이상</td>' +
         '<td style="padding:2px 5px;white-space:nowrap;font-size:.62rem;font-weight:700;color:#a4262c' + bd + '">' +
           (on ? '← 현재 선택' : '') + '</td></tr>';
     }).join('');
   box.innerHTML =
-    '<table style="width:100%;border-collapse:collapse;font-size:.66rem;background:#fffdf7;border:1px solid #f0d9a0;border-radius:4px;overflow:hidden">' +
-    '<tr style="background:#f7edd4"><th style="padding:4px 7px;text-align:left;font-weight:700">Voucher Type</th>' +
+    '<table style="border-collapse:collapse;font-size:.66rem;background:#fffdf7;border:1px solid #f0d9a0;border-radius:4px;overflow:hidden">' +
+    '<tr style="background:#f7edd4"><th style="padding:4px 7px;text-align:left;font-weight:700;white-space:nowrap">Voucher Type</th>' +
     '<th style="padding:4px 7px;text-align:right;font-weight:700;white-space:nowrap">RD 승인 대상 금액</th>' +
-    '<th style="padding:4px 7px;text-align:center;font-weight:700;white-space:nowrap">제외 신청</th>' +
     '<th style="padding:4px 5px"></th></tr>' + rows + '</table>' +
     '<div style="font-size:.62rem;color:#a89464;margin-top:4px;line-height:1.5">' +
     '위 금액 미만이면 RD 결재가 원래 붙지 않으므로 제외 신청이 필요하지 않습니다.</div>';
