@@ -1241,6 +1241,8 @@ const ADMIN_EMAILS = [];
 const PKF_EMAILS = [];
 // Voucher Type 선택 시 담당 연락처 배지 표시용 - loadSystemConfig 콜백에서 채워짐
 const CONTACT_EMAILS = { ap:'', ar:'', gl:'' };
+// 배지에는 이메일 대신 이름을 보여준다(폭 절약). 결재선·저장값은 그대로 이메일을 쓰므로 영향 없음.
+const CONTACT_NAMES  = { ap:'', ar:'', gl:'' };
 // 각 Voucher Type이 어느 담당(AP/AR/GL)에 해당하는지
 const TYPE_CONTACT_CAT = { AP:'ap', AP_IMS:'gl', AP_CR:'ar', AR:'ar', GL:'gl', FA:'gl', ADV:'ap', SET:'ap' };
 const IT_EMAILS = []; // ACC-Voucher_IT — Approvals 세대 관리 등 인프라 전환 기능 노출 대상
@@ -1564,6 +1566,7 @@ async function boot(account) {
     if(ar.email) el('acc-contact-ar').textContent = 'BU Admin(AR 관련) 문의 Email: '+ar.email;
     if(gl.email) el('acc-contact-gl').textContent = 'BU Admin(GL 관련) 문의 Email: '+gl.email;
     CONTACT_EMAILS.ap = ap.email||''; CONTACT_EMAILS.ar = ar.email||''; CONTACT_EMAILS.gl = gl.email||'';
+    CONTACT_NAMES.ap  = ap.name||'';  CONTACT_NAMES.ar  = ar.name||'';  CONTACT_NAMES.gl  = gl.name||'';
     onTypeChange(); // Voucher Type이 이미 선택돼 있었다면(기존 전표 불러오기 등) 배지를 바로 갱신
     // 관리자 권한: ACC-Voucher_ADMIN_1~N 모두 읽기
     const adminList = cfgEmails(cfg, ['ACC-Voucher_ADMIN_1']); // ADMIN_N 패턴 자동 확장
@@ -2177,6 +2180,19 @@ function onRdExemptReasonChange() {
   renderApproval();   // 사유 유무와 무관하게 결재라인은 즉시 반영
 }
 
+// 이메일을 사람이 읽는 이름으로 바꾼다. 표시 전용이며 저장값에는 관여하지 않는다.
+//   1) employee_search.xlsx 의 EngName  2) system_config 의 이름  3) 이메일 로컬파트에서 유추
+function contactNameOf(email, fallbackName) {
+  const e = String(email || '').trim().toLowerCase();
+  if (!e) return '';
+  if (fallbackName) return fallbackName;
+  const emp = (window._employeeData || []).find(x => (x.email || '').toLowerCase() === e);
+  if (emp && emp.name) return emp.name;
+  // gina.shin@hyosung.com → Gina Shin  /  saerom.park.ext@ → Saerom Park (외부 계정 접미사는 제외)
+  return e.split('@')[0].split(/[._-]+/)
+    .filter(w => w && !['ext', 'external', 'ex'].includes(w))
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') || e;
+}
 function onTypeChange() {
   try { renderRdAmountTable(); } catch (e) {}
   const type = document.getElementById('v-type').value;
@@ -2190,9 +2206,12 @@ function onTypeChange() {
   const contactToggleEl = document.getElementById('v-type-contact-toggle');
   const cat = TYPE_CONTACT_CAT[type];
   const email = accOverride ? accOverride.email : (cat ? CONTACT_EMAILS[cat] : '');
+  const cName = contactNameOf(email, accOverride ? accOverride.name : (cat ? CONTACT_NAMES[cat] : ''));
   if (email) {
-    contactEl.innerHTML = `회계 처리 담당자: ${email}` + (accOverride ? ' <span style="color:#8a6914">(수동 지정됨)</span>' : '');
-    contactEl.title = `회계 처리 담당자: ${email}`;   // 폭이 좁아 말줄임될 때 전체 확인용
+    // 이메일은 길어서 배지가 잘리고 '(수동 지정됨)' 표시까지 밀려났다.
+    // 배지에는 이름만 두고 이메일은 툴팁으로 옮긴다. 결재선에 실리는 값은 그대로 이메일이다.
+    contactEl.innerHTML = `회계 처리 담당자: <b>${escHtml(cName)}</b>` + (accOverride ? ' <span style="color:#8a6914">(수동 지정됨)</span>' : '');
+    contactEl.title = `회계 처리 담당자: ${cName} · ${email}` + (accOverride ? ' (수동 지정됨)' : '');
     contactEl.style.display = 'flex';
     if (contactToggleEl) contactToggleEl.style.display = 'inline-flex';
   } else {
