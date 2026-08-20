@@ -314,7 +314,9 @@ table.pt-tbl tfoot td{background:#eef1f5;font-weight:700;border-top:2px solid #1
 #pt-panel .pt-in{padding:11px 12px 12px}
 .pt-bar{display:flex;align-items:center;gap:6px;font-weight:400;flex-wrap:wrap;padding:9px 11px;background:#f4faf4;border:1px solid #d9ecd9;border-radius:6px}
 .pt-bar select{border:1px solid #d2d0ce;border-radius:4px;padding:5px 8px;font-size:.74rem;font-family:inherit;min-width:290px}
-.pt-hint{font-size:.68rem;color:#a19f9d;line-height:1.65;margin-top:9px}
+.pt-hint{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:.68rem;color:#8a8886;line-height:1.6;margin-top:10px}
+.pt-hint dt{color:#605e5c;font-weight:600;white-space:nowrap}
+.pt-hint dd{margin:0}
 .spinner { width: 32px; height: 32px; border: 3px solid #edebe9; border-top: 3px solid #0078d4; border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -491,12 +493,12 @@ if (new URLSearchParams(location.search).get('openId')) {
             <button onclick="ptDownloadTemplate()" title="원본 자료 양식(6개 시트·머리글)을 내려받습니다" style="padding:5px 12px;border:1px solid #107c10;border-radius:4px;background:#fff;color:#107c10;font-size:.74rem;cursor:pointer;white-space:nowrap;font-family:inherit">양식 다운로드</button>
             <input type="file" id="pt-file" accept=".xlsx,.xlsm,.xls" style="display:none" onchange="ptOnFile(this)">
           </div>
-          <div class="pt-hint">
-            * <b style="color:#107c10">포인트 정산 자동 작성</b>은 월별 원본 자료(부품/통합 × 적립·소멸·사용 6개 시트)를 올리면
-            계정·금액·Purpose를 채우고 원본 Excel을 첨부까지 담습니다. 적용 전에 계산 결과를 먼저 보여드립니다.<br>
-            * <b>양식 다운로드</b>로 받은 파일의 시트명·머리글을 그대로 유지해 주세요. 이름이 바뀌면 인식되지 않습니다.<br>
-            * <b>기존 전표 불러오기</b> — Invoice Date는 기존 전표 날짜로 복원되고, Exchange Rate는 오늘 기준 환율을 그대로 사용합니다. 첨부파일은 새로 첨부해주세요.
-          </div>
+          <dl class="pt-hint">
+            <dt>Excel 올리기</dt><dd>월별 원본 자료를 올리면 계정·금액·Purpose가 채워지고, 원본 Excel도 함께 첨부됩니다.</dd>
+            <dt>계산 확인</dt><dd>폼에 적용하기 전에 계산 결과를 먼저 보여드립니다.</dd>
+            <dt>양식 다운로드</dt><dd>시트명과 머리글을 그대로 유지해 주세요. 바뀌면 인식되지 않습니다.</dd>
+            <dt>전표 불러오기</dt><dd>Invoice Date는 원 전표 날짜, Exchange Rate는 오늘 환율을 씁니다. 첨부는 새로 해주세요.</dd>
+          </dl>
         </div>
       </details>
 
