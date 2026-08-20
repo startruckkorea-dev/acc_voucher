@@ -316,7 +316,13 @@ table.pt-tbl tfoot td{background:#eef1f5;font-weight:700;border-top:2px solid #1
 #pt-panel .pt-in{padding:11px 12px 12px}
 .pt-bar{display:flex;align-items:center;gap:6px;font-weight:400;flex-wrap:wrap;padding:9px 11px;background:#f4faf4;border:1px solid #d9ecd9;border-radius:6px}
 .pt-bar select{border:1px solid #d2d0ce;border-radius:4px;padding:5px 8px;font-size:.74rem;font-family:inherit;min-width:290px}
-.pt-hint{margin-top:9px;background:#fff;border:1px solid #ececec;border-radius:6px;overflow:hidden}
+.pt-more{margin-top:9px}
+.pt-more>summary{cursor:pointer;list-style:none;user-select:none;display:inline-flex;align-items:center;gap:6px;font-size:.7rem;color:#8a8886;padding:2px 0;transition:color .12s}
+.pt-more>summary::-webkit-details-marker{display:none}
+.pt-more>summary::before{content:'';flex-shrink:0;width:0;height:0;border-left:4px solid #b3b0ad;border-top:3.5px solid transparent;border-bottom:3.5px solid transparent;transition:transform .15s ease}
+.pt-more[open]>summary::before{transform:rotate(90deg);border-left-color:#8a8886}
+.pt-more>summary:hover{color:#605e5c}
+.pt-hint{margin-top:6px;background:#fff;border:1px solid #ececec;border-radius:6px;overflow:hidden}
 .pt-hint>div{display:grid;grid-template-columns:114px 1fr;align-items:center;gap:12px;padding:5px 14px;font-size:.71rem;line-height:1.5;border-top:1px solid #f5f5f5}
 .pt-hint>div:first-child{border-top:none}
 .pt-hint b{display:flex;align-items:center;gap:7px;color:#323130;font-weight:600;white-space:nowrap;letter-spacing:.01em}
@@ -486,7 +492,7 @@ if (new URLSearchParams(location.search).get('openId')) {
         </div>
       </div>
       <details id="pt-panel">
-        <summary>포인트 정산 자동 작성 &nbsp;·&nbsp; 전표 작성 안내</summary>
+        <summary>포인트 정산 자동 작성</summary>
         <div class="pt-in">
           <div class="pt-bar">
             <span style="font-size:.72rem;color:#107c10;font-weight:600;white-space:nowrap">포인트 정산 자동 작성</span>
@@ -499,12 +505,15 @@ if (new URLSearchParams(location.search).get('openId')) {
             <button onclick="ptDownloadTemplate()" title="원본 자료 양식(6개 시트·머리글)을 내려받습니다" style="padding:5px 12px;border:1px solid #107c10;border-radius:4px;background:#fff;color:#107c10;font-size:.74rem;cursor:pointer;white-space:nowrap;font-family:inherit">양식 다운로드</button>
             <input type="file" id="pt-file" accept=".xlsx,.xlsm,.xls" style="display:none" onchange="ptOnFile(this)">
           </div>
+          <details class="pt-more">
+            <summary>사용 안내</summary>
           <div class="pt-hint">
             <div><b>Excel 올리기</b><span>월별 원본 자료를 올리면 계정 &middot; 금액 &middot; Purpose가 채워지고, 원본 파일도 함께 첨부됩니다.</span></div>
             <div><b>계산 확인</b><span>폼에 적용하기 전에 계산 결과를 먼저 보여드립니다.</span></div>
             <div><b>양식 다운로드</b><span>시트명과 머리글은 <em>그대로 유지</em>해 주세요. 바뀌면 인식되지 않습니다.</span></div>
             <div><b>전표 불러오기</b><span>Invoice Date는 원 전표 날짜, Exchange Rate는 오늘 환율을 사용합니다. 첨부는 새로 해주세요.</span></div>
           </div>
+          </details>
         </div>
       </details>
 
