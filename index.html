@@ -292,6 +292,22 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 /* Loading */
 #dyn-loading { display: none; position: fixed; inset: 0; background: rgba(255,255,255,.8); z-index: 300; align-items: center; justify-content: center; flex-direction: column; gap: 12px; }
 #dyn-loading.show { display: flex; }
+/* Mercedes ServiceCard 포인트 정산 — 확인 모달 */
+#pt-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:320;align-items:center;justify-content:center;padding:20px}
+#pt-modal.show{display:flex}
+#pt-modal .pt-box{background:#fff;border-radius:10px;box-shadow:0 16px 48px rgba(0,0,0,.24);width:100%;max-width:660px;max-height:88vh;display:flex;flex-direction:column}
+#pt-modal .pt-hd{padding:13px 18px;background:#0078d4;color:#fff;font-weight:600;font-size:.9rem;border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center}
+#pt-modal .pt-hd button{background:none;border:none;color:#fff;font-size:18px;cursor:pointer;font-family:inherit}
+#pt-modal .pt-bd{padding:16px 18px;overflow-y:auto}
+#pt-modal .pt-ft{padding:12px 18px;border-top:1px solid #edebe9;text-align:right}
+table.pt-tbl{width:100%;border-collapse:collapse;font-size:.73rem}
+table.pt-tbl th{background:#1F3864;color:#fff;padding:6px 8px;text-align:left;font-weight:600;font-size:.7rem}
+table.pt-tbl td{padding:5px 8px;border-bottom:1px solid #edebe9}
+table.pt-tbl td.r,table.pt-tbl th.r{text-align:right;font-variant-numeric:tabular-nums}
+table.pt-tbl tr.tot td{background:#f3f7fb;font-weight:700}
+table.pt-tbl tfoot td{background:#eef1f5;font-weight:700;border-top:2px solid #1F3864}
+.pt-bar{display:flex;align-items:center;gap:6px;font-weight:400}
+.pt-bar select{border:1px solid #d2d0ce;border-radius:4px;padding:5px 8px;font-size:.74rem;font-family:inherit;max-width:250px}
 .spinner { width: 32px; height: 32px; border: 3px solid #edebe9; border-top: 3px solid #0078d4; border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -448,6 +464,16 @@ if (new URLSearchParams(location.search).get('openId')) {
     <div class="card">
       <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;row-gap:8px">
         <span>회계 전표 작성 <span id="voucher-id-badge" style="font-size:11px;font-weight:400;color:#a19f9d"></span></span>
+        <div class="pt-bar">
+          <span style="font-size:.72rem;color:#0078d4;font-weight:600;white-space:nowrap">포인트 정산 자동 작성</span>
+          <select id="pt-preset" title="월별 원본 자료를 올리면 전표가 규칙대로 채워집니다">
+            <option value="">-- 양식 선택 --</option>
+            <option value="provision">Mercedes ServiceCard Point Provision</option>
+            <option value="redemption">Mercedes ServiceCard Point Reimbursement</option>
+          </select>
+          <button onclick="ptPickFile()" style="padding:5px 12px;border:none;border-radius:4px;background:#107c10;color:#fff;font-size:.74rem;cursor:pointer;white-space:nowrap;font-family:inherit">Excel 올리기</button>
+          <input type="file" id="pt-file" accept=".xlsx,.xlsm,.xls" style="display:none" onchange="ptOnFile(this)">
+        </div>
         <div style="display:flex;align-items:center;gap:6px;font-weight:400">
           <span style="font-size:.72rem;color:#0078d4;font-weight:600;white-space:nowrap">기존 전표 불러오기</span>
           <input type="text" id="load-voucher-id" placeholder="예: ACC-Voucher-20**-**-**_ID-**" style="width:220px;border:1px solid #d2d0ce;border-radius:4px;padding:5px 9px;font-size:.74rem">
@@ -457,7 +483,9 @@ if (new URLSearchParams(location.search).get('openId')) {
       <div style="font-size:.68rem;color:#a19f9d;margin:-8px 0 14px;line-height:1.6">
         * Invoice Date는 기존 전표 날짜로 복원됩니다 &nbsp;·&nbsp;
         * Exchange Rate는 <b>오늘 기준 환율</b>을 그대로 사용합니다 &nbsp;·&nbsp;
-        * 첨부파일은 새로 첨부해주세요
+        * 첨부파일은 새로 첨부해주세요<br>
+        * <b style="color:#107c10">포인트 정산 자동 작성</b>은 월별 원본 자료(부품/통합 × 적립·소멸·사용 6개 시트)를 올리면
+        계정·금액·Purpose를 채우고 원본 Excel을 첨부까지 담습니다. 적용 전에 계산 결과를 먼저 보여드립니다.
       </div>
 
       <div class="section-title">1. 바우처 정보 (Voucher Information)</div>
@@ -935,6 +963,18 @@ if (new URLSearchParams(location.search).get('openId')) {
 </div>
 
 <div id="dyn-loading"><div class="spinner"></div><span style="font-size:13px;color:#605e5c">처리 중...</span></div>
+
+<!-- 포인트 정산 자동 작성 — 계산 결과 확인 후 적용 -->
+<div id="pt-modal">
+  <div class="pt-box">
+    <div class="pt-hd"><span id="pt-modal-title">포인트 정산</span><button onclick="ptCloseConfirm()">&times;</button></div>
+    <div class="pt-bd" id="pt-modal-body"></div>
+    <div class="pt-ft">
+      <button onclick="ptCloseConfirm()" style="padding:7px 16px;border:1px solid #d2d0ce;border-radius:4px;background:#fff;color:#605e5c;font-size:.78rem;cursor:pointer;font-family:inherit">취소</button>
+      <button onclick="ptApply()" style="margin-left:6px;padding:7px 22px;border:none;border-radius:4px;background:#107c10;color:#fff;font-size:.78rem;font-weight:600;cursor:pointer;font-family:inherit">전표에 적용</button>
+    </div>
+  </div>
+</div>
 
 <!-- 상신 진행 모달 — 처리 중에는 화면을 덮어 다른 조작을 막고, 단계별 진행을 보여준다 -->
 <div id="submit-progress">
@@ -6377,6 +6417,336 @@ window.addEventListener('load',async()=>{
     console.warn('MSAL 초기화 오류:',e.message);
   }
 });
+
+/* ══════════════════════════════════════════════════════════════
+   Mercedes ServiceCard 포인트 정산 — 전표 자동 작성
+   월별 원본 엑셀(부품/통합 × 적립/소멸/사용 6개 시트)을 올리면
+   Provision / Reimbursement 전표를 규칙대로 채운다.
+
+   설계 원칙
+   · 계정코드·딜러 목록·문구를 코드에 두지 않고 acc_point_master.xlsx 에서 읽는다
+   · 원본 시트에 끼어 있는 합계행(빈 포인트타입 또는 'SUM')을 반드시 제외한다
+     - 「부품 적립」 J열 Sum · 「통합 적립」 E열 SUM · 「부품 사용」 포인트타입 열 'SUM'
+     - 거르지 않으면 정확히 2배가 된다
+   · 적립은 「적립포인트」, 소멸은 「남은포인트」 열을 쓴다(소멸 시점 잔액 기준)
+   · 「부품 사용」이 통합 포인트 사용분까지 이미 포함하므로 「통합 사용」은 더하지 않는다
+   · 폼에 바로 쓰지 않고 먼저 계산 결과를 보여주고, 사용자가 확인한 뒤 채운다
+   ══════════════════════════════════════════════════════════════ */
+
+const PT_MASTER_FILE = 'acc_point_master.xlsx';
+let PT_MASTER = null;
+let _ptPending = null;   // {kind, res, file}
+
+// #dyn-loading 오버레이는 마크업만 있고 토글 함수가 없어 여기서 직접 다룬다
+function ptLoading(on, msg){
+  const el = document.getElementById('dyn-loading');
+  if(!el) return;
+  const sp = el.querySelector('span');
+  if(sp && msg) sp.textContent = msg;
+  el.classList.toggle('show', !!on);
+}
+function ptNum(v){
+  if(v===null||v===undefined||v==='') return 0;
+  const n = parseFloat(String(v).replace(/,/g,''));
+  return isNaN(n) ? 0 : n;
+}
+function ptStr(v){ return v===null||v===undefined ? '' : String(v).trim(); }
+
+// 시트를 머리글 기준 객체 배열로 읽고, 중간에 끼어 있는 합계행을 제외한다
+function ptRows(wb, name){
+  const sh = wb.Sheets[name];
+  if(!sh) return null;
+  const raw = XLSX.utils.sheet_to_json(sh, {header:1});
+  if(!raw.length) return [];
+  const hdr = (raw[0]||[]).map(v=>ptStr(v));
+  const out = [];
+  for(let i=1;i<raw.length;i++){
+    const r = raw[i]; if(!r || r.every(v=>ptStr(v)==='')) continue;
+    const o = {}; hdr.forEach((h,ci)=>{ if(h) o[h] = r[ci]; });
+    const ty = ptStr(o['포인트타입']);
+    if(!ty || ty.toUpperCase()==='SUM') continue;   // ★ 합계행 제외
+    o._raw = r;
+    out.push(o);
+  }
+  return out;
+}
+
+// 정산 대상 월 판정 — 적립일/사용일에서 가장 많이 등장한 YYYY-MM
+function ptPeriod(sets){
+  const cnt = {};
+  sets.forEach(({rows, col}) => (rows||[]).forEach(r=>{
+    const s = ptStr(r[col]).slice(0,7);
+    if(/^\d{4}-\d{2}$/.test(s)) cnt[s] = (cnt[s]||0)+1;
+  }));
+  const ym = Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0];
+  if(!ym) return null;
+  const [y,m] = ym.split('-').map(Number);
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const p = n => String(n).padStart(2,'0');
+  return { ym, label: `${y}.${p(m)}.01~${y}.${p(m)}.${p(last)}`, title: `${y}-${p(m)}` };
+}
+
+// 원본 6개 시트 → Provision / Redemption 집계
+function ptAnalyze(wb){
+  const need = ['부품 적립','통합 적립','부품 소멸','통합 소멸','부품 사용'];
+  const miss = need.filter(n=>!wb.Sheets[n]);
+  if(miss.length) throw new Error('필요한 시트가 없습니다: ' + miss.join(', ') +
+    '\n원본 월별 자료 파일(부품/통합 × 적립·소멸·사용)을 선택했는지 확인해 주세요.');
+
+  const pa = ptRows(wb,'부품 적립'), ta = ptRows(wb,'통합 적립');
+  const ps = ptRows(wb,'부품 소멸'), ts = ptRows(wb,'통합 소멸') || [];
+  const pu = ptRows(wb,'부품 사용');
+
+  const sum = (rows, type, col) => (rows||[])
+    .filter(r=>ptStr(r['포인트타입'])===type)
+    .reduce((s,r)=>s+ptNum(r[col]),0);
+
+  // 부품 포인트: 적립(적립포인트) − 소멸(남은포인트)
+  const welcome = sum(pa,'웰컴','적립포인트') - sum(ps,'웰컴','남은포인트');
+  const parts   = sum(pa,'부품','적립포인트') - sum(ps,'부품','남은포인트');
+  // 통합 포인트: 동일 규칙
+  const sales   = sum(ta,'Sales','적립포인트') - sum(ts,'Sales','남은포인트');
+  const csp     = sum(ta,'CSP','적립포인트')   - sum(ts,'CSP','남은포인트');
+  const promo   = sum(ta,'Promotion','적립포인트') - sum(ts,'Promotion','남은포인트');
+
+  // 사용(딜러별) — 「부품 사용」 단독. 통합 사용분이 이미 포함되어 있다.
+  const byDealer = {}; const byType = {};
+  (pu||[]).forEach(r=>{
+    const vc = ptStr(r['Vendor Code']);
+    const v = ptNum(r['사용금액(개별)']);
+    if(vc) byDealer[vc] = (byDealer[vc]||0) + v;
+    const t = ptStr(r['포인트타입']); byType[t] = (byType[t]||0) + v;
+  });
+  const redTotal = Object.values(byDealer).reduce((a,b)=>a+b,0);
+
+  const period = ptPeriod([{rows:pa,col:'적립일'},{rows:ta,col:'적립일'},{rows:pu,col:'사용일'}]);
+
+  return {
+    period,
+    counts: { pa:(pa||[]).length, ta:(ta||[]).length, ps:(ps||[]).length, ts:ts.length, pu:(pu||[]).length },
+    prov: { welcome, parts, sales, csp, promo, total: welcome+parts+sales+csp+promo },
+    red:  { byDealer, byType, total: redTotal }
+  };
+}
+
+/* ── 마스터 로드 ─────────────────────────────────────────── */
+async function ptLoadMaster(){
+  if(PT_MASTER) return PT_MASTER;
+  const t = await token();
+  if(!siteId){ const s = await api('/sites/'+SITE_PATH_DB); siteId = s.id; }
+  const drives = await api('/sites/'+siteId+'/drives');
+  const dv = (drives.value||[]).find(d=>['Documents','문서','Shared Documents'].includes(d.name)) || (drives.value||[])[0];
+  if(!dv) throw new Error('문서 라이브러리를 찾을 수 없습니다.');
+  const res = await fetch(GRAPH+'/drives/'+dv.id+'/root:/'+PT_MASTER_FILE+':/content', {headers:{Authorization:'Bearer '+t}});
+  if(!res.ok) throw new Error(PT_MASTER_FILE+' 을 읽을 수 없습니다 ('+res.status+').\nSTK-DB 문서 루트에 파일이 있는지 확인해 주세요.');
+  const wb = XLSX.read(await res.arrayBuffer(), {type:'array'});
+  const rowsOf = n => { const sh = wb.Sheets[n]; return sh ? XLSX.utils.sheet_to_json(sh) : []; };
+
+  const dealers = rowsOf('Dealers').map(r=>({
+    code: ptStr(r['VendorCode']), nameEn: ptStr(r['DealerNameEN']),
+    nameKo: ptStr(r['DealerNameKO']), order: ptNum(r['SortOrder'])
+  })).filter(d=>d.code).sort((a,b)=>a.order-b.order);
+
+  const glmap = rowsOf('GLMap').map(r=>({
+    key: ptStr(r['Key']), drcr: ptStr(r['DRCR']).toUpperCase(), gl: ptStr(r['GL']),
+    glName: ptStr(r['GLName']), pc: ptStr(r['PC']), cctr: ptStr(r['CCTR']),
+    subpc: ptStr(r['SubPC']), desc: ptStr(r['LineDesc']),
+    keepZero: ptStr(r['KeepZero']).toUpperCase()==='Y'
+  })).filter(g=>g.key);
+
+  const settings = {};
+  rowsOf('Settings').forEach(r=>{ const k = ptStr(r['Key']); if(k) settings[k] = ptStr(r['Value']); });
+
+  if(!dealers.length) throw new Error(PT_MASTER_FILE+' 의 Dealers 시트가 비어 있습니다.');
+  if(!glmap.length)   throw new Error(PT_MASTER_FILE+' 의 GLMap 시트가 비어 있습니다.');
+  PT_MASTER = { dealers, glmap, settings };
+  console.log('[Point] 마스터 로드: 딜러 '+dealers.length+' · GL매핑 '+glmap.length+' · 설정 '+Object.keys(settings).length);
+  return PT_MASTER;
+}
+
+/* ── 파일 선택 ───────────────────────────────────────────── */
+function ptPickFile(){
+  const kind = (document.getElementById('pt-preset')||{}).value||'';
+  if(!kind){ showAccAlert('양식을 먼저 선택해 주세요.', 'Provision(포인트 적립 충당) 또는 Reimbursement(딜러 상환) 중 하나를 고른 뒤 Excel을 올려 주세요.', '📋'); return; }
+  const el = document.getElementById('pt-file');
+  el.value = '';
+  el.click();
+}
+
+async function ptOnFile(input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  const kind = (document.getElementById('pt-preset')||{}).value||'';
+  try{
+    ptLoading(true, '원본 자료를 분석하는 중...');
+    await ptLoadMaster();
+    const wb = XLSX.read(await file.arrayBuffer(), {type:'array'});
+    const res = ptAnalyze(wb);
+    _ptPending = { kind, res, file };
+    ptShowConfirm(kind, res, file);
+  }catch(e){
+    console.error('[Point] 분석 실패:', e);
+    showAccAlert('원본 자료를 읽지 못했습니다', e.message, '⚠️');
+  }finally{ ptLoading(false); }
+}
+
+/* ── 확인 모달 ───────────────────────────────────────────── */
+function ptFmt(n){ return (Math.round(n)).toLocaleString('ko-KR'); }
+
+function ptShowConfirm(kind, res, file){
+  const M = PT_MASTER;
+  const isProv = kind==='provision';
+  const rowsHtml = [];
+  let warn = [];
+
+  if(isProv){
+    const src = { WELCOME_SALES: res.prov.welcome + res.prov.sales, PARTS: res.prov.parts,
+                  CSP: res.prov.csp, PROMOTION: res.prov.promo };
+    M.glmap.filter(g=>g.key.startsWith('PROV_')).forEach(g=>{
+      const k = g.key.replace('PROV_','');
+      if(k==='CREDIT') return;
+      const amt = src[k];
+      if(amt===undefined) return;
+      if(amt===0 && !g.keepZero) return;
+      rowsHtml.push(`<tr><td>${g.drcr}</td><td>${escHtml(g.gl)}</td><td>${escHtml(g.glName)}</td><td class="r">${amt===0?'-':ptFmt(amt)}</td></tr>`);
+    });
+    const cr = M.glmap.find(g=>g.key==='PROV_CREDIT');
+    if(cr) rowsHtml.push(`<tr class="tot"><td>${cr.drcr}</td><td>${escHtml(cr.gl)}</td><td>${escHtml(cr.glName)}</td><td class="r">${ptFmt(res.prov.total)}</td></tr>`);
+    else warn.push('GLMap 에 PROV_CREDIT 행이 없습니다.');
+  } else {
+    M.dealers.forEach(d=>{
+      const amt = res.red.byDealer[d.code]||0;
+      rowsHtml.push(`<tr><td>CR</td><td>${escHtml(d.code)}</td><td>${escHtml(d.nameEn||d.nameKo)}</td><td class="r">${amt===0?'-':ptFmt(amt)}</td></tr>`);
+    });
+    const dr = M.glmap.find(g=>g.key==='RED_DEBIT');
+    if(dr) rowsHtml.push(`<tr class="tot"><td>${dr.drcr}</td><td>${escHtml(dr.gl)}</td><td>${escHtml(dr.glName)}</td><td class="r">${ptFmt(res.red.total)}</td></tr>`);
+    else warn.push('GLMap 에 RED_DEBIT 행이 없습니다.');
+    // 마스터에 없는 딜러가 원본에 있으면 금액이 누락되므로 반드시 알린다
+    const unknown = Object.keys(res.red.byDealer).filter(c=>!M.dealers.find(d=>d.code===c));
+    if(unknown.length) warn.push('마스터에 없는 Vendor Code: '+unknown.join(', ')+' → 이 금액은 전표에 담기지 않습니다.');
+  }
+  if(!res.period) warn.push('정산 대상 월을 판정하지 못했습니다. Purpose 기간을 직접 확인해 주세요.');
+
+  const total = isProv ? res.prov.total : res.red.total;
+  const c = res.counts;
+  document.getElementById('pt-modal-title').textContent =
+    isProv ? 'Mercedes ServiceCard Point Provision' : 'Mercedes ServiceCard Point Reimbursement';
+  document.getElementById('pt-modal-body').innerHTML =
+    `<div style="font-size:.74rem;color:#605e5c;line-height:1.7;margin-bottom:10px">
+       <b>${escHtml(file.name)}</b><br>
+       정산 대상 ${res.period ? escHtml(res.period.label) : '(판정 실패)'} &nbsp;·&nbsp;
+       유효 데이터 부품적립 ${c.pa} / 통합적립 ${c.ta} / 부품소멸 ${c.ps} / 통합소멸 ${c.ts} / 부품사용 ${c.pu}행
+     </div>
+     ${isProv ? '' : `<div style="font-size:.7rem;color:#8a6116;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:5px;padding:7px 10px;margin-bottom:9px;line-height:1.6">
+       「부품 사용」 시트가 통합 포인트 사용분까지 포함하고 있어 「통합 사용」 시트는 더하지 않습니다(이중 계상 방지).<br>
+       포인트 종류별: ${Object.entries(res.red.byType).sort((a,b)=>b[1]-a[1]).map(([k,v])=>escHtml(k)+' '+ptFmt(v)).join(' · ')}
+     </div>`}
+     <table class="pt-tbl"><thead><tr><th style="width:44px">구분</th><th style="width:92px">코드</th><th>계정 / 딜러</th><th style="width:120px" class="r">금액(KRW)</th></tr></thead>
+     <tbody>${rowsHtml.join('')}</tbody>
+     <tfoot><tr><td colspan="3">Total</td><td class="r">${ptFmt(total)}</td></tr></tfoot></table>
+     ${warn.length ? `<div style="margin-top:10px;background:#fdf2f2;border:1px solid #f0c8c8;border-radius:6px;padding:8px 11px;font-size:.72rem;color:#a4262c;line-height:1.6">${warn.map(w=>'· '+escHtml(w)).join('<br>')}</div>` : ''}
+     <div style="margin-top:10px;font-size:.7rem;color:#a19f9d;line-height:1.6">
+       적용하면 현재 작성 중인 내용(유형·Purpose·회계 라인)이 <b>덮어쓰기</b> 됩니다. 올린 Excel은 첨부파일로 함께 담깁니다.
+     </div>`;
+  document.getElementById('pt-modal').classList.add('show');
+}
+function ptCloseConfirm(){ document.getElementById('pt-modal').classList.remove('show'); }
+
+/* ── 폼 채우기 ───────────────────────────────────────────── */
+function ptMakeLine(drcr, gl, glName, amount, desc, m){
+  const info = (typeof GL_LIST!=='undefined' ? GL_LIST.find(g=>g.code===gl) : null);
+  return {
+    drcr, gl, glName: glName || (info?info.name:''),
+    cctr: (m&&m.cctr)||'', cctrName:'', pc: (m&&m.pc)||'', pcName:'', subpc: (m&&m.subpc)||'', subpcName:'',
+    lineDesc: desc||'', currency:'KRW', unitPrice:'', qty:1, amount: Math.round(amount)
+  };
+}
+
+function ptApply(){
+  if(!_ptPending) return;
+  const { kind, res, file } = _ptPending;
+  const M = PT_MASTER, isProv = kind==='provision';
+  const S = M.settings || {};
+  const per = res.period ? res.period.label : '';
+  try{
+    // 1) Voucher Type
+    const vType = ptStr(isProv ? (S.ProvisionVoucherType||'GL') : (S.RedemptionVoucherType||'AP'));
+    document.getElementById('v-type').value = vType;
+    const _rd = document.getElementById('rd-exempt-check'); if(_rd) _rd.checked = false;
+    rdExempt = false; rdExemptReason = '';
+    onTypeChange();
+
+    // 2) Invoice Date — 오늘(작성일) 기준. 원 전표도 Submission Date와 동일했다.
+    const _iv = document.getElementById('v-inv-date');
+    if(_iv && !_iv.value) _iv.value = new Date(new Date().getTime()+9*3600000).toISOString().slice(0,10);
+
+    // 3) Purpose / Purpose Title
+    const tpl = ptStr(isProv ? S.ProvisionPurpose : S.RedemptionPurpose);
+    const note = ptStr(isProv ? S.ProvisionPurposeNote : S.RedemptionPurposeNote);
+    const purpose = (tpl ? tpl.replace('{PERIOD}', per) : '') + (note ? '\n' + note.replace(/\\n/g,'\n') : '');
+    document.getElementById('v-purpose').value = purpose.trim();
+    const ttpl = ptStr(isProv ? S.ProvisionTitle : S.RedemptionTitle);
+    const pt = document.getElementById('v-purpose-title');
+    if(pt){ pt.value = (ttpl ? ttpl.replace('{YM}', res.period?res.period.title:'') : '').slice(0,80); if(typeof onPurposeTitleInput==='function') onPurposeTitleInput(); }
+
+    // 4) 회계 라인
+    const newLines = [];
+    if(isProv){
+      const src = { WELCOME_SALES: res.prov.welcome + res.prov.sales, PARTS: res.prov.parts,
+                    CSP: res.prov.csp, PROMOTION: res.prov.promo };
+      M.glmap.filter(g=>g.key.startsWith('PROV_') && g.key!=='PROV_CREDIT').forEach(g=>{
+        const amt = src[g.key.replace('PROV_','')];
+        if(amt===undefined) return;
+        if(amt===0 && !g.keepZero) return;
+        newLines.push(ptMakeLine(g.drcr||'DR', g.gl, g.glName, amt, g.desc, g));
+      });
+      const cr = M.glmap.find(g=>g.key==='PROV_CREDIT');
+      if(cr) newLines.push(ptMakeLine(cr.drcr||'CR', cr.gl, cr.glName, res.prov.total, cr.desc, cr));
+    } else {
+      M.dealers.forEach(d=>{
+        newLines.push(ptMakeLine('CR', d.code, d.nameEn||d.nameKo, res.red.byDealer[d.code]||0, '', null));
+      });
+      const dr = M.glmap.find(g=>g.key==='RED_DEBIT');
+      if(dr) newLines.push(ptMakeLine(dr.drcr||'DR', dr.gl, dr.glName, res.red.total, dr.desc, dr));
+    }
+    lines = newLines;
+    renderLines();
+    updateTotals();
+    if(typeof evaluateBpCategoryWarning==='function') evaluateBpCategoryWarning();
+
+    // 5) 원본 Excel 을 첨부에 추가 (근거 자료)
+    if(file && typeof accFiles!=='undefined'){
+      if(!accFiles.find(f=>f.name===file.name)) accFiles.push(file);
+      if(typeof renderAccFiles==='function') renderAccFiles();
+    }
+
+    // 6) GL 마스터상 필수인데 비어 있는 항목을 미리 알려준다 (상신 단계에서 막히지 않도록)
+    const need = [];
+    newLines.forEach((l,i)=>{
+      const gi = (typeof GL_LIST!=='undefined') ? GL_LIST.find(g=>g.code===l.gl) : null;
+      if(!gi) return;
+      const n = [];
+      if(gi.cctrEnabled && !l.cctr) n.push('Cost Center');
+      if(gi.pcEnabled && !l.pc) n.push('Profit Center');
+      if(gi.subpcEnabled && !l.subpc) n.push('Sub_PC');
+      if(n.length) need.push('라인 '+(i+1)+' ('+l.gl+'): '+n.join(', '));
+    });
+
+    ptCloseConfirm();
+    _ptPending = null;
+    document.getElementById('voucher-id-badge').textContent =
+      '(' + (isProv?'Point Provision':'Point Reimbursement') + (per?' '+per:'') + ' 자동 작성)';
+    showAccAlert('전표를 자동으로 작성했습니다.',
+      '라인 ' + newLines.length + '건 · 합계 ' + ptFmt(isProv?res.prov.total:res.red.total) + ' KRW\n' +
+      '원본 Excel이 첨부에 담겼습니다.\n\n' +
+      (need.length ? '아래 항목은 직접 입력해 주세요.\n' + need.join('\n') + '\n\n' : '') +
+      '내용을 확인하신 뒤 결재선을 지정하고 상신해 주세요.', '✅');
+  }catch(e){
+    console.error('[Point] 적용 실패:', e);
+    showAccAlert('전표 자동 작성 실패', e.message, '⚠️');
+  }
+}
+
 </script>
 <!-- GW 스타일 알림 모달 -->
 <div id="acc-alert-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2000;align-items:center;justify-content:center">
