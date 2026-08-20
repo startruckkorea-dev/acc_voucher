@@ -6497,17 +6497,17 @@ function ptAnalyze(wb){
   const ps = ptRows(wb,'부품 소멸'), ts = ptRows(wb,'통합 소멸') || [];
   const pu = ptRows(wb,'부품 사용');
 
-  const sum = (rows, type, col) => (rows||[])
-    .filter(r=>ptStr(r['포인트타입'])===type)
-    .reduce((s,r)=>s+ptNum(r[col]),0);
-
-  // 부품 포인트: 적립(적립포인트) − 소멸(남은포인트)
-  const welcome = sum(pa,'웰컴','적립포인트') - sum(ps,'웰컴','남은포인트');
-  const parts   = sum(pa,'부품','적립포인트') - sum(ps,'부품','남은포인트');
-  // 통합 포인트: 동일 규칙
-  const sales   = sum(ta,'Sales','적립포인트') - sum(ts,'Sales','남은포인트');
-  const csp     = sum(ta,'CSP','적립포인트')   - sum(ts,'CSP','남은포인트');
-  const promo   = sum(ta,'Promotion','적립포인트') - sum(ts,'Promotion','남은포인트');
+  // 종류(부품/통합) × 세부종류(포인트타입)별 순증 = 적립(적립포인트) − 소멸(남은포인트)
+  // 계정 매핑은 마스터가 정하므로 여기서는 조합별 금액만 만든다.
+  // 새로운 세부종류가 원본에 생겨도 집계는 되고, 매핑이 없으면 확인 창에서 경고한다.
+  const net = {};
+  const acc = (kind, rows, col, sign) => (rows||[]).forEach(r=>{
+    const k = kind + '|' + ptStr(r['포인트타입']);
+    net[k] = (net[k]||0) + sign * ptNum(r[col]);
+  });
+  acc('부품', pa, '적립포인트',  1); acc('부품', ps, '남은포인트', -1);
+  acc('통합', ta, '적립포인트',  1); acc('통합', ts, '남은포인트', -1);
+  const provTotal = Object.values(net).reduce((a,b)=>a+b,0);
 
   // 사용(딜러별) — 「부품 사용」 단독. 통합 사용분이 이미 포함되어 있다.
   const byDealer = {}; const byType = {};
@@ -6524,7 +6524,7 @@ function ptAnalyze(wb){
   return {
     period,
     counts: { pa:(pa||[]).length, ta:(ta||[]).length, ps:(ps||[]).length, ts:ts.length, pu:(pu||[]).length },
-    prov: { welcome, parts, sales, csp, promo, total: welcome+parts+sales+csp+promo },
+    prov: { net, total: provTotal },
     red:  { byDealer, byType, total: redTotal }
   };
 }
@@ -6548,10 +6548,12 @@ async function ptLoadMaster(){
   })).filter(d=>d.code).sort((a,b)=>a.order-b.order);
 
   const glmap = rowsOf('GLMap').map(r=>({
-    key: ptStr(r['Key']), drcr: ptStr(r['DRCR']).toUpperCase(), gl: ptStr(r['GL']),
+    key: ptStr(r['Key']), kind: ptStr(r['Kind']), subKind: ptStr(r['SubKind']),
+    drcr: ptStr(r['DRCR']).toUpperCase(), gl: ptStr(r['GL']),
     glName: ptStr(r['GLName']), pc: ptStr(r['PC']), cctr: ptStr(r['CCTR']),
     subpc: ptStr(r['SubPC']), desc: ptStr(r['LineDesc']),
-    keepZero: ptStr(r['KeepZero']).toUpperCase()==='Y'
+    keepZero: ptStr(r['KeepZero']).toUpperCase()==='Y',
+    order: ptNum(r['SortOrder'])
   })).filter(g=>g.key);
 
   const settings = {};
@@ -6562,6 +6564,18 @@ async function ptLoadMaster(){
   PT_MASTER = { dealers, glmap, settings };
   console.log('[Point] 마스터 로드: 딜러 '+dealers.length+' · GL매핑 '+glmap.length+' · 설정 '+Object.keys(settings).length);
   return PT_MASTER;
+}
+
+// Provision 차변 라인 — 마스터의 (Kind, SubKind) 조합으로 금액을 찾아 SortOrder 순으로 만든다
+function ptProvLines(res){
+  const M = PT_MASTER;
+  return M.glmap
+    .filter(g=>g.key!=='PROV_CREDIT' && g.key!=='RED_DEBIT' && g.kind && g.subKind)
+    .sort((a,b)=>a.order-b.order)
+    .map(g=>({ map:g, drcr:g.drcr||'DR', gl:g.gl, glName:g.glName,
+               label: g.glName + '  (' + g.kind + ' · ' + g.subKind + ')',
+               desc: g.desc, amount: res.prov.net[g.kind+'|'+g.subKind] || 0 }))
+    .filter(l=>l.amount!==0 || l.map.keepZero);
 }
 
 /* ── 파일 선택 ───────────────────────────────────────────── */
@@ -6600,19 +6614,19 @@ function ptShowConfirm(kind, res, file){
   let warn = [];
 
   if(isProv){
-    const src = { WELCOME_SALES: res.prov.welcome + res.prov.sales, PARTS: res.prov.parts,
-                  CSP: res.prov.csp, PROMOTION: res.prov.promo };
-    M.glmap.filter(g=>g.key.startsWith('PROV_')).forEach(g=>{
-      const k = g.key.replace('PROV_','');
-      if(k==='CREDIT') return;
-      const amt = src[k];
-      if(amt===undefined) return;
-      if(amt===0 && !g.keepZero) return;
-      rowsHtml.push(`<tr><td>${g.drcr}</td><td>${escHtml(g.gl)}</td><td>${escHtml(g.glName)}</td><td class="r">${amt===0?'-':ptFmt(amt)}</td></tr>`);
+    ptProvLines(res).forEach(l=>{
+      rowsHtml.push(`<tr><td>${l.drcr}</td><td>${escHtml(l.gl)}</td><td>${escHtml(l.label)}</td><td class="r">${l.amount===0?'-':ptFmt(l.amount)}</td></tr>`);
     });
     const cr = M.glmap.find(g=>g.key==='PROV_CREDIT');
     if(cr) rowsHtml.push(`<tr class="tot"><td>${cr.drcr}</td><td>${escHtml(cr.gl)}</td><td>${escHtml(cr.glName)}</td><td class="r">${ptFmt(res.prov.total)}</td></tr>`);
     else warn.push('GLMap 에 PROV_CREDIT 행이 없습니다.');
+    // 원본에 금액이 있는데 매핑이 없으면 그 금액이 전표에서 통째로 빠진다 — 반드시 알린다
+    Object.keys(res.prov.net).forEach(k=>{
+      if(Math.round(res.prov.net[k])===0) return;
+      const [kind, sub] = k.split('|');
+      if(!M.glmap.find(g=>g.kind===kind && g.subKind===sub))
+        warn.push(`GLMap 에 매핑이 없는 조합: ${kind} · ${sub} (${ptFmt(res.prov.net[k])}) → 전표에 담기지 않습니다.`);
+    });
   } else {
     M.dealers.forEach(d=>{
       const amt = res.red.byDealer[d.code]||0;
@@ -6692,13 +6706,8 @@ function ptApply(){
     // 4) 회계 라인
     const newLines = [];
     if(isProv){
-      const src = { WELCOME_SALES: res.prov.welcome + res.prov.sales, PARTS: res.prov.parts,
-                    CSP: res.prov.csp, PROMOTION: res.prov.promo };
-      M.glmap.filter(g=>g.key.startsWith('PROV_') && g.key!=='PROV_CREDIT').forEach(g=>{
-        const amt = src[g.key.replace('PROV_','')];
-        if(amt===undefined) return;
-        if(amt===0 && !g.keepZero) return;
-        newLines.push(ptMakeLine(g.drcr||'DR', g.gl, g.glName, amt, g.desc, g));
+      ptProvLines(res).forEach(l=>{
+        newLines.push(ptMakeLine(l.drcr, l.gl, l.glName, l.amount, l.desc, l.map));
       });
       const cr = M.glmap.find(g=>g.key==='PROV_CREDIT');
       if(cr) newLines.push(ptMakeLine(cr.drcr||'CR', cr.gl, cr.glName, res.prov.total, cr.desc, cr));
