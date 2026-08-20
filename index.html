@@ -492,17 +492,17 @@ if (new URLSearchParams(location.search).get('openId')) {
         </div>
       </div>
       <details id="pt-panel">
-        <summary>포인트 정산 자동 작성</summary>
+        <summary>Excel 전표 자동 작성</summary>
         <div class="pt-in">
           <div class="pt-bar">
-            <span style="font-size:.72rem;color:#107c10;font-weight:600;white-space:nowrap">포인트 정산 자동 작성</span>
-            <select id="pt-preset" title="월별 원본 자료를 올리면 전표가 규칙대로 채워집니다">
+            <span style="font-size:.72rem;color:#107c10;font-weight:600;white-space:nowrap">Excel 전표 자동 작성</span>
+            <select id="pt-preset" title="양식을 고르고 원본 자료를 올리면 전표가 규칙대로 채워집니다">
               <option value="">-- 양식 선택 --</option>
               <option value="provision">Mercedes ServiceCard Point Provision</option>
               <option value="redemption">Mercedes ServiceCard Point Reimbursement</option>
             </select>
             <button onclick="ptPickFile()" style="padding:5px 12px;border:none;border-radius:4px;background:#107c10;color:#fff;font-size:.74rem;cursor:pointer;white-space:nowrap;font-family:inherit">Excel 올리기</button>
-            <button onclick="ptDownloadTemplate()" title="원본 자료 양식(6개 시트·머리글)을 내려받습니다" style="padding:5px 12px;border:1px solid #107c10;border-radius:4px;background:#fff;color:#107c10;font-size:.74rem;cursor:pointer;white-space:nowrap;font-family:inherit">양식 다운로드</button>
+            <button onclick="ptDownloadTemplate()" title="선택한 양식의 원본 자료 서식을 내려받습니다" style="padding:5px 12px;border:1px solid #107c10;border-radius:4px;background:#fff;color:#107c10;font-size:.74rem;cursor:pointer;white-space:nowrap;font-family:inherit">양식 다운로드</button>
             <input type="file" id="pt-file" accept=".xlsx,.xlsm,.xls" style="display:none" onchange="ptOnFile(this)">
           </div>
           <details class="pt-more">
@@ -993,7 +993,7 @@ if (new URLSearchParams(location.search).get('openId')) {
 
 <div id="dyn-loading"><div class="spinner"></div><span style="font-size:13px;color:#605e5c">처리 중...</span></div>
 
-<!-- 포인트 정산 자동 작성 — 계산 결과 확인 후 적용 -->
+<!-- Excel 전표 자동 작성 — 계산 결과 확인 후 적용. 양식이 늘어나면 select 에 option 만 추가하면 된다. -->
 <div id="pt-modal">
   <div class="pt-box">
     <div class="pt-hd"><span id="pt-modal-title">포인트 정산</span><button onclick="ptCloseConfirm()">&times;</button></div>
@@ -6681,7 +6681,7 @@ function ptDownloadTemplate(){
 /* ── 파일 선택 ───────────────────────────────────────────── */
 function ptPickFile(){
   const kind = (document.getElementById('pt-preset')||{}).value||'';
-  if(!kind){ showAccAlert('양식을 먼저 선택해 주세요.', 'Provision(포인트 적립 충당) 또는 Reimbursement(딜러 상환) 중 하나를 고른 뒤 Excel을 올려 주세요.', '📋'); return; }
+  if(!kind){ showAccAlert('양식을 먼저 선택해 주세요.', '작성할 전표 양식을 고른 뒤 Excel을 올려 주세요.', '📋'); return; }
   const el = document.getElementById('pt-file');
   el.value = '';
   el.click();
