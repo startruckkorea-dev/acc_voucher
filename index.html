@@ -306,8 +306,8 @@ table.pt-tbl td{padding:5px 8px;border-bottom:1px solid #edebe9}
 table.pt-tbl td.r,table.pt-tbl th.r{text-align:right;font-variant-numeric:tabular-nums}
 table.pt-tbl tr.tot td{background:#f3f7fb;font-weight:700}
 table.pt-tbl tfoot td{background:#eef1f5;font-weight:700;border-top:2px solid #1F3864}
-.pt-bar{display:flex;align-items:center;gap:6px;font-weight:400}
-.pt-bar select{border:1px solid #d2d0ce;border-radius:4px;padding:5px 8px;font-size:.74rem;font-family:inherit;max-width:250px}
+.pt-bar{display:flex;align-items:center;gap:6px;font-weight:400;flex-wrap:wrap;margin:-6px 0 10px;padding:8px 11px;background:#f4faf4;border:1px solid #d9ecd9;border-radius:6px}
+.pt-bar select{border:1px solid #d2d0ce;border-radius:4px;padding:5px 8px;font-size:.74rem;font-family:inherit;min-width:290px}
 .spinner { width: 32px; height: 32px; border: 3px solid #edebe9; border-top: 3px solid #0078d4; border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -464,21 +464,21 @@ if (new URLSearchParams(location.search).get('openId')) {
     <div class="card">
       <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;row-gap:8px">
         <span>회계 전표 작성 <span id="voucher-id-badge" style="font-size:11px;font-weight:400;color:#a19f9d"></span></span>
-        <div class="pt-bar">
-          <span style="font-size:.72rem;color:#0078d4;font-weight:600;white-space:nowrap">포인트 정산 자동 작성</span>
-          <select id="pt-preset" title="월별 원본 자료를 올리면 전표가 규칙대로 채워집니다">
-            <option value="">-- 양식 선택 --</option>
-            <option value="provision">Mercedes ServiceCard Point Provision</option>
-            <option value="redemption">Mercedes ServiceCard Point Reimbursement</option>
-          </select>
-          <button onclick="ptPickFile()" style="padding:5px 12px;border:none;border-radius:4px;background:#107c10;color:#fff;font-size:.74rem;cursor:pointer;white-space:nowrap;font-family:inherit">Excel 올리기</button>
-          <input type="file" id="pt-file" accept=".xlsx,.xlsm,.xls" style="display:none" onchange="ptOnFile(this)">
-        </div>
         <div style="display:flex;align-items:center;gap:6px;font-weight:400">
           <span style="font-size:.72rem;color:#0078d4;font-weight:600;white-space:nowrap">기존 전표 불러오기</span>
           <input type="text" id="load-voucher-id" placeholder="예: ACC-Voucher-20**-**-**_ID-**" style="width:220px;border:1px solid #d2d0ce;border-radius:4px;padding:5px 9px;font-size:.74rem">
           <button onclick="loadExistingVoucher()" style="padding:5px 12px;border:none;border-radius:4px;background:#0078d4;color:#fff;font-size:.74rem;cursor:pointer;white-space:nowrap">📥 불러오기</button>
         </div>
+      </div>
+      <div class="pt-bar">
+        <span style="font-size:.72rem;color:#107c10;font-weight:600;white-space:nowrap">포인트 정산 자동 작성</span>
+        <select id="pt-preset" title="월별 원본 자료를 올리면 전표가 규칙대로 채워집니다">
+          <option value="">-- 양식 선택 --</option>
+          <option value="provision">Mercedes ServiceCard Point Provision</option>
+          <option value="redemption">Mercedes ServiceCard Point Reimbursement</option>
+        </select>
+        <button onclick="ptPickFile()" style="padding:5px 12px;border:none;border-radius:4px;background:#107c10;color:#fff;font-size:.74rem;cursor:pointer;white-space:nowrap;font-family:inherit">Excel 올리기</button>
+        <input type="file" id="pt-file" accept=".xlsx,.xlsm,.xls" style="display:none" onchange="ptOnFile(this)">
       </div>
       <div style="font-size:.68rem;color:#a19f9d;margin:-8px 0 14px;line-height:1.6">
         * Invoice Date는 기존 전표 날짜로 복원됩니다 &nbsp;·&nbsp;
