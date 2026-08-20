@@ -6596,14 +6596,40 @@ async function ptLoadMaster(){
 }
 
 // Provision 차변 라인 — 마스터의 (Kind, SubKind) 조합으로 금액을 찾아 SortOrder 순으로 만든다
+// 계정 정보는 ACC Voucher 가 이미 쓰고 있는 GL 마스터(GL_CCTR_COPA.xlsx)에서 찾는다.
+// 포인트 마스터에 계정명을 따로 적어두면 COA 가 바뀔 때 두 곳이 어긋나므로,
+// 이름은 GL 마스터를 기준으로 하고 포인트 마스터의 GLName 은 보조(미등록 계정용)로만 쓴다.
+function ptGlInfo(code){
+  if (typeof GL_LIST === 'undefined' || !code) return null;
+  return GL_LIST.find(g => g.code === code || g.altCode === code) || null;
+}
+// 표시용 계정명 — GL 마스터 → (없으면) 포인트 마스터 GLName → (없으면) 코드
+function ptGlName(code, fallback){
+  const gi = ptGlInfo(code);
+  return (gi && gi.name) || fallback || code || '';
+}
+// COA 상 필수인데 값이 비어 있는 항목
+function ptMissingReq(code, m){
+  const gi = ptGlInfo(code);
+  if (!gi) return [];
+  const n = [];
+  if (gi.cctrEnabled  && !(m && m.cctr))  n.push('Cost Center');
+  if (gi.pcEnabled    && !(m && m.pc))    n.push('Profit Center');
+  if (gi.subpcEnabled && !(m && m.subpc)) n.push('Sub_PC');
+  return n;
+}
 function ptProvLines(res){
   const M = PT_MASTER;
   return M.glmap
     .filter(g=>g.key!=='PROV_CREDIT' && g.key!=='RED_DEBIT' && g.kind && g.subKind)
     .sort((a,b)=>a.order-b.order)
-    .map(g=>({ map:g, drcr:g.drcr||'DR', gl:g.gl, glName:g.glName,
-               label: g.glName + '  (' + g.kind + ' · ' + g.subKind + ')',
-               desc: g.desc, amount: res.prov.net[g.kind+'|'+g.subKind] || 0 }))
+    .map(g=>{
+      const nm = ptGlName(g.gl, g.glName);
+      return { map:g, drcr:g.drcr||'DR', gl:g.gl, glName:nm,
+               label: nm + '  (' + g.kind + ' · ' + g.subKind + ')',
+               inCoa: !!ptGlInfo(g.gl),
+               desc: g.desc, amount: res.prov.net[g.kind+'|'+g.subKind] || 0 };
+    })
     .filter(l=>l.amount!==0 || l.map.keepZero);
 }
 
@@ -6692,8 +6718,14 @@ function ptShowConfirm(kind, res, file){
       rowsHtml.push(`<tr><td>${l.drcr}</td><td>${escHtml(l.gl)}</td><td>${escHtml(l.label)}</td><td class="r">${l.amount===0?'-':ptFmt(l.amount)}</td></tr>`);
     });
     const cr = M.glmap.find(g=>g.key==='PROV_CREDIT');
-    if(cr) rowsHtml.push(`<tr class="tot"><td>${cr.drcr}</td><td>${escHtml(cr.gl)}</td><td>${escHtml(cr.glName)}</td><td class="r">${ptFmt(res.prov.total)}</td></tr>`);
+    if(cr) rowsHtml.push(`<tr class="tot"><td>${cr.drcr}</td><td>${escHtml(cr.gl)}</td><td>${escHtml(ptGlName(cr.gl, cr.glName))}</td><td class="r">${ptFmt(res.prov.total)}</td></tr>`);
     else warn.push('GLMap 에 PROV_CREDIT 행이 없습니다.');
+    // COA 미등록 계정 / 필수값 누락을 적용 전에 알린다
+    ptProvLines(res).concat(cr?[{gl:cr.gl, map:cr, inCoa:!!ptGlInfo(cr.gl)}]:[]).forEach(l=>{
+      if(!l.inCoa) warn.push('GL 마스터에 없는 계정: ' + l.gl + ' → 계정명이 자동으로 채워지지 않습니다.');
+      const need = ptMissingReq(l.gl, l.map);
+      if(need.length) warn.push(l.gl + ' — ' + need.join(', ') + ' 값이 비어 있습니다. 상신 전에 입력이 필요합니다.');
+    });
     // 원본에 금액이 있는데 매핑이 없으면 그 금액이 전표에서 통째로 빠진다 — 반드시 알린다
     Object.keys(res.prov.net).forEach(k=>{
       if(Math.round(res.prov.net[k])===0) return;
@@ -6707,8 +6739,12 @@ function ptShowConfirm(kind, res, file){
       rowsHtml.push(`<tr><td>CR</td><td>${escHtml(d.code)}</td><td>${escHtml(d.nameEn||d.nameKo)}</td><td class="r">${amt===0?'-':ptFmt(amt)}</td></tr>`);
     });
     const dr = M.glmap.find(g=>g.key==='RED_DEBIT');
-    if(dr) rowsHtml.push(`<tr class="tot"><td>${dr.drcr}</td><td>${escHtml(dr.gl)}</td><td>${escHtml(dr.glName)}</td><td class="r">${ptFmt(res.red.total)}</td></tr>`);
-    else warn.push('GLMap 에 RED_DEBIT 행이 없습니다.');
+    if(dr){
+      rowsHtml.push(`<tr class="tot"><td>${dr.drcr}</td><td>${escHtml(dr.gl)}</td><td>${escHtml(ptGlName(dr.gl, dr.glName))}</td><td class="r">${ptFmt(res.red.total)}</td></tr>`);
+      if(!ptGlInfo(dr.gl)) warn.push('GL 마스터에 없는 계정: ' + dr.gl);
+      const need = ptMissingReq(dr.gl, dr);
+      if(need.length) warn.push(dr.gl + ' — ' + need.join(', ') + ' 값이 비어 있습니다.');
+    } else warn.push('GLMap 에 RED_DEBIT 행이 없습니다.');
     // 마스터에 없는 딜러가 원본에 있으면 금액이 누락되므로 반드시 알린다
     const unknown = Object.keys(res.red.byDealer).filter(c=>!M.dealers.find(d=>d.code===c));
     if(unknown.length) warn.push('마스터에 없는 Vendor Code: '+unknown.join(', ')+' → 이 금액은 전표에 담기지 않습니다.');
@@ -6742,9 +6778,8 @@ function ptCloseConfirm(){ document.getElementById('pt-modal').classList.remove(
 
 /* ── 폼 채우기 ───────────────────────────────────────────── */
 function ptMakeLine(drcr, gl, glName, amount, desc, m){
-  const info = (typeof GL_LIST!=='undefined' ? GL_LIST.find(g=>g.code===gl) : null);
   return {
-    drcr, gl, glName: glName || (info?info.name:''),
+    drcr, gl, glName: ptGlName(gl, glName),
     cctr: (m&&m.cctr)||'', cctrName:'', pc: (m&&m.pc)||'', pcName:'', subpc: (m&&m.subpc)||'', subpcName:'',
     lineDesc: desc||'', currency:'KRW', unitPrice:'', qty:1, amount: Math.round(amount)
   };
@@ -6784,7 +6819,7 @@ function ptApply(){
         newLines.push(ptMakeLine(l.drcr, l.gl, l.glName, l.amount, l.desc, l.map));
       });
       const cr = M.glmap.find(g=>g.key==='PROV_CREDIT');
-      if(cr) newLines.push(ptMakeLine(cr.drcr||'CR', cr.gl, cr.glName, res.prov.total, cr.desc, cr));
+      if(cr) newLines.push(ptMakeLine(cr.drcr||'CR', cr.gl, cr.glName, res.prov.total, cr.desc, cr));   // 이름은 ptMakeLine 이 GL 마스터에서 채운다
     } else {
       M.dealers.forEach(d=>{
         newLines.push(ptMakeLine('CR', d.code, d.nameEn||d.nameKo, res.red.byDealer[d.code]||0, '', null));
