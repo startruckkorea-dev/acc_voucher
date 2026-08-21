@@ -3378,11 +3378,15 @@ function applyPcSubpcAvailability(pcEnabled, subpcEnabled, cctrEnabled, fullyLoc
   }
 }
 
-function showAccAlert(title, sub='', icon='✅') {
+// list 를 넘기면 본문 아래에 왼쪽 정렬 목록 박스로 따로 보여준다.
+// 항목이 여러 줄일 때 가운데 정렬이면 읽기 어렵기 때문이다. (인자 생략 시 기존 동작 그대로)
+function showAccAlert(title, sub='', icon='✅', list='') {
   const iconEl = document.getElementById('acc-alert-icon');
   if(iconEl){ iconEl.textContent = icon; iconEl.style.display = icon ? 'block' : 'none'; }
   document.getElementById('acc-alert-title').textContent = title;
   document.getElementById('acc-alert-sub').textContent = sub;
+  const le = document.getElementById('acc-alert-list');
+  if(le){ le.textContent = list || ''; le.style.display = list ? 'block' : 'none'; }
   document.getElementById('acc-alert-modal').style.display = 'flex';
 }
 function closeAccAlert() {
@@ -3550,12 +3554,12 @@ async function saveVoucher(status) {
       if(glInfo.cctrEnabled && !l.cctr) need.push('Cost Center');
       if(glInfo.pcEnabled && !l.pc) need.push('Profit Center');
       if(glInfo.subpcEnabled && !l.subpc) need.push('Sub_PC');
-      if(need.length) missingLines.push('라인 '+(idx+1)+'  '+l.gl+' '+(glInfo.name||'')+'\n     → '+need.join(', '));
+      if(need.length) missingLines.push('라인 '+(idx+1)+' · '+l.gl+' '+(glInfo.name||'')+'  →  '+need.join(', ')+' 필요');
     });
     if(missingLines.length){
-      alert('상신할 수 없습니다.\n\n회계 마스터(COA)에서 필수로 지정된 항목이 비어 있습니다.\n\n'
-            + missingLines.join('\n\n')
-            + '\n\n해당 라인을 열어 값을 입력한 뒤 다시 상신해 주세요.');
+      showAccAlert('상신할 수 없습니다',
+        '회계 마스터(COA)에서 필수로 지정된 항목이 비어 있습니다.\n해당 라인을 열어 값을 입력한 뒤 다시 상신해 주세요.',
+        '⛔', missingLines.join('\n'));
       return;
     }
   }
@@ -6810,13 +6814,12 @@ function ptShowConfirm(kind, res, file){
      ${block.length ? `<div style="margin-top:11px;background:#fdf2f2;border:1px solid #e8a9a9;border-left:4px solid #a4262c;border-radius:5px;padding:11px 13px">
        <div style="font-size:.78rem;font-weight:700;color:#a4262c;margin-bottom:6px">이대로는 상신할 수 없습니다</div>
        <div style="font-size:.72rem;color:#8a3a3f;line-height:1.65;margin-bottom:8px">회계 마스터(COA)에서 필수로 지정된 항목입니다. 적용 후 해당 라인을 열어 값을 입력해 주세요.</div>
-       <table style="width:100%;border-collapse:collapse;font-size:.71rem">
-         ${block.map(b=>`<tr>
-           <td style="padding:3px 0;width:74px;font-weight:700;color:#a4262c;vertical-align:top">${escHtml(b.gl)}</td>
-           <td style="padding:3px 8px;color:#8a3a3f;vertical-align:top">${escHtml(b.name)}</td>
-           <td style="padding:3px 0;width:190px;font-weight:700;color:#a4262c;text-align:right;vertical-align:top">${b.need.map(escHtml).join(' · ')} 필요</td>
-         </tr>`).join('')}
-       </table></div>` : ''}
+       ${block.map(b=>`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:3px 0;font-size:.71rem">
+           <span style="font-weight:700;color:#a4262c">${escHtml(b.gl)}</span>
+           <span style="color:#8a3a3f">${escHtml(b.name)}</span>
+           <span style="background:#a4262c;color:#fff;border-radius:9px;padding:1px 8px;font-size:.65rem;font-weight:700;white-space:nowrap">${b.need.map(escHtml).join(' · ')} 필요</span>
+         </div>`).join('')}
+       </div>` : ''}
      ${warn.length ? `<div style="margin-top:10px;background:#fefaf2;border:1px solid #f0dcb4;border-left:4px solid #b7791f;border-radius:5px;padding:9px 12px;font-size:.72rem;color:#8a6116;line-height:1.65">
        <b style="display:block;margin-bottom:3px">확인해 주세요</b>${warn.map(w=>'· '+escHtml(w)).join('<br>')}</div>` : ''}
      <div style="margin-top:10px;font-size:.7rem;color:#a19f9d;line-height:1.6">
@@ -6897,7 +6900,7 @@ function ptApply(){
       if(gi.cctrEnabled && !l.cctr) n.push('Cost Center');
       if(gi.pcEnabled && !l.pc) n.push('Profit Center');
       if(gi.subpcEnabled && !l.subpc) n.push('Sub_PC');
-      if(n.length) need.push('라인 '+(i+1)+'  '+l.gl+' '+(gi.name||'')+'\n     → '+n.join(', '));
+      if(n.length) need.push('라인 '+(i+1)+' · '+l.gl+' '+(gi.name||'')+'  →  '+n.join(', ')+' 필요');
     });
 
     ptCloseConfirm();
@@ -6908,9 +6911,9 @@ function ptApply(){
       '라인 ' + newLines.length + '건 · 합계 ' + ptFmt(isProv?res.prov.total:res.red.total) + ' KRW\n' +
       '원본 Excel이 첨부에 담겼습니다.\n\n' +
       (need.length
-        ? '\n[ 상신 전 입력 필요 ]\n회계 마스터(COA)에서 필수로 지정된 항목입니다.\n입력하지 않으면 상신 단계에서 막힙니다.\n\n' + need.join('\n\n') + '\n\n'
-        : '\n') +
-      '내용을 확인하신 뒤 결재선을 지정하고 상신해 주세요.', need.length ? '⚠️' : '✅');
+        ? '아래 항목은 회계 마스터(COA)에서 필수로 지정된 값입니다.\n입력하지 않으면 상신 단계에서 막힙니다.'
+        : '내용을 확인하신 뒤 결재선을 지정하고 상신해 주세요.'),
+      need.length ? '⚠️' : '✅', need.join('\n'));
   }catch(e){
     console.error('[Point] 적용 실패:', e);
     showAccAlert('전표 자동 작성 실패', e.message, '⚠️');
@@ -6924,6 +6927,7 @@ function ptApply(){
     <div id="acc-alert-icon" style="font-size:2rem;margin-bottom:10px">✅</div>
     <div id="acc-alert-title" style="font-size:1rem;font-weight:700;color:#1e293b;margin-bottom:6px;line-height:1.6"></div>
     <div id="acc-alert-sub" style="font-size:.8rem;color:#64748b;margin-bottom:20px;white-space:pre-line;line-height:1.7;text-align:center"></div>
+    <div id="acc-alert-list" style="display:none;font-size:.78rem;color:#475569;line-height:1.7;text-align:left;background:#f8fafc;border:1px solid #e6ebf1;border-radius:8px;padding:11px 14px;margin:-8px 0 18px;white-space:pre-line"></div>
     <button style="background:#0078d4;color:#fff;border:none;border-radius:8px;padding:9px 32px;font-size:.88rem;font-weight:600;cursor:pointer;font-family:inherit" onclick="closeAccAlert()">확인</button>
   </div>
 </div>
