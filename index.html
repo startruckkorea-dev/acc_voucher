@@ -6616,6 +6616,8 @@ function ptAnalyze(wb){
 
   return {
     period,
+    // 「통합 사용」은 양식에서 제외했다(2026-08-21). 옛 파일을 올린 경우에만 안내한다.
+    hasLegacySheet: !!wb.Sheets['통합 사용'],
     counts: { pa:(pa||[]).length, ta:(ta||[]).length, ps:(ps||[]).length, ts:ts.length, pu:(pu||[]).length },
     prov: { net, total: provTotal },
     red:  { byDealer, byType, total: redTotal, unmapped, derived, fromCol }
@@ -6705,7 +6707,7 @@ function ptProvLines(res){
 const PT_TEMPLATE_FILE = 'MB_ServiceCard_Point_원본자료_양식.xlsx';
 
 // 양식이 담고 있는 시트 목록 — 어느 양식이 어느 시트를 쓰는지 표시할 때 쓴다.
-const PT_SHEETS = ['부품 적립','통합 적립','부품 소멸','통합 소멸','부품 사용','통합 사용'];
+const PT_SHEETS = ['부품 적립','통합 적립','부품 소멸','통합 소멸','부품 사용'];
 
 // 양식별로 실제 집계에 쓰는 시트. ptAnalyze 의 로직과 짝을 이루므로 함께 관리한다.
 const PT_USES = {
@@ -6854,7 +6856,7 @@ function ptShowConfirm(kind, res, file){
        유효 데이터 부품적립 ${c.pa} / 통합적립 ${c.ta} / 부품소멸 ${c.ps} / 통합소멸 ${c.ts} / 부품사용 ${c.pu}행
      </div>
      ${isProv ? '' : `<div style="font-size:.7rem;color:#8a6116;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:5px;padding:7px 10px;margin-bottom:9px;line-height:1.6">
-       「부품 사용」 시트가 통합 포인트 사용분까지 포함하고 있어 「통합 사용」 시트는 더하지 않습니다(이중 계상 방지).<br>
+       ${res.hasLegacySheet ? '올리신 파일에 「통합 사용」 시트가 있습니다. 그 내용은 「부품 사용」에 이미 포함되어 있어 더하지 않습니다(이중 계상 방지).<br>' : ''}
        포인트 종류별: ${Object.entries(res.red.byType).sort((a,b)=>b[1]-a[1]).map(([k,v])=>escHtml(k)+' '+ptFmt(v)).join(' · ')}<br>
        딜러 판정: 원본 Vendor Code ${res.red.fromCol}행 · 정비번호 앞 2글자로 자동 판정 ${res.red.derived}행
      </div>`}
