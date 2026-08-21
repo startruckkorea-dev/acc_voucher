@@ -316,6 +316,11 @@ table.pt-tbl tfoot td{background:#eef1f5;font-weight:700;border-top:2px solid #1
 #pt-panel .pt-in{padding:11px 12px 12px}
 .pt-bar{display:flex;align-items:center;gap:6px;font-weight:400;flex-wrap:wrap;padding:9px 11px;background:#f4faf4;border:1px solid #d9ecd9;border-radius:6px}
 .pt-bar select{border:1px solid #d2d0ce;border-radius:4px;padding:5px 8px;font-size:.74rem;font-family:inherit;min-width:290px}
+.pt-sheets{margin-top:8px;font-size:.68rem;color:#8a8886;display:flex;align-items:center;gap:6px;flex-wrap:wrap;line-height:1.6}
+.pt-sheets .lb{color:#605e5c;font-weight:600;white-space:nowrap}
+.pt-sheets .sh{display:inline-block;border-radius:10px;padding:2px 9px;font-size:.66rem;font-weight:600;white-space:nowrap;background:#e8f4ec;color:#0e7a3c;border:1px solid #cbe5d5}
+.pt-sheets .sh.off{background:#f5f5f5;color:#b3b0ad;border-color:#ececec;font-weight:400}
+.pt-sheets .nt{color:#a19f9d}
 .pt-more{margin-top:9px}
 .pt-more>summary{cursor:pointer;list-style:none;user-select:none;display:inline-flex;align-items:center;gap:6px;font-size:.7rem;color:#8a8886;padding:2px 0;transition:color .12s}
 .pt-more>summary::-webkit-details-marker{display:none}
@@ -492,11 +497,11 @@ if (new URLSearchParams(location.search).get('openId')) {
         </div>
       </div>
       <details id="pt-panel">
-        <summary>Excel 전표 자동 작성</summary>
+        <summary ontoggle="ptRenderSheets()" onclick="setTimeout(ptRenderSheets,0)">Excel 전표 자동 작성</summary>
         <div class="pt-in">
           <div class="pt-bar">
             <span style="font-size:.72rem;color:#107c10;font-weight:600;white-space:nowrap">포인트 정산 자동 작성</span>
-            <select id="pt-preset" title="양식을 고르고 원본 자료를 올리면 전표가 규칙대로 채워집니다">
+            <select id="pt-preset" onchange="ptRenderSheets()" title="양식을 고르고 원본 자료를 올리면 전표가 규칙대로 채워집니다">
               <option value="">-- 양식 선택 --</option>
               <option value="provision">Mercedes ServiceCard Point Provision</option>
               <option value="redemption">Mercedes ServiceCard Point Reimbursement</option>
@@ -505,6 +510,8 @@ if (new URLSearchParams(location.search).get('openId')) {
             <button onclick="ptDownloadTemplate()" title="선택한 양식의 원본 자료 서식을 내려받습니다" style="padding:5px 12px;border:1px solid #107c10;border-radius:4px;background:#fff;color:#107c10;font-size:.74rem;cursor:pointer;white-space:nowrap;font-family:inherit">양식 다운로드</button>
             <input type="file" id="pt-file" accept=".xlsx,.xlsm,.xls" style="display:none" onchange="ptOnFile(this)">
           </div>
+          <!-- 선택한 양식이 어느 시트를 읽는지 — 양식을 바꿀 때마다 갱신된다 -->
+          <div id="pt-sheets" class="pt-sheets"></div>
           <details class="pt-more">
             <summary>사용 안내</summary>
           <div class="pt-hint">
@@ -6662,6 +6669,33 @@ const PT_TEMPLATE_GUIDE = [
   ['· 「부품 사용」 시트에 통합 포인트 사용분이 함께 들어오는 경우, 「통합 사용」 시트는 더하지 않습니다(이중 계상 방지).'],
   ['· 계정 매핑과 딜러 목록은 acc_point_master.xlsx 에서 관리합니다. 변경이 필요하면 IT팀에 요청해 주세요.']
 ];
+// 양식별로 실제 집계에 쓰는 시트. ptAnalyze 의 로직과 짝을 이루므로 함께 관리한다.
+const PT_USES = {
+  provision:  { sheets: ['부품 적립', '통합 적립', '부품 소멸', '통합 소멸'],
+                note: '적립(적립포인트) − 소멸(남은포인트)' },
+  redemption: { sheets: ['부품 사용'],
+                note: 'Vendor Code 별 사용금액 합계' }
+};
+function ptRenderSheets(){
+  const box = document.getElementById('pt-sheets');
+  if(!box) return;
+  const kind = (document.getElementById('pt-preset')||{}).value||'';
+  if(!kind){
+    box.innerHTML = '<span class="nt">양식을 고르면 어느 시트를 읽는지 표시됩니다.</span>';
+    return;
+  }
+  const u = PT_USES[kind];
+  if(!u){ box.innerHTML = ''; return; }
+  const all = PT_TEMPLATE.map(t => t[0]);
+  const used = all.filter(n => u.sheets.includes(n));
+  const off  = all.filter(n => !u.sheets.includes(n));
+  box.innerHTML =
+    '<span class="lb">읽는 시트</span>' +
+    used.map(n => '<span class="sh">' + escHtml(n) + '</span>').join('') +
+    '<span class="nt">' + escHtml(u.note) + '</span>' +
+    (off.length ? '<span class="lb" style="margin-left:6px">읽지 않음</span>' +
+      off.map(n => '<span class="sh off">' + escHtml(n) + '</span>').join('') : '');
+}
 function ptDownloadTemplate(){
   try{
     const wb = XLSX.utils.book_new();
