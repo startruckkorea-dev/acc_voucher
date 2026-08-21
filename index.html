@@ -3544,16 +3544,18 @@ async function saveVoucher(status) {
     const missingLines = [];
     lines.forEach((l,idx)=>{
       if(l._lockCC || !l.gl) return; // BP/VAT 자동라인, GL 미선택 빈 라인은 제외
-      const glInfo = GL_LIST.find(g=>g.code===l.gl);
+      const glInfo = GL_LIST.find(g=>g.code===l.gl || g.altCode===l.gl);
       if(!glInfo) return;
       const need = [];
       if(glInfo.cctrEnabled && !l.cctr) need.push('Cost Center');
       if(glInfo.pcEnabled && !l.pc) need.push('Profit Center');
       if(glInfo.subpcEnabled && !l.subpc) need.push('Sub_PC');
-      if(need.length) missingLines.push('라인 '+(idx+1)+': '+need.join(', '));
+      if(need.length) missingLines.push('라인 '+(idx+1)+'  '+l.gl+' '+(glInfo.name||'')+'\n     → '+need.join(', '));
     });
     if(missingLines.length){
-      alert('다음 라인에 필수 입력값이 비어있습니다:\n\n'+missingLines.join('\n')+'\n\n라인을 열어 값을 입력해주세요.');
+      alert('상신할 수 없습니다.\n\n회계 마스터(COA)에서 필수로 지정된 항목이 비어 있습니다.\n\n'
+            + missingLines.join('\n\n')
+            + '\n\n해당 라인을 열어 값을 입력한 뒤 다시 상신해 주세요.');
       return;
     }
   }
@@ -6747,7 +6749,8 @@ function ptShowConfirm(kind, res, file){
   const M = PT_MASTER;
   const isProv = kind==='provision';
   const rowsHtml = [];
-  let warn = [];
+  let warn = [];    // 참고 — 적용은 되지만 확인이 필요한 것
+  let block = [];   // 차단 — 이대로는 상신이 되지 않는 것
 
   if(isProv){
     ptProvLines(res).forEach(l=>{
@@ -6760,7 +6763,7 @@ function ptShowConfirm(kind, res, file){
     ptProvLines(res).concat(cr?[{gl:cr.gl, map:cr, inCoa:!!ptGlInfo(cr.gl)}]:[]).forEach(l=>{
       if(!l.inCoa) warn.push('GL 마스터에 없는 계정: ' + l.gl + ' → 계정명이 자동으로 채워지지 않습니다.');
       const need = ptMissingReq(l.gl, l.map);
-      if(need.length) warn.push(l.gl + ' — ' + need.join(', ') + ' 값이 비어 있습니다. 상신 전에 입력이 필요합니다.');
+      if(need.length) block.push({ gl: l.gl, name: ptGlName(l.gl, ''), need });
     });
     // 원본에 금액이 있는데 매핑이 없으면 그 금액이 전표에서 통째로 빠진다 — 반드시 알린다
     Object.keys(res.prov.net).forEach(k=>{
@@ -6779,7 +6782,7 @@ function ptShowConfirm(kind, res, file){
       rowsHtml.push(`<tr class="tot"><td>${dr.drcr}</td><td>${escHtml(dr.gl)}</td><td>${escHtml(ptGlName(dr.gl, dr.glName))}</td><td class="r">${ptFmt(res.red.total)}</td></tr>`);
       if(!ptGlInfo(dr.gl)) warn.push('GL 마스터에 없는 계정: ' + dr.gl);
       const need = ptMissingReq(dr.gl, dr);
-      if(need.length) warn.push(dr.gl + ' — ' + need.join(', ') + ' 값이 비어 있습니다.');
+      if(need.length) block.push({ gl: dr.gl, name: ptGlName(dr.gl, ''), need });
     } else warn.push('GLMap 에 RED_DEBIT 행이 없습니다.');
     // 마스터에 없는 딜러가 원본에 있으면 금액이 누락되므로 반드시 알린다
     const unknown = Object.keys(res.red.byDealer).filter(c=>!M.dealers.find(d=>d.code===c));
@@ -6804,7 +6807,18 @@ function ptShowConfirm(kind, res, file){
      <table class="pt-tbl"><thead><tr><th style="width:44px">구분</th><th style="width:92px">코드</th><th>계정 / 딜러</th><th style="width:120px" class="r">금액(KRW)</th></tr></thead>
      <tbody>${rowsHtml.join('')}</tbody>
      <tfoot><tr><td colspan="3">Total</td><td class="r">${ptFmt(total)}</td></tr></tfoot></table>
-     ${warn.length ? `<div style="margin-top:10px;background:#fdf2f2;border:1px solid #f0c8c8;border-radius:6px;padding:8px 11px;font-size:.72rem;color:#a4262c;line-height:1.6">${warn.map(w=>'· '+escHtml(w)).join('<br>')}</div>` : ''}
+     ${block.length ? `<div style="margin-top:11px;background:#fdf2f2;border:1px solid #e8a9a9;border-left:4px solid #a4262c;border-radius:5px;padding:11px 13px">
+       <div style="font-size:.78rem;font-weight:700;color:#a4262c;margin-bottom:6px">이대로는 상신할 수 없습니다</div>
+       <div style="font-size:.72rem;color:#8a3a3f;line-height:1.65;margin-bottom:8px">회계 마스터(COA)에서 필수로 지정된 항목입니다. 적용 후 해당 라인을 열어 값을 입력해 주세요.</div>
+       <table style="width:100%;border-collapse:collapse;font-size:.71rem">
+         ${block.map(b=>`<tr>
+           <td style="padding:3px 0;width:74px;font-weight:700;color:#a4262c;vertical-align:top">${escHtml(b.gl)}</td>
+           <td style="padding:3px 8px;color:#8a3a3f;vertical-align:top">${escHtml(b.name)}</td>
+           <td style="padding:3px 0;width:190px;font-weight:700;color:#a4262c;text-align:right;vertical-align:top">${b.need.map(escHtml).join(' · ')} 필요</td>
+         </tr>`).join('')}
+       </table></div>` : ''}
+     ${warn.length ? `<div style="margin-top:10px;background:#fefaf2;border:1px solid #f0dcb4;border-left:4px solid #b7791f;border-radius:5px;padding:9px 12px;font-size:.72rem;color:#8a6116;line-height:1.65">
+       <b style="display:block;margin-bottom:3px">확인해 주세요</b>${warn.map(w=>'· '+escHtml(w)).join('<br>')}</div>` : ''}
      <div style="margin-top:10px;font-size:.7rem;color:#a19f9d;line-height:1.6">
        적용하면 현재 작성 중인 내용(유형·Purpose·회계 라인)이 <b>덮어쓰기</b> 됩니다. 올린 Excel은 첨부파일로 함께 담깁니다.
      </div>`;
@@ -6877,13 +6891,13 @@ function ptApply(){
     // 6) GL 마스터상 필수인데 비어 있는 항목을 미리 알려준다 (상신 단계에서 막히지 않도록)
     const need = [];
     newLines.forEach((l,i)=>{
-      const gi = (typeof GL_LIST!=='undefined') ? GL_LIST.find(g=>g.code===l.gl) : null;
+      const gi = ptGlInfo(l.gl);
       if(!gi) return;
       const n = [];
       if(gi.cctrEnabled && !l.cctr) n.push('Cost Center');
       if(gi.pcEnabled && !l.pc) n.push('Profit Center');
       if(gi.subpcEnabled && !l.subpc) n.push('Sub_PC');
-      if(n.length) need.push('라인 '+(i+1)+' ('+l.gl+'): '+n.join(', '));
+      if(n.length) need.push('라인 '+(i+1)+'  '+l.gl+' '+(gi.name||'')+'\n     → '+n.join(', '));
     });
 
     ptCloseConfirm();
@@ -6893,8 +6907,10 @@ function ptApply(){
     showAccAlert('전표를 자동으로 작성했습니다.',
       '라인 ' + newLines.length + '건 · 합계 ' + ptFmt(isProv?res.prov.total:res.red.total) + ' KRW\n' +
       '원본 Excel이 첨부에 담겼습니다.\n\n' +
-      (need.length ? '아래 항목은 직접 입력해 주세요.\n' + need.join('\n') + '\n\n' : '') +
-      '내용을 확인하신 뒤 결재선을 지정하고 상신해 주세요.', '✅');
+      (need.length
+        ? '\n[ 상신 전 입력 필요 ]\n회계 마스터(COA)에서 필수로 지정된 항목입니다.\n입력하지 않으면 상신 단계에서 막힙니다.\n\n' + need.join('\n\n') + '\n\n'
+        : '\n') +
+      '내용을 확인하신 뒤 결재선을 지정하고 상신해 주세요.', need.length ? '⚠️' : '✅');
   }catch(e){
     console.error('[Point] 적용 실패:', e);
     showAccAlert('전표 자동 작성 실패', e.message, '⚠️');
