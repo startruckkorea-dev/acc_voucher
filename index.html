@@ -6583,12 +6583,32 @@ function ptAnalyze(wb){
   const provTotal = Object.values(net).reduce((a,b)=>a+b,0);
 
   // 사용(딜러별) — 「부품 사용」 단독. 통합 사용분이 이미 포함되어 있다.
-  const byDealer = {}; const byType = {};
+  //
+  // Vendor Code 는 원래 담당자가 정비번호 앞 2글자(DMS 코드)를 보고 손으로 채우던 열이다.
+  // 마스터의 DMSCode 열로 자동 판정하고, 원본에 값이 있으면 그 값을 우선한다.
+  //   판정 순서: ① 원본 Vendor Code 열  ② 정비번호 앞 2글자 → 마스터 DMSCode
+  // 어느 쪽으로도 못 정하면 unmapped 에 모아 확인 창에서 알린다.
+  const byDealer = {}; const byType = {}; const unmapped = {};
+  let derived = 0, fromCol = 0;
+  const dmsMap = {};
+  ((PT_MASTER && PT_MASTER.dealers) || []).forEach(d=>{
+    (d.dms||'').split(/[,/\s]+/).forEach(code=>{
+      const c = ptStr(code).toUpperCase();
+      if(c) dmsMap[c] = d.code;
+    });
+  });
   (pu||[]).forEach(r=>{
-    const vc = ptStr(r['Vendor Code']);
     const v = ptNum(r['사용금액(개별)']);
-    if(vc) byDealer[vc] = (byDealer[vc]||0) + v;
     const t = ptStr(r['포인트타입']); byType[t] = (byType[t]||0) + v;
+    let vc = ptStr(r['Vendor Code']);
+    if(vc){ fromCol++; }
+    else {
+      const jb = ptStr(r['정비번호']);
+      const pfx = jb.slice(0,2).toUpperCase();
+      if(dmsMap[pfx]){ vc = dmsMap[pfx]; derived++; }
+      else if(jb){ unmapped[pfx || '(빈값)'] = (unmapped[pfx || '(빈값)']||0) + v; }
+    }
+    if(vc) byDealer[vc] = (byDealer[vc]||0) + v;
   });
   const redTotal = Object.values(byDealer).reduce((a,b)=>a+b,0);
 
@@ -6598,7 +6618,7 @@ function ptAnalyze(wb){
     period,
     counts: { pa:(pa||[]).length, ta:(ta||[]).length, ps:(ps||[]).length, ts:ts.length, pu:(pu||[]).length },
     prov: { net, total: provTotal },
-    red:  { byDealer, byType, total: redTotal }
+    red:  { byDealer, byType, total: redTotal, unmapped, derived, fromCol }
   };
 }
 
@@ -6617,7 +6637,8 @@ async function ptLoadMaster(){
 
   const dealers = rowsOf('Dealers').map(r=>({
     code: ptStr(r['VendorCode']), nameEn: ptStr(r['DealerNameEN']),
-    nameKo: ptStr(r['DealerNameKO']), order: ptNum(r['SortOrder'])
+    nameKo: ptStr(r['DealerNameKO']), dms: ptStr(r['DMSCode']),
+    order: ptNum(r['SortOrder'])
   })).filter(d=>d.code).sort((a,b)=>a.order-b.order);
 
   const glmap = rowsOf('GLMap').map(r=>({
@@ -6685,6 +6706,8 @@ const PT_TEMPLATE = [
   ['통합 적립', ['고객명','포인트카드번호','포인트타입','발행일','발행여부','적립포인트','남은포인트','적립일','만료일','상태','등급']],
   ['부품 소멸', ['순번','포인트카드번호','고객','연락처','정비번호','적립딜러','매뉴얼적립여부','포인트타입','발행일','발행여부','적립포인트','남은포인트','적립일','만료일','상태','등급']],
   ['통합 소멸', ['고객명','포인트카드번호','포인트타입','발행일','발행여부','적립포인트','남은포인트','적립일','만료일','상태','등급']],
+  // Vendor Code · Dealer Name(KOR) 은 비워두어도 된다.
+  // 정비번호 앞 2글자(DMS 코드)로 자동 판정하며, 값이 있으면 그 값을 우선한다.
   ['부품 사용', ['순번','사용금액 총액','고객','포인트카드번호','정비번호','발행일','발행여부','사용일','포인트타입','사용금액(개별)','등급','Vendor Code','Dealer Name(KOR)']],
   ['통합 사용', ['순번','고객','포인트카드번호','정비번호','발행일','발행여부','사용일','포인트타입','사용금액(개별)','등급','Vendor Code','Dealer Name(KOR)']]
 ];
@@ -6702,6 +6725,11 @@ const PT_TEMPLATE_GUIDE = [
   ['Reimbursement 금액','「부품 사용」을 Vendor Code 별로 합계'],
   [''],
   ['· 「부품 사용」 시트에 통합 포인트 사용분이 함께 들어오는 경우, 「통합 사용」 시트는 더하지 않습니다(이중 계상 방지).'],
+  [''],
+  ['[Vendor Code · Dealer Name(KOR) 열]'],
+  ['· 비워두셔도 됩니다. 정비번호 앞 2글자(DMS 코드)로 서비스센터를 자동으로 찾습니다.'],
+  ['· 값이 채워져 있으면 그 값을 우선 사용합니다.'],
+  ['· 매핑에 없는 DMS 코드가 나오면 적용 전 확인 창에서 알려드립니다.'],
   ['· 계정 매핑과 딜러 목록은 acc_point_master.xlsx 에서 관리합니다. 변경이 필요하면 IT팀에 요청해 주세요.']
 ];
 // 양식별로 실제 집계에 쓰는 시트. ptAnalyze 의 로직과 짝을 이루므로 함께 관리한다.
@@ -6823,6 +6851,10 @@ function ptShowConfirm(kind, res, file){
     // 마스터에 없는 딜러가 원본에 있으면 금액이 누락되므로 반드시 알린다
     const unknown = Object.keys(res.red.byDealer).filter(c=>!M.dealers.find(d=>d.code===c));
     if(unknown.length) warn.push('마스터에 없는 Vendor Code: '+unknown.join(', ')+' → 이 금액은 전표에 담기지 않습니다.');
+    // 정비번호 앞 2글자를 마스터에서 못 찾은 행 — 금액이 통째로 빠지므로 반드시 알린다
+    Object.keys(res.red.unmapped).forEach(p=>{
+      warn.push('DMS 코드 매핑 없음: 정비번호 「' + p + '」 (' + ptFmt(res.red.unmapped[p]) + ') → 이 금액은 전표에 담기지 않습니다.');
+    });
   }
   if(!res.period) warn.push('정산 대상 월을 판정하지 못했습니다. Purpose 기간을 직접 확인해 주세요.');
 
@@ -6838,7 +6870,8 @@ function ptShowConfirm(kind, res, file){
      </div>
      ${isProv ? '' : `<div style="font-size:.7rem;color:#8a6116;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:5px;padding:7px 10px;margin-bottom:9px;line-height:1.6">
        「부품 사용」 시트가 통합 포인트 사용분까지 포함하고 있어 「통합 사용」 시트는 더하지 않습니다(이중 계상 방지).<br>
-       포인트 종류별: ${Object.entries(res.red.byType).sort((a,b)=>b[1]-a[1]).map(([k,v])=>escHtml(k)+' '+ptFmt(v)).join(' · ')}
+       포인트 종류별: ${Object.entries(res.red.byType).sort((a,b)=>b[1]-a[1]).map(([k,v])=>escHtml(k)+' '+ptFmt(v)).join(' · ')}<br>
+       딜러 판정: 원본 Vendor Code ${res.red.fromCol}행 · 정비번호 앞 2글자로 자동 판정 ${res.red.derived}행
      </div>`}
      <table class="pt-tbl"><thead><tr><th style="width:44px">구분</th><th style="width:92px">코드</th><th>계정 / 딜러</th><th style="width:120px" class="r">금액(KRW)</th></tr></thead>
      <tbody>${rowsHtml.join('')}</tbody>
