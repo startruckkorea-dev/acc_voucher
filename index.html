@@ -6699,39 +6699,14 @@ function ptProvLines(res){
 }
 
 /* ── 원본 자료 양식 다운로드 ─────────────────────────────────
-   시트명과 머리글이 인식 기준이므로, 실제 리포트와 동일한 구성을 그대로 내려준다.
-   여기 이름이 바뀌면 자동 작성이 동작하지 않는다. */
-const PT_TEMPLATE = [
-  ['부품 적립', ['순번','포인트카드번호','고객','연락처','정비번호','적립딜러','매뉴얼적립여부','포인트타입','발행일','발행여부','적립포인트','남은포인트','적립일','만료일','상태','등급']],
-  ['통합 적립', ['고객명','포인트카드번호','포인트타입','발행일','발행여부','적립포인트','남은포인트','적립일','만료일','상태','등급']],
-  ['부품 소멸', ['순번','포인트카드번호','고객','연락처','정비번호','적립딜러','매뉴얼적립여부','포인트타입','발행일','발행여부','적립포인트','남은포인트','적립일','만료일','상태','등급']],
-  ['통합 소멸', ['고객명','포인트카드번호','포인트타입','발행일','발행여부','적립포인트','남은포인트','적립일','만료일','상태','등급']],
-  // Vendor Code · Dealer Name(KOR) 은 비워두어도 된다.
-  // 정비번호 앞 2글자(DMS 코드)로 자동 판정하며, 값이 있으면 그 값을 우선한다.
-  ['부품 사용', ['순번','사용금액 총액','고객','포인트카드번호','정비번호','발행일','발행여부','사용일','포인트타입','사용금액(개별)','등급','Vendor Code','Dealer Name(KOR)']],
-  ['통합 사용', ['순번','고객','포인트카드번호','정비번호','발행일','발행여부','사용일','포인트타입','사용금액(개별)','등급','Vendor Code','Dealer Name(KOR)']]
-];
-const PT_TEMPLATE_GUIDE = [
-  ['MercedesServiceCard 포인트 정산 — 원본 자료 양식'],
-  [''],
-  ['· 각 시트의 1행(머리글)과 시트 이름은 바꾸지 마세요. 이 이름으로 값을 찾습니다.'],
-  ['· 데이터는 2행부터 채웁니다. 열 순서는 달라도 되지만 머리글 이름은 같아야 합니다.'],
-  ['· 시트 중간이나 끝에 합계행(SUM)이 있어도 자동으로 제외됩니다.'],
-  [''],
-  ['[계산 규칙]'],
-  ['적립','「부품 적립」·「통합 적립」의 적립포인트 합계'],
-  ['소멸','「부품 소멸」·「통합 소멸」의 남은포인트 합계 (적립포인트가 아님)'],
-  ['Provision 금액','종류(부품/통합) × 세부종류(포인트타입)별 = 적립 − 소멸'],
-  ['Reimbursement 금액','「부품 사용」을 Vendor Code 별로 합계'],
-  [''],
-  ['· 「부품 사용」 시트에 통합 포인트 사용분이 함께 들어오는 경우, 「통합 사용」 시트는 더하지 않습니다(이중 계상 방지).'],
-  [''],
-  ['[Vendor Code · Dealer Name(KOR) 열]'],
-  ['· 비워두셔도 됩니다. 정비번호 앞 2글자(DMS 코드)로 서비스센터를 자동으로 찾습니다.'],
-  ['· 값이 채워져 있으면 그 값을 우선 사용합니다.'],
-  ['· 매핑에 없는 DMS 코드가 나오면 적용 전 확인 창에서 알려드립니다.'],
-  ['· 계정 매핑과 딜러 목록은 acc_point_master.xlsx 에서 관리합니다. 변경이 필요하면 IT팀에 요청해 주세요.']
-];
+   양식 파일은 SharePoint STK-DB 문서 루트에 두고 그대로 내려준다.
+   코드에서 만들면 파일을 손볼 때마다 배포해야 하고, 실제 배포본과
+   설명이 어긋날 수 있다. 파일 하나만 교체하면 되도록 한다. */
+const PT_TEMPLATE_FILE = 'MB_ServiceCard_Point_원본자료_양식.xlsx';
+
+// 양식이 담고 있는 시트 목록 — 어느 양식이 어느 시트를 쓰는지 표시할 때 쓴다.
+const PT_SHEETS = ['부품 적립','통합 적립','부품 소멸','통합 소멸','부품 사용','통합 사용'];
+
 // 양식별로 실제 집계에 쓰는 시트. ptAnalyze 의 로직과 짝을 이루므로 함께 관리한다.
 const PT_USES = {
   provision:  { sheets: ['부품 적립', '통합 적립', '부품 소멸', '통합 소멸'],
@@ -6749,7 +6724,7 @@ function ptRenderSheets(){
   }
   const u = PT_USES[kind];
   if(!u){ box.innerHTML = ''; return; }
-  const all = PT_TEMPLATE.map(t => t[0]);
+  const all = PT_SHEETS.slice();
   const used = all.filter(n => u.sheets.includes(n));
   const off  = all.filter(n => !u.sheets.includes(n));
   // 사용 / 미사용을 각각 한 행으로 나눠 경계를 분명히 한다.
@@ -6762,21 +6737,31 @@ function ptRenderSheets(){
         '<span class="row">' + off.map(n => '<span class="sh off">' + escHtml(n) + '</span>').join('') + '</span>'
       : '');
 }
-function ptDownloadTemplate(){
+
+async function ptDownloadTemplate(){
+  const btn = event && event.target;
+  const label = btn && btn.textContent;
   try{
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(PT_TEMPLATE_GUIDE), '사용안내');
-    PT_TEMPLATE.forEach(([name, hdr])=>{
-      const ws = XLSX.utils.aoa_to_sheet([hdr]);
-      ws['!cols'] = hdr.map(h=>({ wch: Math.max(10, Math.min(22, h.length*2+4)) }));
-      XLSX.utils.book_append_sheet(wb, ws, name);
-    });
-    const n = new Date(new Date().getTime()+9*3600000);
-    const p = x => String(x).padStart(2,'0');
-    XLSX.writeFile(wb, 'MB_ServiceCard_Point_원본자료_양식_' + n.getUTCFullYear() + p(n.getUTCMonth()+1) + p(n.getUTCDate()) + '.xlsx');
+    if(btn){ btn.disabled = true; btn.textContent = '받는 중...'; }
+    const t = await token();
+    if(!siteId){ const s = await api('/sites/'+SITE_PATH_DB); siteId = s.id; }
+    const drives = await api('/sites/'+siteId+'/drives');
+    const dv = (drives.value||[]).find(d=>['Documents','문서','Shared Documents'].includes(d.name)) || (drives.value||[])[0];
+    if(!dv) throw new Error('문서 라이브러리를 찾을 수 없습니다.');
+    const res = await fetch(GRAPH+'/drives/'+dv.id+'/root:/'+encodeURIComponent(PT_TEMPLATE_FILE)+':/content',
+                            {headers:{Authorization:'Bearer '+t}});
+    if(!res.ok) throw new Error(PT_TEMPLATE_FILE+' 을 내려받지 못했습니다 ('+res.status+').\nSTK-DB 문서 루트에 파일이 있는지 IT팀에 확인해 주세요.');
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = PT_TEMPLATE_FILE;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 4000);
   }catch(e){
-    console.error('[Point] 양식 생성 실패:', e);
-    showAccAlert('양식을 만들지 못했습니다', e.message, '⚠️');
+    console.error('[Point] 양식 다운로드 실패:', e);
+    showAccAlert('양식을 내려받지 못했습니다', e.message, '⚠️');
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = label || '양식 다운로드'; }
   }
 }
 
