@@ -6625,16 +6625,62 @@ function ptAnalyze(wb){
 }
 
 /* ── 마스터 로드 ─────────────────────────────────────────── */
-async function ptLoadMaster(){
-  if(PT_MASTER) return PT_MASTER;
-  const t = await token();
+// 마스터를 담아 둘 자리. eTag 로 파일이 바뀌었는지 판정한다.
+let _ptMasterTag = '';
+
+// 문서 라이브러리에서 파일 메타데이터를 먼저 읽는다 (본문보다 훨씬 가볍다)
+async function ptFindFile(name){
   if(!siteId){ const s = await api('/sites/'+SITE_PATH_DB); siteId = s.id; }
   const drives = await api('/sites/'+siteId+'/drives');
   const dv = (drives.value||[]).find(d=>['Documents','문서','Shared Documents'].includes(d.name)) || (drives.value||[])[0];
   if(!dv) throw new Error('문서 라이브러리를 찾을 수 없습니다.');
-  const res = await fetch(GRAPH+'/drives/'+dv.id+'/root:/'+PT_MASTER_FILE+':/content', {headers:{Authorization:'Bearer '+t}});
+  const meta = await api('/drives/'+dv.id+'/root:/'+encodeURIComponent(name));
+  return { driveId: dv.id, meta };
+}
+
+// 마스터 내용을 점검한다. 여기서 걸러내지 못하면 금액이 조용히 빠지거나 계정이 비는 형태로 나타난다.
+function ptValidateMaster(m){
+  const warn = [];
+  const seenV = {}, seenD = {}, seenO = {};
+  m.dealers.forEach(d=>{
+    if(seenV[d.code]) warn.push('Dealers — VendorCode 중복: ' + d.code);
+    seenV[d.code] = 1;
+    (d.dms||'').split(/[,/\s]+/).filter(Boolean).forEach(c=>{
+      const u = c.toUpperCase();
+      if(seenD[u]) warn.push('Dealers — DMS 코드 중복: ' + u + ' (' + seenD[u] + ' / ' + d.code + ')');
+      else seenD[u] = d.code;
+    });
+    if(!d.dms) warn.push('Dealers — DMS 코드 없음: ' + d.code + ' (정비번호로 자동 판정되지 않습니다)');
+    if(d.order && seenO[d.order]) warn.push('Dealers — SortOrder 중복: ' + d.order);
+    seenO[d.order] = 1;
+  });
+  ['PROV_CREDIT','RED_DEBIT'].forEach(k=>{
+    if(!m.glmap.find(g=>g.key===k)) warn.push('GLMap — 필수 행 없음: ' + k);
+  });
+  m.glmap.forEach(g=>{
+    if(g.key!=='PROV_CREDIT' && g.key!=='RED_DEBIT' && (!g.kind || !g.subKind))
+      warn.push('GLMap — Kind/SubKind 비어 있음: ' + g.key);
+    if(!g.gl) warn.push('GLMap — GL 코드 없음: ' + g.key);
+  });
+  ['ProvisionVoucherType','RedemptionVoucherType','ProvisionPurpose','RedemptionPurpose']
+    .forEach(k=>{ if(!m.settings[k]) warn.push('Settings — 값 없음: ' + k); });
+  return warn;
+}
+
+async function ptLoadMaster(){
+  const { driveId, meta } = await ptFindFile(PT_MASTER_FILE);
+  const tag = meta.eTag || meta.lastModifiedDateTime || '';
+  // 파일이 그대로면 다시 내려받지 않는다.
+  // 반대로 IT 가 마스터를 고치면 새로고침 없이도 다음 실행부터 반영된다.
+  if(PT_MASTER && tag && tag === _ptMasterTag) return PT_MASTER;
+
+  const t = await token();
+  const res = await fetch(GRAPH+'/drives/'+driveId+'/root:/'+encodeURIComponent(PT_MASTER_FILE)+':/content',
+                          {headers:{Authorization:'Bearer '+t}});
   if(!res.ok) throw new Error(PT_MASTER_FILE+' 을 읽을 수 없습니다 ('+res.status+').\nSTK-DB 문서 루트에 파일이 있는지 확인해 주세요.');
   const wb = XLSX.read(await res.arrayBuffer(), {type:'array'});
+  const need = ['Dealers','GLMap','Settings'].filter(n=>!wb.Sheets[n]);
+  if(need.length) throw new Error(PT_MASTER_FILE+' 에 다음 시트가 없습니다: ' + need.join(', '));
   const rowsOf = n => { const sh = wb.Sheets[n]; return sh ? XLSX.utils.sheet_to_json(sh) : []; };
 
   const dealers = rowsOf('Dealers').map(r=>({
@@ -6646,7 +6692,8 @@ async function ptLoadMaster(){
   const glmap = rowsOf('GLMap').map(r=>({
     key: ptStr(r['Key']), kind: ptStr(r['Kind']), subKind: ptStr(r['SubKind']),
     drcr: ptStr(r['DRCR']).toUpperCase(), gl: ptStr(r['GL']),
-    glName: ptStr(r['GLName']), pc: ptStr(r['PC']), cctr: ptStr(r['CCTR']),
+    // GLName 은 비워두는 것이 정상이다. 계정명은 GL 마스터(COA)에서 코드로 찾는다.
+    glName: ptStr(r['GLName'] || r['GLName (비워둠)']), pc: ptStr(r['PC']), cctr: ptStr(r['CCTR']),
     subpc: ptStr(r['SubPC']), desc: ptStr(r['LineDesc']),
     keepZero: ptStr(r['KeepZero']).toUpperCase()==='Y',
     order: ptNum(r['SortOrder'])
@@ -6657,8 +6704,19 @@ async function ptLoadMaster(){
 
   if(!dealers.length) throw new Error(PT_MASTER_FILE+' 의 Dealers 시트가 비어 있습니다.');
   if(!glmap.length)   throw new Error(PT_MASTER_FILE+' 의 GLMap 시트가 비어 있습니다.');
-  PT_MASTER = { dealers, glmap, settings };
-  console.log('[Point] 마스터 로드: 딜러 '+dealers.length+' · GL매핑 '+glmap.length+' · 설정 '+Object.keys(settings).length);
+
+  const info = {
+    file: PT_MASTER_FILE,
+    modified: (meta.lastModifiedDateTime||'').slice(0,16).replace('T',' '),
+    by: (meta.lastModifiedBy && meta.lastModifiedBy.user && meta.lastModifiedBy.user.displayName) || ''
+  };
+  PT_MASTER = { dealers, glmap, settings, info };
+  PT_MASTER.warn = ptValidateMaster(PT_MASTER);
+  _ptMasterTag = tag;
+  console.log('[Point] 마스터 로드: 딜러 '+dealers.length+' · GL매핑 '+glmap.length
+    +' · 설정 '+Object.keys(settings).length+' · 수정 '+info.modified
+    +(PT_MASTER.warn.length ? ' · 점검 경고 '+PT_MASTER.warn.length+'건' : ''));
+  PT_MASTER.warn.forEach(w=>console.warn('[Point] 마스터 점검:', w));
   return PT_MASTER;
 }
 
@@ -6844,6 +6902,8 @@ function ptShowConfirm(kind, res, file){
     });
   }
   if(!res.period) warn.push('정산 대상 월을 판정하지 못했습니다. Purpose 기간을 직접 확인해 주세요.');
+  // 마스터 자체 점검에서 나온 것도 함께 보여준다 (계정·딜러가 잘못 잡히는 원인이 된다)
+  (M.warn||[]).forEach(w=>warn.push('설정 파일 — ' + w));
 
   const total = isProv ? res.prov.total : res.red.total;
   const c = res.counts;
@@ -6853,7 +6913,8 @@ function ptShowConfirm(kind, res, file){
     `<div style="font-size:.74rem;color:#605e5c;line-height:1.7;margin-bottom:10px">
        <b>${escHtml(file.name)}</b><br>
        정산 대상 ${res.period ? escHtml(res.period.label) : '(판정 실패)'} &nbsp;·&nbsp;
-       유효 데이터 부품적립 ${c.pa} / 통합적립 ${c.ta} / 부품소멸 ${c.ps} / 통합소멸 ${c.ts} / 부품사용 ${c.pu}행
+       유효 데이터 부품적립 ${c.pa} / 통합적립 ${c.ta} / 부품소멸 ${c.ps} / 통합소멸 ${c.ts} / 부품사용 ${c.pu}행<br>
+       <span style="color:#a19f9d">설정 파일 ${escHtml((M.info&&M.info.file)||'-')} &nbsp;·&nbsp; 서비스센터 ${M.dealers.length}곳 &nbsp;·&nbsp; 계정 매핑 ${M.glmap.length}행${M.info&&M.info.modified ? ' &nbsp;·&nbsp; 최종 수정 '+escHtml(M.info.modified) : ''}</span>
      </div>
      ${isProv ? '' : `<div style="font-size:.7rem;color:#8a6116;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:5px;padding:7px 10px;margin-bottom:9px;line-height:1.6">
        ${res.hasLegacySheet ? '올리신 파일에 「통합 사용」 시트가 있습니다. 그 내용은 「부품 사용」에 이미 포함되어 있어 더하지 않습니다(이중 계상 방지).<br>' : ''}
