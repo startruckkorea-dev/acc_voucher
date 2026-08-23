@@ -5388,9 +5388,9 @@ async function openVoucherSP(spId, fromTab){
          아래 Accounting Approval Line 안내(파란 박스)와 같은 위치·간격 규칙을 따른다. -->
     <div id="voucher-appr-extra"></div>
     ${v.AccLineSkipReason ? `
-      <div style="margin-top:10px;background:#eaf3fd;border:1px solid #b6d7f2;border-radius:6px;padding:10px 12px;line-height:1.6">
-        <div style="font-size:.76rem;font-weight:700;color:#0b5fa5;margin-bottom:3px">Accounting Approval Line — Duplicate accounting review excluded</div>
-        <div style="font-size:.7rem;color:#0b5fa5"><b style="color:#a4262c">Submitted by a member of the Accounting team.</b> The Team Lead and Dept Head steps already correspond to the Accounting Head and the CFO, so the duplicate accounting review was excluded.</div>
+      <div style="margin-top:10px;background:#eaf3fd;border:1px solid #b6d7f2;border-radius:8px;padding:8px 12px">
+        <div style="font-size:.71rem;font-weight:700;color:#0b5fa5;margin-bottom:2px">Accounting Approval Line — Duplicate accounting review excluded</div>
+        <div style="font-size:.68rem;color:#0b5fa5;line-height:1.5"><b style="color:#a4262c">Submitted by a member of the Accounting team.</b> The Team Lead and Dept Head steps already correspond to the Accounting Head and the CFO, so the duplicate accounting review was excluded.</div>
       </div>` : ''}
     <div id="voucher-appr-action-btns" style="margin-top:14px;text-align:right"></div>
   `;
