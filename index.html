@@ -2228,16 +2228,19 @@ function renderRdAmountTable() {
       const on = k === cur;
       const b = on ? ';font-weight:700;color:#7a5310' : '';
       return '<tr style="background:' + (on ? '#fbf1d6' : 'transparent') + '">' +
-        '<td style="padding:2px 7px;white-space:nowrap' + bd + b + '">' + VTYPE_LABEL[k] + '</td>' +
-        '<td style="padding:2px 7px;text-align:right;white-space:nowrap' + bd + b + '">' + amt + '원 이상</td>' +
-        '<td style="padding:2px 5px;white-space:nowrap;font-size:.62rem;font-weight:700;color:#a4262c' + bd + '">' +
+        '<td style="padding:3px 10px;white-space:nowrap' + bd + b + '">' + VTYPE_LABEL[k] + '</td>' +
+        '<td style="padding:3px 10px;text-align:right;white-space:nowrap' + bd + b + '">' + amt + '원 이상</td>' +
+        '<td style="padding:3px 10px;white-space:nowrap;font-size:.62rem;font-weight:700;color:#a4262c' + bd + '">' +
           (on ? '← 현재 선택' : '') + '</td></tr>';
     }).join('');
   box.innerHTML =
-    '<table style="border-collapse:collapse;font-size:.66rem;background:#fffdf7;border:1px solid #f0d9a0;border-radius:4px;overflow:hidden">' +
-    '<tr style="background:#f7edd4"><th style="padding:4px 7px;text-align:left;font-weight:700;white-space:nowrap">Voucher Type</th>' +
-    '<th style="padding:4px 7px;text-align:right;font-weight:700;white-space:nowrap">RD 승인 대상 금액</th>' +
-    '<th style="padding:4px 5px"></th></tr>' + rows + '</table>' +
+    // 폭을 지정하지 않으면 내용 폭에만 맞춰져 안내 박스 안에서 유독 짧아 보인다.
+    // 부모 폭을 채우고 열 비율을 고정해 값이 한쪽에 몰리지 않게 한다.
+    '<table style="width:100%;table-layout:fixed;border-collapse:collapse;font-size:.66rem;background:#fffdf7;border:1px solid #f0d9a0;border-radius:4px;overflow:hidden">' +
+    '<colgroup><col style="width:46%"><col style="width:32%"><col style="width:22%"></colgroup>' +
+    '<tr style="background:#f7edd4"><th style="padding:4px 10px;text-align:left;font-weight:700;white-space:nowrap">Voucher Type</th>' +
+    '<th style="padding:4px 10px;text-align:right;font-weight:700;white-space:nowrap">RD 승인 대상 금액</th>' +
+    '<th style="padding:4px 10px"></th></tr>' + rows + '</table>' +
     '<div style="font-size:.62rem;color:#a89464;margin-top:4px;line-height:1.5">' +
     '위 금액 미만이면 RD 결재가 원래 붙지 않으므로 제외 신청이 필요하지 않습니다.</div>';
 }
