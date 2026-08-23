@@ -5246,7 +5246,8 @@ async function openVoucherSP(spId, fromTab){
   }).join('');
 
   // 첨부파일 목록 (클릭 시 다운로드)
-  let attHtml = '<span style="color:#a19f9d">첨부파일 없음</span>';
+  // 첨부가 없을 때는 「결재 이력이 없습니다.」와 같은 규칙(가운데 정렬 · 패딩)으로 표시한다.
+  let attHtml = '<div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">첨부파일이 없습니다.</div>';
   if(v.AttachmentRef) {
     // 「여러 줄 텍스트」 컬럼으로 바꾼 뒤로 SharePoint가 값 앞뒤에 <div> 래퍼나 개행을 붙여 돌려준다.
     // 그대로 쪼개면 첫 항목 파일명에 개행이 남아 링크 안에서 줄이 바뀐다.
