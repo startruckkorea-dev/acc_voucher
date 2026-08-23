@@ -3578,6 +3578,28 @@ async function saveVoucher(status) {
         '⛔', missingLines.join('\n'));
       return;
     }
+
+    // 환율 — 결재 단계는 DEBIT 합계의 원화 환산액으로 결정된다.
+    // 환율이 비어 있으면 외화 금액이 0원으로 환산되어 Dept Head·RD·CFO 가 모두 빠진 채
+    // 소액 건처럼 상신된다. 화면에는 오류가 보이지 않아 조용히 잘못 나가는 유형이라 여기서 막는다.
+    const _fxMissing = [];
+    lines.forEach((l,idx)=>{
+      const cur = (l.currency||'KRW').toUpperCase();
+      if(cur === 'KRW') return;
+      const amt = Number(String(l.amount||0).toString().replace(/,/g,'')) || 0;
+      if(amt <= 0) return;                       // 금액이 없으면 환산 결과에 영향이 없다
+      if(getExchangeRate(cur) > 0) return;
+      _fxMissing.push('라인 '+(idx+1)+' · '+cur+' '+amt.toLocaleString('ko-KR')+'  →  '+cur+' 환율 필요');
+    });
+    if(_fxMissing.length){
+      const _curs = [...new Set(_fxMissing.map(t=>t.split('·')[1].trim().split(' ')[0]))];
+      showAccAlert('환율이 입력되지 않았습니다',
+        '외화 라인이 있는데 '+_curs.join(' · ')+' 환율이 비어 있습니다.\n'
+        + '환율이 없으면 원화 환산액이 0원으로 계산되어 결재 단계가 잘못 지정됩니다.\n'
+        + '상단 Exchange Rate 를 확인한 뒤 다시 상신해 주세요.',
+        '⛔', _fxMissing.join('\n'));
+      return;
+    }
   }
 
   const blocks = document.getElementById('dr-cr-blocks');
