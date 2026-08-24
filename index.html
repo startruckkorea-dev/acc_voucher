@@ -4976,7 +4976,7 @@ function showAccApproverChange(spId, aprId, curName, curEmail){
   // 결재라인 담당자 후보와 같은 목록을 쓴다 (system_config 의 Accounting 담당자)
   // 결재라인 6번 섹션과 같은 후보 목록을 쓴다 (AP/AR/GL · Accounting Head)
   const cands = accCandidateList();
-  sel.innerHTML = '<option value="">담당자 선택</option>' + cands
+  sel.innerHTML = '<option value="">Select approver</option>' + cands
     .filter(c => (c.email||'').toLowerCase() !== (curEmail||'').toLowerCase())
     .map(c => `<option value="${escHtml(c.email)}" data-name="${escHtml(c.name)}">${escHtml(c.name)} (${escHtml(c.email)})</option>`).join('');
   document.getElementById('acc-chg-cur').textContent = (curName||'-') + ' (' + (curEmail||'-') + ')';
@@ -4993,12 +4993,12 @@ async function saveAccApproverChange(){
   const email = sel.value;
   const name  = sel.options[sel.selectedIndex]?.dataset?.name || '';
   const reason = (document.getElementById('acc-chg-reason').value||'').trim();
-  if(!email){ showAccAlert('담당자를 선택해 주세요','변경할 Accounting 담당자를 골라 주세요.','⚠️'); return; }
-  if(!reason){ showAccAlert('사유를 입력해 주세요','변경 사유는 기록에 그대로 남습니다.','⚠️'); return; }
-  if(reason.length > 500){ showAccAlert('사유가 너무 깁니다','500자를 넘을 수 없습니다.','⚠️'); return; }
+  if(!email){ showAccAlert('Select an approver','Please choose the new Accounting approver.','⚠️'); return; }
+  if(!reason){ showAccAlert('Enter a reason','The reason is recorded in the approval history.','⚠️'); return; }
+  if(reason.length > 500){ showAccAlert('Reason is too long','Maximum 500 characters.','⚠️'); return; }
 
   const btn = document.getElementById('acc-chg-save');
-  btn.disabled = true; btn.textContent = '저장 중...';
+  btn.disabled = true; btn.textContent = 'Saving...';
   const { spId, aprId, curName, curEmail } = _accChgCtx;
   try {
     await useVolumeOf(window._currentVoucherDetail || { _spId: spId });
@@ -5034,7 +5034,7 @@ async function saveAccApproverChange(){
     if(cached) cached.AccChangeLog = JSON.stringify(logs);
 
     closeAccApproverChange();
-    showAccAlert('담당자를 변경했습니다', name + ' (' + email + ') 님으로 변경되었습니다.\n변경 내용은 아래 이력에 기록됩니다.', '✅');
+    showAccAlert('Approver changed', 'Changed to ' + name + ' (' + email + ').\nThe change is recorded in the history below.', '✅');
     renderAccChangeLog(JSON.stringify(logs));
     await loadApprovalHistory(spId);
   } catch(e){
@@ -5042,7 +5042,7 @@ async function saveAccApproverChange(){
     showAccAlert(denied ? '변경 권한이 없습니다' : '변경 실패',
       denied ? '결재선을 수정할 권한이 없습니다. STK IT에 권한 조정을 요청해 주세요.' : (e.message||String(e)), '⚠️');
   } finally {
-    btn.disabled = false; btn.textContent = '변경';
+    btn.disabled = false; btn.textContent = 'Change';
   }
 }
 // ── Accounting 담당자 변경 이력 렌더링 (B1 변경 이력과 동일 카드 스타일) ──
@@ -5054,15 +5054,15 @@ function renderAccChangeLog(logJson){
   if(!logs.length){ el.innerHTML=''; return; }
   el.innerHTML =
     '<div style="margin:16px 0 8px;font-size:.78rem;font-weight:700;color:#0b5fa5;padding:6px 10px;background:#f0f6ff;border-left:3px solid #0078d4;border-radius:3px">'
-    + '🔄 Accounting 담당자 변경 이력 (' + logs.length + '건)</div>'
+    + '🔄 Accounting Approver Change History (' + logs.length + ')</div>'
     + '<div style="background:#f0f6ff;border-radius:6px;border:1px solid #c7e0f4;overflow:hidden">'
     + logs.map((g,i)=>
         '<div style="padding:9px 12px;' + (i===logs.length-1 ? '' : 'border-bottom:1px solid #c7e0f4') + '">'
         + '<div style="font-size:.68rem;color:#a19f9d">' + escHtml(g.changedAt||'') + '</div>'
-        + '<div style="font-size:.72rem;color:#323130;margin-top:3px">변경자: <b>' + escHtml(g.changedBy||'') + '</b></div>'
-        + '<div style="font-size:.72rem;color:#605e5c;margin-top:2px">이전: ' + escHtml(g.fromEmail||'-') + '</div>'
-        + '<div style="font-size:.72rem;color:#323130">변경 후: <b>' + escHtml(g.toName||'') + '</b> (' + escHtml(g.toEmail||'') + ')</div>'
-        + (g.reason ? '<div style="font-size:.72rem;color:#605e5c;margin-top:3px">💬 사유: ' + escHtml(g.reason) + '</div>' : '')
+        + '<div style="font-size:.72rem;color:#323130;margin-top:3px">Changed by: <b>' + escHtml(g.changedBy||'') + '</b></div>'
+        + '<div style="font-size:.72rem;color:#605e5c;margin-top:2px">From: ' + escHtml(g.fromEmail||'-') + '</div>'
+        + '<div style="font-size:.72rem;color:#323130">To: <b>' + escHtml(g.toName||'') + '</b> (' + escHtml(g.toEmail||'') + ')</div>'
+        + (g.reason ? '<div style="font-size:.72rem;color:#605e5c;margin-top:3px">💬 Reason: ' + escHtml(g.reason) + '</div>' : '')
         + '</div>').join('')
     + '</div>';
 }
@@ -5488,29 +5488,29 @@ async function openVoucherSP(spId, fromTab){
 <div id="acc-chg-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1200;align-items:center;justify-content:center;padding:20px">
   <div style="background:#fff;border-radius:10px;max-width:480px;width:100%;box-shadow:0 8px 28px rgba(0,0,0,.22)">
     <div style="display:flex;justify-content:space-between;align-items:center;padding:15px 20px;border-bottom:1px solid #edebe9">
-      <h3 style="font-size:1rem;color:#0f2744;margin:0">Accounting 담당자 변경</h3>
+      <h3 style="font-size:1rem;color:#0f2744;margin:0">Change Accounting Approver</h3>
       <button onclick="closeAccApproverChange()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:#a19f9d;line-height:1">&times;</button>
     </div>
     <div style="padding:18px 20px">
       <div style="background:#f9f9f9;border:1px solid #edebe9;border-radius:6px;padding:10px 13px;margin-bottom:14px">
-        <div style="font-size:.7rem;color:#a19f9d">현재 담당자</div>
+        <div style="font-size:.7rem;color:#a19f9d">Current approver</div>
         <div id="acc-chg-cur" style="font-size:.82rem;font-weight:600;color:#323130;margin-top:3px">-</div>
       </div>
       <div style="margin-bottom:12px">
-        <label style="display:block;font-size:.75rem;font-weight:600;color:#605e5c;margin-bottom:5px">변경할 담당자<span style="color:#a4262c">*</span></label>
+        <label style="display:block;font-size:.75rem;font-weight:600;color:#605e5c;margin-bottom:5px">New approver<span style="color:#a4262c">*</span></label>
         <select id="acc-chg-person" style="width:100%;padding:8px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:.82rem;font-family:inherit"></select>
       </div>
       <div>
-        <label style="display:block;font-size:.75rem;font-weight:600;color:#605e5c;margin-bottom:5px">변경 사유<span style="color:#a4262c">*</span></label>
-        <textarea id="acc-chg-reason" rows="2" maxlength="500" placeholder="예) 담당자 휴직으로 업무 이관" style="width:100%;padding:8px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:.82rem;font-family:inherit;resize:vertical"></textarea>
-        <div style="font-size:.68rem;color:#a19f9d;margin-top:4px">변경 내용과 사유는 결재 이력에 그대로 기록됩니다.</div>
+        <label style="display:block;font-size:.75rem;font-weight:600;color:#605e5c;margin-bottom:5px">Reason for change<span style="color:#a4262c">*</span></label>
+        <textarea id="acc-chg-reason" rows="2" maxlength="500" placeholder="e.g. Handover due to the current approver's leave" style="width:100%;padding:8px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:.82rem;font-family:inherit;resize:vertical"></textarea>
+        <div style="font-size:.68rem;color:#a19f9d;margin-top:4px">The change and its reason are recorded in the approval history.</div>
       </div>
       <div style="background:#fdf6e3;border:1px solid #f0d9a0;border-radius:6px;padding:9px 12px;margin-top:12px;font-size:.7rem;color:#8a6116;line-height:1.6">
-        아직 결재하지 않은 단계만 변경할 수 있습니다. 이미 승인·반려된 결재는 바꿀 수 없습니다.
+        Only pending steps can be changed. Approved or rejected steps cannot be modified.
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
-        <button onclick="closeAccApproverChange()" style="padding:8px 18px;background:#fff;color:#605e5c;border:1px solid #d2d0ce;border-radius:4px;font-size:.82rem;cursor:pointer;font-family:inherit">취소</button>
-        <button id="acc-chg-save" onclick="saveAccApproverChange()" style="padding:8px 18px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit">변경</button>
+        <button onclick="closeAccApproverChange()" style="padding:8px 18px;background:#fff;color:#605e5c;border:1px solid #d2d0ce;border-radius:4px;font-size:.82rem;cursor:pointer;font-family:inherit">Cancel</button>
+        <button id="acc-chg-save" onclick="saveAccApproverChange()" style="padding:8px 18px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit">Change</button>
       </div>
     </div>
   </div>
@@ -5792,7 +5792,7 @@ async function loadApprovalHistory(spId){
         && ADMIN_EMAILS.map(e=>e.toLowerCase()).includes((user?.email||user?.username||'').trim().toLowerCase())
         && !['승인완료','반려','철회'].includes((v.Status||'').trim());
       const _accBtn = _accChangeable
-        ? `<span class="btn-change" style="margin-left:8px" onclick="showAccApproverChange('${spId}','${af._id||''}','${escHtml(af.ApproverName||'')}','${escHtml(af.ApproverEmail||'')}')">✎ 담당자 변경</span>`
+        ? `<button onclick="showAccApproverChange('${spId}','${af._id||''}','${escHtml(af.ApproverName||'')}','${escHtml(af.ApproverEmail||'')}')" style="margin-left:8px;padding:2px 10px;font-size:11px;background:#a4262c;color:#fff;border:none;border-radius:4px;cursor:pointer;font-family:inherit">Change</button>`
         : '';
       return `<div class="appr-item">
         <div>
