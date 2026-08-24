@@ -6223,7 +6223,9 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
         '<td style="'+lblB+'">Currency</td><td style="'+lblB+'">Total Amount</td>'+
       '</tr>'+
       '<tr>'+
-        '<td colspan="2" style="'+cellB+';padding:8px;white-space:pre-wrap;min-height:34px">'+(esc(v.Purpose)||'-')+'</td>'+
+        // SharePoint 다중 텍스트는 콜론·슬래시를 숫자 엔티티(&#58;)로 저장하는 경우가 있다.
+      // spText 로 걷어내지 않으면 PDF 에 &#58; 가 글자 그대로 찍힌다. (Purpose Title 은 이미 적용돼 있었음)
+      '<td colspan="2" style="'+cellB+';padding:8px;white-space:pre-wrap;min-height:34px">'+(esc(spText(v.Purpose))||'-')+'</td>'+
         '<td style="'+cellB+'">'+hdrCurrency+'</td><td style="'+cellB+';text-align:right;font-weight:700">'+hdrTotalAmount+'</td>'+
       '</tr>'+
       '<tr>'+
