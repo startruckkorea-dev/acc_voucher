@@ -5485,32 +5485,27 @@ async function openVoucherSP(spId, fromTab){
     </div>
 
     <!-- Accounting 담당자 변경 모달 -->
-<div id="acc-chg-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1200;align-items:center;justify-content:center;padding:20px">
-  <div style="background:#fff;border-radius:10px;max-width:480px;width:100%;box-shadow:0 8px 28px rgba(0,0,0,.22)">
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:15px 20px;border-bottom:1px solid #edebe9">
-      <h3 style="font-size:1rem;color:#0f2744;margin:0">Change Accounting Approver</h3>
-      <button onclick="closeAccApproverChange()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:#a19f9d;line-height:1">&times;</button>
+<div id="acc-chg-modal" style="display:none;position:fixed;inset:0;background:rgba(15,39,68,.42);z-index:1200;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:10px;max-width:380px;width:100%;box-shadow:0 12px 32px rgba(0,0,0,.18);overflow:hidden">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid #f0eff0">
+      <h3 style="font-size:.88rem;font-weight:600;color:#0f2744;margin:0">Change Accounting Approver</h3>
+      <button onclick="closeAccApproverChange()" style="background:none;border:none;font-size:1.1rem;cursor:pointer;color:#c8c6c4;line-height:1;padding:0 2px">&times;</button>
     </div>
-    <div style="padding:18px 20px">
-      <div style="background:#f9f9f9;border:1px solid #edebe9;border-radius:6px;padding:10px 13px;margin-bottom:14px">
-        <div style="font-size:.7rem;color:#a19f9d">Current approver</div>
-        <div id="acc-chg-cur" style="font-size:.82rem;font-weight:600;color:#323130;margin-top:3px">-</div>
+    <div style="padding:16px 18px">
+      <div style="display:flex;align-items:baseline;gap:8px;padding-bottom:12px;border-bottom:1px solid #f5f4f3;margin-bottom:13px">
+        <span style="font-size:.68rem;color:#a19f9d;white-space:nowrap">Current</span>
+        <span id="acc-chg-cur" style="font-size:.78rem;font-weight:600;color:#323130;line-height:1.4">-</span>
       </div>
-      <div style="margin-bottom:12px">
-        <label style="display:block;font-size:.75rem;font-weight:600;color:#605e5c;margin-bottom:5px">New approver<span style="color:#a4262c">*</span></label>
-        <select id="acc-chg-person" style="width:100%;padding:8px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:.82rem;font-family:inherit"></select>
+      <label style="display:block;font-size:.7rem;font-weight:600;color:#605e5c;margin-bottom:5px">New approver<span style="color:#a4262c;margin-left:2px">*</span></label>
+      <select id="acc-chg-person" style="width:100%;padding:7px 9px;border:1px solid #d2d0ce;border-radius:5px;font-size:.78rem;font-family:inherit;color:#323130;background:#fff;margin-bottom:13px"></select>
+      <label style="display:block;font-size:.7rem;font-weight:600;color:#605e5c;margin-bottom:5px">Reason<span style="color:#a4262c;margin-left:2px">*</span></label>
+      <textarea id="acc-chg-reason" rows="2" maxlength="500" placeholder="e.g. Approver changed due to the current approver&#39;s annual leave" style="width:100%;padding:7px 9px;border:1px solid #d2d0ce;border-radius:5px;font-size:.78rem;font-family:inherit;color:#323130;resize:vertical;line-height:1.5"></textarea>
+      <div style="font-size:.65rem;color:#a19f9d;line-height:1.6;margin-top:9px">
+        Only pending steps can be changed &middot; recorded in the approval history
       </div>
-      <div>
-        <label style="display:block;font-size:.75rem;font-weight:600;color:#605e5c;margin-bottom:5px">Reason for change<span style="color:#a4262c">*</span></label>
-        <textarea id="acc-chg-reason" rows="2" maxlength="500" placeholder="e.g. Approver changed due to the current approver's annual leave" style="width:100%;padding:8px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:.82rem;font-family:inherit;resize:vertical"></textarea>
-        <div style="font-size:.68rem;color:#a19f9d;margin-top:4px">The change and its reason are recorded in the approval history.</div>
-      </div>
-      <div style="background:#fdf6e3;border:1px solid #f0d9a0;border-radius:6px;padding:9px 12px;margin-top:12px;font-size:.7rem;color:#8a6116;line-height:1.6">
-        Only pending steps can be changed. Approved or rejected steps cannot be modified.
-      </div>
-      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
-        <button onclick="closeAccApproverChange()" style="padding:8px 18px;background:#fff;color:#605e5c;border:1px solid #d2d0ce;border-radius:4px;font-size:.82rem;cursor:pointer;font-family:inherit">Cancel</button>
-        <button id="acc-chg-save" onclick="saveAccApproverChange()" style="padding:8px 18px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit">Change</button>
+      <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:16px">
+        <button onclick="closeAccApproverChange()" style="padding:7px 15px;background:#fff;color:#605e5c;border:1px solid #d2d0ce;border-radius:5px;font-size:.78rem;cursor:pointer;font-family:inherit">Cancel</button>
+        <button id="acc-chg-save" onclick="saveAccApproverChange()" style="padding:7px 15px;background:#0078d4;color:#fff;border:none;border-radius:5px;font-size:.78rem;font-weight:600;cursor:pointer;font-family:inherit">Change</button>
       </div>
     </div>
   </div>
