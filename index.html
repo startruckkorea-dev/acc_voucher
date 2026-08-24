@@ -4964,6 +4964,109 @@ async function saveB1Doc(spId, b1DocNo, postingDone) {
   }
 }
 
+// ── Accounting 담당자 변경 ────────────────────────────────
+// 상신 후에는 결재선이 고정되지만, 담당자 부재·업무 이관 등으로 바꿔야 하는 경우가 있다.
+// 아직 결재 전(대기/대기(잠김))인 행만 바꾼다. 이미 승인·반려한 행을 바꾸면
+// 그 사람이 처리한 것처럼 기록이 뒤바뀐다.
+let _accChgCtx = null;
+function showAccApproverChange(spId, aprId, curName, curEmail){
+  if(!aprId){ showAccAlert('변경할 수 없습니다','결재선 항목을 찾지 못했습니다. 새로고침 후 다시 시도해 주세요.','⚠️'); return; }
+  _accChgCtx = { spId, aprId, curName, curEmail };
+  const sel = document.getElementById('acc-chg-person');
+  // 결재라인 담당자 후보와 같은 목록을 쓴다 (system_config 의 Accounting 담당자)
+  // 결재라인 6번 섹션과 같은 후보 목록을 쓴다 (AP/AR/GL · Accounting Head)
+  const cands = accCandidateList();
+  sel.innerHTML = '<option value="">담당자 선택</option>' + cands
+    .filter(c => (c.email||'').toLowerCase() !== (curEmail||'').toLowerCase())
+    .map(c => `<option value="${escHtml(c.email)}" data-name="${escHtml(c.name)}">${escHtml(c.name)} (${escHtml(c.email)})</option>`).join('');
+  document.getElementById('acc-chg-cur').textContent = (curName||'-') + ' (' + (curEmail||'-') + ')';
+  document.getElementById('acc-chg-reason').value = '';
+  document.getElementById('acc-chg-modal').style.display = 'flex';
+}
+function closeAccApproverChange(){
+  document.getElementById('acc-chg-modal').style.display = 'none';
+  _accChgCtx = null;
+}
+async function saveAccApproverChange(){
+  if(!_accChgCtx) return;
+  const sel = document.getElementById('acc-chg-person');
+  const email = sel.value;
+  const name  = sel.options[sel.selectedIndex]?.dataset?.name || '';
+  const reason = (document.getElementById('acc-chg-reason').value||'').trim();
+  if(!email){ showAccAlert('담당자를 선택해 주세요','변경할 Accounting 담당자를 골라 주세요.','⚠️'); return; }
+  if(!reason){ showAccAlert('사유를 입력해 주세요','변경 사유는 기록에 그대로 남습니다.','⚠️'); return; }
+  if(reason.length > 500){ showAccAlert('사유가 너무 깁니다','500자를 넘을 수 없습니다.','⚠️'); return; }
+
+  const btn = document.getElementById('acc-chg-save');
+  btn.disabled = true; btn.textContent = '저장 중...';
+  const { spId, aprId, curName, curEmail } = _accChgCtx;
+  try {
+    await useVolumeOf(window._currentVoucherDetail || { _spId: spId });
+
+    // ① 결재선 행 상태를 다시 확인한다. 그 사이 결재가 처리됐을 수 있다.
+    const cur = await api(`/sites/${siteId}/lists/${LIST_APPROVALS}/items/${aprId}/fields`);
+    if(!['대기','대기(잠김)','Pending'].includes((cur.Status||'').trim())){
+      throw new Error('이미 처리된 결재입니다. (현재 상태: ' + (cur.Status||'-') + ')\n담당자를 바꿀 수 없습니다.');
+    }
+
+    // ② 결재선 갱신
+    await api(`/sites/${siteId}/lists/${LIST_APPROVALS}/items/${aprId}/fields`, 'PATCH', {
+      ApproverName: name, ApproverEmail: email
+    });
+
+    // ③ 이력 append — B1ChangeLog 와 같은 방식
+    const now = new Date(new Date().getTime()+9*3600*1000);
+    const p = n=>String(n).padStart(2,'0');
+    const at = `${now.getUTCFullYear()}-${p(now.getUTCMonth()+1)}-${p(now.getUTCDate())} ${p(now.getUTCHours())}:${p(now.getUTCMinutes())}`;
+    const reqFields = await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${spId}/fields`);
+    let logs = [];
+    if(reqFields.AccChangeLog){ try { logs = JSON.parse(reqFields.AccChangeLog); } catch(e){ logs = []; } }
+    logs.push({ changedAt: at, changedBy: (user?.email||user?.username||''),
+                fromName: curName||'-', fromEmail: curEmail||'-',
+                toName: name, toEmail: email, reason });
+    await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${spId}/fields`, 'PATCH', {
+      AccChangeLog: JSON.stringify(logs)
+    });
+    if(window._currentVoucherDetail && window._currentVoucherDetail._spId===spId){
+      window._currentVoucherDetail.AccChangeLog = JSON.stringify(logs);
+    }
+    const cached = adminListCache.find(x=>x._spId===spId);
+    if(cached) cached.AccChangeLog = JSON.stringify(logs);
+
+    closeAccApproverChange();
+    showAccAlert('담당자를 변경했습니다', name + ' (' + email + ') 님으로 변경되었습니다.\n변경 내용은 아래 이력에 기록됩니다.', '✅');
+    renderAccChangeLog(JSON.stringify(logs));
+    await loadApprovalHistory(spId);
+  } catch(e){
+    const denied = /403|Forbidden|accessDenied|denied/i.test(e.message||'');
+    showAccAlert(denied ? '변경 권한이 없습니다' : '변경 실패',
+      denied ? '결재선을 수정할 권한이 없습니다. STK IT에 권한 조정을 요청해 주세요.' : (e.message||String(e)), '⚠️');
+  } finally {
+    btn.disabled = false; btn.textContent = '변경';
+  }
+}
+// ── Accounting 담당자 변경 이력 렌더링 (B1 변경 이력과 동일 카드 스타일) ──
+function renderAccChangeLog(logJson){
+  const el = document.getElementById('acc-change-log');
+  if(!el) return;
+  let logs = [];
+  if(logJson){ try { logs = JSON.parse(logJson); } catch(e){ logs = []; } }
+  if(!logs.length){ el.innerHTML=''; return; }
+  el.innerHTML =
+    '<div style="margin:16px 0 8px;font-size:.78rem;font-weight:700;color:#0b5fa5;padding:6px 10px;background:#f0f6ff;border-left:3px solid #0078d4;border-radius:3px">'
+    + '🔄 Accounting 담당자 변경 이력 (' + logs.length + '건)</div>'
+    + '<div style="background:#f0f6ff;border-radius:6px;border:1px solid #c7e0f4;overflow:hidden">'
+    + logs.map((g,i)=>
+        '<div style="padding:9px 12px;' + (i===logs.length-1 ? '' : 'border-bottom:1px solid #c7e0f4') + '">'
+        + '<div style="font-size:.68rem;color:#a19f9d">' + escHtml(g.changedAt||'') + '</div>'
+        + '<div style="font-size:.72rem;color:#323130;margin-top:3px">변경자: <b>' + escHtml(g.changedBy||'') + '</b></div>'
+        + '<div style="font-size:.72rem;color:#605e5c;margin-top:2px">이전: ' + escHtml(g.fromEmail||'-') + '</div>'
+        + '<div style="font-size:.72rem;color:#323130">변경 후: <b>' + escHtml(g.toName||'') + '</b> (' + escHtml(g.toEmail||'') + ')</div>'
+        + (g.reason ? '<div style="font-size:.72rem;color:#605e5c;margin-top:3px">💬 사유: ' + escHtml(g.reason) + '</div>' : '')
+        + '</div>').join('')
+    + '</div>';
+}
+
 // ── B1 Doc No./Posting 변경 이력 렌더링 (SSC PKF 담당자 변경 이력과 동일 카드 스타일) ──
 function renderB1ChangeLog(logJson) {
   const el = document.getElementById('b1-change-log');
@@ -5381,7 +5484,39 @@ async function openVoucherSP(spId, fromTab){
       <div id="b1-change-log" style="margin-top:12px"></div>
     </div>
 
-    <!-- No.10: 관리자 의견 제시 -->
+    <!-- Accounting 담당자 변경 모달 -->
+<div id="acc-chg-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1200;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:10px;max-width:480px;width:100%;box-shadow:0 8px 28px rgba(0,0,0,.22)">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:15px 20px;border-bottom:1px solid #edebe9">
+      <h3 style="font-size:1rem;color:#0f2744;margin:0">Accounting 담당자 변경</h3>
+      <button onclick="closeAccApproverChange()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:#a19f9d;line-height:1">&times;</button>
+    </div>
+    <div style="padding:18px 20px">
+      <div style="background:#f9f9f9;border:1px solid #edebe9;border-radius:6px;padding:10px 13px;margin-bottom:14px">
+        <div style="font-size:.7rem;color:#a19f9d">현재 담당자</div>
+        <div id="acc-chg-cur" style="font-size:.82rem;font-weight:600;color:#323130;margin-top:3px">-</div>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-size:.75rem;font-weight:600;color:#605e5c;margin-bottom:5px">변경할 담당자<span style="color:#a4262c">*</span></label>
+        <select id="acc-chg-person" style="width:100%;padding:8px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:.82rem;font-family:inherit"></select>
+      </div>
+      <div>
+        <label style="display:block;font-size:.75rem;font-weight:600;color:#605e5c;margin-bottom:5px">변경 사유<span style="color:#a4262c">*</span></label>
+        <textarea id="acc-chg-reason" rows="2" maxlength="500" placeholder="예) 담당자 휴직으로 업무 이관" style="width:100%;padding:8px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:.82rem;font-family:inherit;resize:vertical"></textarea>
+        <div style="font-size:.68rem;color:#a19f9d;margin-top:4px">변경 내용과 사유는 결재 이력에 그대로 기록됩니다.</div>
+      </div>
+      <div style="background:#fdf6e3;border:1px solid #f0d9a0;border-radius:6px;padding:9px 12px;margin-top:12px;font-size:.7rem;color:#8a6116;line-height:1.6">
+        아직 결재하지 않은 단계만 변경할 수 있습니다. 이미 승인·반려된 결재는 바꿀 수 없습니다.
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+        <button onclick="closeAccApproverChange()" style="padding:8px 18px;background:#fff;color:#605e5c;border:1px solid #d2d0ce;border-radius:4px;font-size:.82rem;cursor:pointer;font-family:inherit">취소</button>
+        <button id="acc-chg-save" onclick="saveAccApproverChange()" style="padding:8px 18px;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit">변경</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- No.10: 관리자 의견 제시 -->
 
     <div id="pkf-scope-notice" style="display:none;margin-top:16px;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:8px;padding:11px 14px">
       <div style="font-size:.76rem;font-weight:700;color:#8a6116;margin-bottom:4px">🔒 B1 Doc No. / 결재 의견을 사용할 수 없습니다</div>
@@ -5403,6 +5538,7 @@ async function openVoucherSP(spId, fromTab){
       <div id="admin-comment-closed" style="display:none;font-size:.78rem;color:#a19f9d;padding:8px 0">Comments are closed for this voucher. Existing comments remain visible.</div>
       <!-- 등록된 의견은 B1 변경 이력과 동일한 형태의 별도 이력 블록으로 아래에 표시 -->
       <div id="admin-comments-list" style="margin-top:12px"></div>
+      <div id="acc-change-log"></div>
     </div>
 
     <div class="det-sec" style="margin-top:16px">결재 이력</div>
@@ -5467,7 +5603,7 @@ async function openVoucherSP(spId, fromTab){
     b1Section.style.display = 'block';
     document.getElementById('modal-b1docno').value = v.B1DocNo||'';
     updatePostingBadge();
-    renderB1ChangeLog(v.B1ChangeLog);
+    renderAccChangeLog(v.AccChangeLog||''); renderB1ChangeLog(v.B1ChangeLog);
   } else if(b1Section) {
     b1Section.style.display = 'none';
   }
@@ -5643,13 +5779,24 @@ async function loadApprovalHistory(spId){
     // ACC 역할은 Voucher Type에 따라 AP/AR/GL 담당자로 표시
     const accLabelByType = {AP:'AP 담당자',AP_IMS:'GL 담당자',AP_CR:'AP 담당자',AR:'AR 담당자',GL:'GL 담당자',FA:'GL 담당자',ADV:'AP 담당자',SET:'AP 담당자'};
     const html = list.map(af=>{
+      // PATCH 대상이 되는 Approvals 항목 ID. 조회 시점에 함께 담아둔다.
+      af._id = af._id || af.id || af.ID || '';
       const cls = stClsMap[af.Status] || 'status-대기잠김';
       const stText = stLabelMap[af.Status] || af.Status || '대기(잠김)';
       let roleLabel = roleLabelMap[af.ApproverRole] || af.ApproverRole || '';
       if(af.ApproverRole==='ACC') roleLabel = accLabelByType[v.VoucherType] || '담당자';
+      // Accounting 담당자 변경 버튼 — 관리자만, 아직 결재 전(대기/대기(잠김))일 때만.
+      // 이미 승인·반려한 행을 바꾸면 그 사람이 처리한 것처럼 기록이 뒤바뀐다.
+      const _accChangeable = af.ApproverRole === 'ACC'
+        && ['대기','대기(잠김)','Pending'].includes(af.Status)
+        && ADMIN_EMAILS.map(e=>e.toLowerCase()).includes((user?.email||user?.username||'').trim().toLowerCase())
+        && !['승인완료','반려','철회'].includes((v.Status||'').trim());
+      const _accBtn = _accChangeable
+        ? `<span class="btn-change" style="margin-left:8px" onclick="showAccApproverChange('${spId}','${af._id||''}','${escHtml(af.ApproverName||'')}','${escHtml(af.ApproverEmail||'')}')">✎ 담당자 변경</span>`
+        : '';
       return `<div class="appr-item">
         <div>
-          <b>${af.ApprovalOrder}차 결재자(${roleLabel})</b>
+          <b>${af.ApprovalOrder}차 결재자(${roleLabel})</b>${_accBtn}
           <br><span style="font-size:.72rem;color:#605e5c">${af.ApproverName||''} · ${af.ApproverEmail||''}</span>
           ${af.ApprovalDate?`<br><span style="font-size:.72rem;color:#a19f9d">${fmtDate(af.ApprovalDate)}</span>`:''}
           ${af.Comment?`<br><span style="font-size:.72rem;background:#fff;border:1px solid #edebe9;border-radius:4px;padding:2px 6px;display:inline-block;margin-top:2px">💬 ${escHtml(spText(af.Comment))}</span>`:''}
