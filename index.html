@@ -1229,17 +1229,69 @@ async function _forEachAprVolume(fn) {
 //    SharePoint에 쓰기 권한이 있는 한 API 직접 호출은 막을 수 없다.
 //    실질 차단이 필요하면 리스트 권한 분리가 필요하다.
 const SSC_REQ_LIST_ID = 'bb912dff-ba54-4abd-871a-b3d4c3c8620d'; // SSC_Requests
+// 로그인 신원 후보. 외부 게스트(B2B)는 Graph /me 의 mail 이 비어 있으면 user.email 에
+// UPN(이름_도메인#EXT#@테넌트.onmicrosoft.com)이 들어가, 설정 파일의 회사 메일 형식과 대조되지 않는다.
+// SSC(shared-sc)는 email·username 두 값을 모두 대조하므로 SSC 에서는 보이는데 ACC 에서만
+// PKF 로 인식되지 않는 문제가 있었다. 같은 기준을 쓰도록 후보를 모아 대조한다.
+function myIdentities() {
+  return [user?.email, user?.username]
+    .map(x => (x || '').trim().toLowerCase())
+    .filter(Boolean);
+}
+function meMatches(list) {
+  const ids = myIdentities();
+  return (list || []).some(v => ids.includes(String(v || '').trim().toLowerCase()));
+}
+function meInText(text) {
+  const t = String(text || '').toLowerCase();
+  return myIdentities().some(id => t.includes(id));
+}
+
+// ── PKF 담당자 식별 ──────────────────────────────────────────────
+// PKF 인력은 같은 사람이 도메인 두 개(예: 회사 도메인 / 그룹 도메인)를 번갈아 쓰는 경우가 있다.
+// 설정 파일에는 한쪽만 등록돼 있어, 다른 쪽으로 로그인하면 담당자인데도 인식되지 않았다.
+// 도메인을 코드에 적어두면 업체 사정이 바뀔 때마다 배포해야 하므로,
+// 설정 파일(SHARED-SC_2nd_N)에 등록된 도메인 집합을 런타임에 뽑아 그 안에서만 비교한다.
+// 아무 도메인이나 허용하면 동명이인이 통과하므로 범위를 이렇게 좁힌다.
+let _cfgLoadFailed = false;   // 설정 파일을 못 읽으면 ADMIN_EMAILS·PKF_EMAILS 가 빈 채로 남는다
+function _pkfParts() {
+  const doms = new Set(), locals = new Set();
+  (PKF_EMAILS || []).forEach(e => {
+    const [lp, dom] = String(e || '').toLowerCase().split('@');
+    if (lp && dom) { locals.add(lp); doms.add(dom); }
+  });
+  return { doms: [...doms], locals };
+}
+function isPkfUser() {
+  if (meMatches(PKF_EMAILS)) return true;                 // 설정 파일과 정확히 일치
+  const { doms, locals } = _pkfParts();
+  return myIdentities().some(id => {
+    const [lp, dom] = id.split('@');
+    return lp && dom && doms.includes(dom) && locals.has(lp);
+  });
+}
+// SSC 티켓의 PKFAssignees 텍스트와 대조. 위와 같은 기준(등록 도메인 안에서만)을 쓴다.
+function meInPkfText(text) {
+  if (meInText(text)) return true;
+  const t = String(text || '').toLowerCase();
+  const { doms } = _pkfParts();
+  return myIdentities().some(id => {
+    const [lp, dom] = id.split('@');
+    if (!lp || !dom || !doms.includes(dom)) return false;
+    return doms.some(d => t.includes(lp + '@' + d));
+  });
+}
+
 let _pkfAllowedAccIds = undefined;   // undefined=미조회 / null=조회실패 / Set=조회완료
 async function loadPkfAllowedAccIds() {
   if (_pkfAllowedAccIds !== undefined) return _pkfAllowedAccIds;
-  const me = (user?.email || user?.username || '').trim().toLowerCase();
   try {
     if(!siteId){ const s = await api('/sites/'+SITE_PATH_DB); siteId = s.id; }
     const res = await apiAll('/sites/' + siteId + '/lists/' + SSC_REQ_LIST_ID + '/items?$expand=fields&$top=500');
     const ids = new Set();
     (res.value || []).forEach(it => {
       const f = it.fields || {};
-      if (!(f.PKFAssignees || '').toLowerCase().includes(me)) return;
+      if (!meInPkfText(f.PKFAssignees)) return;
       // SSC는 관련 티켓 참조를 RelatedTickets 전용 컬럼으로 옮겼다.
       // (UAT/운영이 같은 리스트를 써서 Detail 본문에 토큰이 그대로 노출되던 문제 때문)
       // SSC 자신도 'RelatedTickets || Detail' 순으로 읽으므로 같은 기준을 쓴다.
@@ -1646,7 +1698,7 @@ async function boot(account) {
   // 프라미스를 보관해두는 이유: ADMIN_EMAILS가 여기서 비로소 채워지므로,
   // ?openId= 딥링크로 바로 상세를 여는 경우 이 로드가 끝난 뒤에 열어야 관리자 판별이 정상 동작한다.
   const _configPromise = loadSystemConfig().then(cfg=>{
-    if(!cfg) return;
+    if(!cfg) { _cfgLoadFailed = true; return; }
     const ap = cfgVal(cfg,'ACC-Voucher_CONTACT_AP');
     const ar = cfgVal(cfg,'ACC-Voucher_CONTACT_AR');
     const gl = cfgVal(cfg,'ACC-Voucher_CONTACT_GL');
@@ -5570,7 +5622,7 @@ async function openVoucherSP(spId, fromTab){
   // PKF 담당자는 SSC 처리 업무상 B1 Doc No./Posting 입력과 결재 의견 확인이 필요하다.
   // 단, 아무 전표나 다룰 수 있으면 안 되므로 "본인 담당 SSC 티켓에 연결된 전표"로 범위를 제한한다.
   // 관리자 탭을 거치지 않고 SSC 링크(?openId=)로 들어오는 경로가 주 사용 방식이라 fromTab 조건은 걸지 않는다.
-  const userIsPkf = PKF_EMAILS.includes(myEmailLower);
+  const userIsPkf = isPkfUser();
   let pkfAllowed = false, pkfDenyReason = '';
   if (userIsPkf && !userIsAdmin) {
     const allowed = await loadPkfAllowedAccIds();
@@ -5604,6 +5656,12 @@ async function openVoucherSP(spId, fromTab){
   }
   // PKF 담당자가 범위 밖 전표를 연 경우, 섹션이 왜 안 보이는지 알려준다(빈 화면이면 오해 소지가 크다)
   const pkfNoticeEl = document.getElementById('pkf-scope-notice');
+  // 설정 파일을 못 읽으면 권한 명단이 통째로 비어, 관리자·PKF 인 사람도 섹션이 조용히 사라진다.
+  // 화면상 아무 표시가 없어 원인을 알 방법이 없었으므로 이 경우를 먼저 알린다.
+  if (_cfgLoadFailed && !showAdminSections && !pkfDenyReason) {
+    pkfDenyReason = '설정 파일을 읽지 못해 권한을 확인할 수 없습니다.\n' +
+                    '새로고침 후에도 같으면 STK IT에 문의해 주세요.';
+  }
   if (pkfNoticeEl) {
     if (pkfDenyReason) {
       pkfNoticeEl.style.display = 'block';
@@ -5890,8 +5948,7 @@ function updatePostingBadge() {
 // PKF 담당자가 화면을 우회해 함수를 직접 호출하는 경우까지 한 번 더 막는다.
 // (근본 차단은 아니지만, 실수로 범위 밖 전표를 수정하는 일은 확실히 방지된다)
 async function pkfBlockedFor(spId) {
-  const me = (user?.email || user?.username || '').toLowerCase();
-  if (!PKF_EMAILS.includes(me)) return false;                       // PKF가 아니면 이 검사 대상 아님
+  if (!isPkfUser()) return false;                                  // PKF가 아니면 이 검사 대상 아님
   if (ADMIN_EMAILS.map(e=>e.toLowerCase()).includes(me)) return false;
   const allowed = await loadPkfAllowedAccIds();
   if (allowed === null) return '담당 티켓 정보를 확인하지 못했습니다.\nSTK IT에 문의해 주세요.';
