@@ -5622,7 +5622,12 @@ async function openVoucherSP(spId, fromTab){
   // PKF 담당자는 SSC 처리 업무상 B1 Doc No./Posting 입력과 결재 의견 확인이 필요하다.
   // 단, 아무 전표나 다룰 수 있으면 안 되므로 "본인 담당 SSC 티켓에 연결된 전표"로 범위를 제한한다.
   // 관리자 탭을 거치지 않고 SSC 링크(?openId=)로 들어오는 경로가 주 사용 방식이라 fromTab 조건은 걸지 않는다.
-  const userIsPkf = isPkfUser();
+  // 설정 파일(system_config_final.xlsx)은 STK-DB 문서 라이브러리에 있어 외부 게스트가 읽지 못하는 경우가 있다.
+  // 그때 PKF_EMAILS 가 비어 명단 대조 자체가 불가능해지므로, SSC 티켓의 PKFAssignees 로 직접 판정한다.
+  // PKFAssignees 는 SSC 관리자가 지정한 값이라 명단보다 정확한 근거이고,
+  // 게스트에게 전사 담당자 명부(설정 파일)를 열어주지 않아도 된다.
+  const cfgUnavailable = _cfgLoadFailed || !PKF_EMAILS.length;
+  const userIsPkf = isPkfUser() || cfgUnavailable;
   let pkfAllowed = false, pkfDenyReason = '';
   if (userIsPkf && !userIsAdmin) {
     const allowed = await loadPkfAllowedAccIds();
@@ -5630,9 +5635,10 @@ async function openVoucherSP(spId, fromTab){
       pkfDenyReason = '담당 티켓 정보를 확인하지 못했습니다. STK IT에 문의해 주세요.';
     } else if (allowed.has(String(v._spId))) {
       pkfAllowed = true;
-    } else {
+    } else if (!cfgUnavailable) {
       pkfDenyReason = '담당하시는 SSC 티켓에 연결된 전표가 아닙니다.\n연결이 필요하면 SSC 티켓에 이 전표를 첨부해 주세요.';
     }
+    // 설정 파일도 못 읽고 담당 티켓도 아니면 아래 설정 파일 안내가 대신 표시된다.
   }
   const showAdminSections = (userIsAdmin && fromTab==='admin') || pkfAllowed;
   if(commentSection && showAdminSections) {
