@@ -222,6 +222,36 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 .modal-close{position:absolute;top:12px;right:16px;background:none;border:none;font-size:1.2rem;cursor:pointer;color:#605e5c}
 .modal-title{font-size:1rem;font-weight:700;color:#323130;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid #edebe9}
 .det-sec{font-size:.72rem;font-weight:700;color:#0078d4;background:#f0f6ff;padding:5px 10px;border-radius:4px;border-left:3px solid #0078d4;margin:14px 0 8px}
+/* 회계 정보 표는 열이 9개라 상세 모달 폭에서는 가로 스크롤 없이 다 보이지 않는다.
+   화면 전체를 쓰는 확대 보기를 따로 띄워 한눈에 볼 수 있게 한다. */
+.det-sec.with-action{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.expand-btn{display:inline-flex;align-items:center;gap:5px;background:#fff;color:#0078d4;
+  border:1px solid #b7d5f0;border-radius:14px;padding:3px 11px;font-size:.68rem;font-weight:700;
+  cursor:pointer;font-family:inherit;white-space:nowrap;line-height:1.6}
+.expand-btn:hover{background:#0078d4;color:#fff;border-color:#0078d4}
+.expand-btn .eb-ico{font-size:.8rem;line-height:1}
+
+#lines-expand{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1200;
+  align-items:center;justify-content:center;padding:24px}
+#lines-expand.open{display:flex}
+#lines-expand .lx-box{background:#fff;border-radius:10px;width:100%;max-width:1600px;max-height:92vh;
+  display:flex;flex-direction:column;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.28)}
+#lines-expand .lx-head{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:14px 20px;border-bottom:1px solid #edebe9;flex-shrink:0}
+#lines-expand .lx-title{font-size:.95rem;font-weight:700;color:#323130}
+#lines-expand .lx-sub{font-size:.74rem;color:#605e5c;margin-top:2px}
+#lines-expand .lx-close{background:none;border:1px solid #d2d0ce;border-radius:6px;width:30px;height:30px;
+  font-size:1rem;color:#605e5c;cursor:pointer;line-height:1;flex-shrink:0}
+#lines-expand .lx-close:hover{background:#f3f2f1}
+#lines-expand .lx-body{overflow:auto;padding:16px 20px;flex:1}
+#lines-expand table{width:100%;border-collapse:collapse;font-size:.82rem}
+#lines-expand thead th{position:sticky;top:0;background:#f3f2f1;padding:9px 10px;text-align:left;
+  color:#605e5c;font-weight:700;font-size:.74rem;white-space:nowrap;z-index:1}
+#lines-expand tbody td{padding:8px 10px;border-bottom:1px solid #f3f2f1;vertical-align:top}
+#lines-expand .lx-foot{padding:12px 20px;border-top:1px solid #edebe9;background:#faf9f8;flex-shrink:0}
+@media print{ #lines-expand.open{position:static;background:none;padding:0}
+  #lines-expand .lx-box{max-width:none;max-height:none;box-shadow:none}
+  #lines-expand .lx-close{display:none} }
 .det-row{display:flex;padding:5px 0;border-bottom:1px solid #f3f2f1;font-size:.8rem}
 .det-row:last-child{border-bottom:none}
 .det-lbl{color:#605e5c;width:160px;flex-shrink:0}
@@ -3137,6 +3167,45 @@ function removeExtraBP(i) {
   evaluateBpCategoryWarning();
 }
 
+// ── 회계 정보 확대 보기 ────────────────────────────────────────────────
+// 상세 모달은 폭이 좁아 9개 열을 다 보려면 가로로 끌어야 한다.
+// 이미 그려진 표를 그대로 복제해 화면 전체 폭으로 다시 보여준다.
+// (데이터를 다시 만들지 않으므로 상세 화면과 값이 어긋날 일이 없다)
+function openLinesExpand() {
+  const sec = document.getElementById('acc-lines-section');
+  if (!sec) return;
+  const table = sec.querySelector('table');
+  if (!table) { showAccAlert('표시할 내용이 없습니다', '회계 정보 라인이 없습니다.', 'ℹ️'); return; }
+
+  const body = document.getElementById('lx-body');
+  const foot = document.getElementById('lx-foot');
+  const vid  = document.getElementById('lx-voucher-id');
+
+  const clone = table.cloneNode(true);
+  clone.style.minWidth = '';          // 원본의 min-width:800px 은 확대 보기에서 불필요
+  clone.style.fontSize = '';
+  body.innerHTML = '';
+  body.appendChild(clone);
+
+  // 합계 줄(표 바로 다음 형제)도 함께 보여준다
+  const totals = table.parentElement && table.parentElement.nextElementSibling;
+  foot.innerHTML = totals ? totals.outerHTML : '';
+
+  const idEl = document.getElementById('detail-voucher-id') || document.querySelector('#voucher-detail-modal .det-vid');
+  const title = (window._currentVoucherDetail && (window._currentVoucherDetail.Title || window._currentVoucherDetail._title)) || '';
+  vid.textContent = title || (idEl ? idEl.textContent.trim() : '');
+
+  document.getElementById('lines-expand').classList.add('open');
+  document.addEventListener('keydown', _lxEsc);
+}
+function closeLinesExpand() {
+  document.getElementById('lines-expand').classList.remove('open');
+  document.removeEventListener('keydown', _lxEsc);
+  const b = document.getElementById('lx-body'); if (b) b.innerHTML = '';
+  const f = document.getElementById('lx-foot'); if (f) f.innerHTML = '';
+}
+function _lxEsc(e) { if (e.key === 'Escape') closeLinesExpand(); }
+
 // ── 회계 정보 라인 복사/붙여넣기 (No.15 편의기능) ──
 function copyLine(i) {
   const l = lines[i]; if(!l) return;
@@ -5513,7 +5582,12 @@ async function openVoucherSP(spId, fromTab){
     <div id="voucher-att-list" style="padding:4px 0;font-size:.78rem">${attHtml}</div>
 
     <div id="acc-lines-section">
-    <div class="det-sec">회계 정보 (Account Information)</div>
+    <div class="det-sec with-action">
+      <span>회계 정보 (Account Information)</span>
+      <button class="expand-btn" onclick="openLinesExpand()" title="회계 정보를 화면 전체로 크게 봅니다.">
+        <span class="eb-ico">⤢</span>Expand
+      </button>
+    </div>
     <div style="overflow-x:auto;margin-top:4px">
       <table style="width:100%;border-collapse:collapse;font-size:.74rem;min-width:800px">
         <thead>
@@ -7393,6 +7467,21 @@ function ptApply(){
   </div>
 </div>
 
+
+<!-- 회계 정보 확대 보기 — 상세 모달의 표를 화면 전체 폭으로 다시 그린다 -->
+<div id="lines-expand" onclick="if(event.target===this)closeLinesExpand()">
+  <div class="lx-box">
+    <div class="lx-head">
+      <div>
+        <div class="lx-title">회계 정보 (Account Information)</div>
+        <div class="lx-sub" id="lx-voucher-id"></div>
+      </div>
+      <button class="lx-close" onclick="closeLinesExpand()" title="닫기 (Esc)">×</button>
+    </div>
+    <div class="lx-body" id="lx-body"></div>
+    <div class="lx-foot" id="lx-foot"></div>
+  </div>
+</div>
 </body>
 <!-- redeploy2 -->
 <!-- redeploy2 -->
