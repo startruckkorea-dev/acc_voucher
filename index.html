@@ -4588,10 +4588,14 @@ async function confirmApprAction() {
 async function processApproval(apprId, action, reqId, comment='', aprCode='') {
   // 목록에서 바로 승인/반려할 때는 aprCode(결재 대기열 로드 시 태깅된 세대 코드)를 우선 사용.
   // 상세화면을 거쳐 열었을 때만 유효한 window._currentVoucherDetail 대신, 이 항목 고유의 세대 정보로 정확히 라우팅.
-  await useVolumeOf(aprCode ? { _aprCode: aprCode, _spId: reqId } : window._currentVoucherDetail);
+  // 전역 LIST_APPROVALS 대신 반환값을 직접 쓴다.
+  // await 사이에 60초 배지 폴링이 끼어들어 applyCurrentVolume() 으로 전역을 되돌리면,
+  // 이어지는 요청이 엉뚱한 세대로 나간다. 손에 쥔 값은 폴링이 바꿀 수 없다.
+  const _v = await useVolumeOf(aprCode ? { _aprCode: aprCode, _spId: reqId } : window._currentVoucherDetail);
+  const _APR = (_v && _v.id) || LIST_APPROVALS;
   try {
     const t = await token();
-    const curRes = await fetch(`${GRAPH}/sites/${siteId}/lists/${LIST_APPROVALS}/items/${apprId}?$expand=fields`,
+    const curRes = await fetch(`${GRAPH}/sites/${siteId}/lists/${_APR}/items/${apprId}?$expand=fields`,
       {headers:{Authorization:'Bearer '+t}});
     const cur = await curRes.json();
     if(cur.fields.Status !== '대기') {
@@ -4611,7 +4615,7 @@ async function processApproval(apprId, action, reqId, comment='', aprCode='') {
         return;
       }
     } catch(e) { console.warn('[결재] 전표 상태 확인 실패, 진행:', e && e.message); }
-    await api(`/sites/${siteId}/lists/${LIST_APPROVALS}/items/${apprId}/fields`, 'PATCH', {
+    await api(`/sites/${siteId}/lists/${_APR}/items/${apprId}/fields`, 'PATCH', {
       Status: action==='승인' ? '승인' : '반려',
       Comment: comment,
       ApprovalDate: new Date().toISOString()
@@ -4623,7 +4627,7 @@ async function processApproval(apprId, action, reqId, comment='', aprCode='') {
       // 예전에는 Approvals 전량(수백 건)을 받아 클라이언트에서 걸렀는데,
       // 전송량이 크고 페이지네이션까지 겹쳐 실패 확률이 높았다.
       // RequestID에 인덱스를 걸어 두었으므로 서버 필터로 해당 전표 행만 조회한다.
-      const mine = await apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_APPROVALS}/items?$expand=fields&$filter=fields/RequestID eq ${parseInt(reqId)}&$top=50`);
+      const mine = await apiAll(`${GRAPH}/sites/${siteId}/lists/${_APR}/items?$expand=fields&$filter=fields/RequestID eq ${parseInt(reqId)}&$top=50`);
       const rows = mine.value || [];
       // 조회 결과가 비어 있으면 데이터가 없는 게 아니라 조회가 잘못된 것이다.
       // 방금 이 전표의 행 하나를 '승인'으로 바꿨으므로 최소 1건은 반드시 나와야 한다.
@@ -4640,7 +4644,7 @@ async function processApproval(apprId, action, reqId, comment='', aprCode='') {
         .filter(i=>(i.fields.Status||'').trim()==='대기(잠김)')
         .sort((a,b)=>a.fields.ApprovalOrder-b.fields.ApprovalOrder);
       if(next.length) {
-        await api(`/sites/${siteId}/lists/${LIST_APPROVALS}/items/${next[0].id}/fields`, 'PATCH', {Status:'대기'});
+        await api(`/sites/${siteId}/lists/${_APR}/items/${next[0].id}/fields`, 'PATCH', {Status:'대기'});
       } else {
         await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${reqId}/fields`, 'PATCH', {Status:'승인완료'});
       }
@@ -5078,16 +5082,20 @@ async function saveAccApproverChange(){
   btn.disabled = true; btn.textContent = 'Saving...';
   const { spId, aprId, curName, curEmail } = _accChgCtx;
   try {
-    await useVolumeOf(window._currentVoucherDetail || { _spId: spId });
+    // 전역 LIST_APPROVALS 대신 반환값을 직접 쓴다.
+    // await 사이에 60초 배지 폴링이 끼어들어 applyCurrentVolume() 으로 전역을 되돌리면,
+    // 이어지는 요청이 엉뚱한 세대로 나간다. 손에 쥔 값은 폴링이 바꿀 수 없다.
+    const _v = await useVolumeOf(window._currentVoucherDetail || { _spId: spId });
+    const _APR2 = (_v && _v.id) || LIST_APPROVALS;
 
     // ① 결재선 행 상태를 다시 확인한다. 그 사이 결재가 처리됐을 수 있다.
-    const cur = await api(`/sites/${siteId}/lists/${LIST_APPROVALS}/items/${aprId}/fields`);
+    const cur = await api(`/sites/${siteId}/lists/${_APR2}/items/${aprId}/fields`);
     if(!['대기','대기(잠김)','Pending'].includes((cur.Status||'').trim())){
       throw new Error('이미 처리된 결재입니다. (현재 상태: ' + (cur.Status||'-') + ')\n담당자를 바꿀 수 없습니다.');
     }
 
     // ② 결재선 갱신
-    await api(`/sites/${siteId}/lists/${LIST_APPROVALS}/items/${aprId}/fields`, 'PATCH', {
+    await api(`/sites/${siteId}/lists/${_APR2}/items/${aprId}/fields`, 'PATCH', {
       ApproverName: name, ApproverEmail: email
     });
 
@@ -5287,11 +5295,15 @@ function confirmWithdraw(spId) {
   withdrawRequest(spId);
 }
 async function withdrawRequest(spId) {
-  await useVolumeOf(window._currentVoucherDetail); // 이 전표의 결재이력이 있는 Approvals 세대로 전환
+  // 전역 LIST_APPROVALS 대신 반환값을 직접 쓴다.
+  // await 사이에 60초 배지 폴링이 끼어들어 applyCurrentVolume() 으로 전역을 되돌리면,
+  // 이어지는 요청이 엉뚱한 세대로 나간다. 손에 쥔 값은 폴링이 바꿀 수 없다.
+  const _v = await useVolumeOf(window._currentVoucherDetail); // 이 전표의 결재이력이 있는 Approvals 세대로 전환
+  const _APR3 = (_v && _v.id) || LIST_APPROVALS;
   try {
     if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
     // 1차 결재자가 아직 미처리(대기)인 경우에만 철회 가능
-    const apprData = await apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_APPROVALS}/items?$expand=fields&$filter=fields/RequestID eq ${parseInt(spId)}&$top=50`);
+    const apprData = await apiAll(`${GRAPH}/sites/${siteId}/lists/${_APR3}/items?$expand=fields&$filter=fields/RequestID eq ${parseInt(spId)}&$top=50`);
     const items = apprData.value.sort((a,b)=>(a.fields.ApprovalOrder||0)-(b.fields.ApprovalOrder||0));
     const first = items[0];
     const firstSt = (first?.fields?.Status || '').trim();
@@ -5333,7 +5345,7 @@ async function withdrawRequest(spId) {
     let _patched = 0;
     for(const it of items) {
       if((it.fields?.Status||'').trim() === '철회(잠김)') continue;
-      await api(`/sites/${siteId}/lists/${LIST_APPROVALS}/items/${it.id}/fields`, 'PATCH', {Status:'철회(잠김)'});
+      await api(`/sites/${siteId}/lists/${_APR3}/items/${it.id}/fields`, 'PATCH', {Status:'철회(잠김)'});
       _patched++;
     }
     // Step 2. Requests → '철회'
@@ -5747,10 +5759,14 @@ function bindFileDownloadLinks(){
 
 // 특정 전표의 결재이력을 직접 조회 (캐시에 의존하지 않음 - PDF 생성처럼 정확성이 중요한 곳에서 재사용)
 async function fetchApprovalListDirect(v){
-  await useVolumeOf(v); // 이 전표의 결재이력이 있는 Approvals 세대로 전환
+  // 전역 LIST_APPROVALS 대신 반환값을 직접 쓴다.
+  // await 사이에 60초 배지 폴링이 끼어들어 applyCurrentVolume() 으로 전역을 되돌리면,
+  // 이어지는 요청이 엉뚱한 세대로 나간다. 손에 쥔 값은 폴링이 바꿀 수 없다.
+  const _v = await useVolumeOf(v); // 이 전표의 결재이력이 있는 Approvals 세대로 전환
+  const _APR4 = (_v && _v.id) || LIST_APPROVALS;
   if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
   const t = await token();
-  const url = `${GRAPH}/sites/${siteId}/lists/${LIST_APPROVALS}/items?$expand=fields&$filter=fields/RequestID eq ${parseInt(v._spId)}&$top=50`;
+  const url = `${GRAPH}/sites/${siteId}/lists/${_APR4}/items?$expand=fields&$filter=fields/RequestID eq ${parseInt(v._spId)}&$top=50`;
   const res = await fetch(url, {headers:{Authorization:'Bearer '+t, Prefer:'HonorNonIndexedQueriesWarningMayFailRandomly'}});
   if(!res.ok) throw new Error('결재 이력 조회 실패');
   const data = await res.json();
