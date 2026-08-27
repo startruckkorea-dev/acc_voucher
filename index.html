@@ -6207,8 +6207,19 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
       '<td style="'+cellThin+bottomThick+';text-align:right">'+(l.drcr==='CR'?(l.currency==='KRW'?fmtK(l.amount):fmt2(l.amount)):'')+'</td>'+
     '</tr>';
   }).join('');
-  const drSum=(lines_data||[]).filter(l=>l.drcr==='DR').reduce((s,l)=>s+(parseFloat(l.amount)||0),0);
-  const crSum=(lines_data||[]).filter(l=>l.drcr==='CR').reduce((s,l)=>s+(parseFloat(l.amount)||0),0);
+  // 외화 Total 은 통화별로 따로 낸다.
+  // 예전에는 통화 구분 없이 전 라인을 합산해, EUR 과 KRW 를 함께 쓴 전표에서
+  // 'EUR Total' 칸에 KRW 금액까지 더해진 값이 찍혔다. (2026-08-26 회계팀 지적)
+  // 상세 모달(5431행) · 상세화면 PDF(6562행) 는 이미 통화별로 계산하고 있어 같은 방식으로 맞춘다.
+  const _fxSums = {};
+  (lines_data||[]).forEach(l=>{
+    const cur = l.currency || 'KRW';
+    if (cur === 'KRW') return;                       // KRW 는 아래 KRW Total 행에서 환산 합계로 따로 표시
+    if (!_fxSums[cur]) _fxSums[cur] = { dr:0, cr:0 };
+    const amt = parseFloat(l.amount) || 0;
+    if (l.drcr === 'DR') _fxSums[cur].dr += amt;
+    else if (l.drcr === 'CR') _fxSums[cur].cr += amt;
+  });
 
   // 결재 단계가 많아지면 한 열의 폭이 줄어 도장이 셀 밖으로 밀린다.
   // 760px 표에서 9열이면 열당 약 70px인데 도장은 이름·일시 때문에 최소 86px이 필요하다.
@@ -6330,13 +6341,15 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
       '</tr></thead>'+
       '<tbody>'+(lineRows||('<tr><td colspan="8" style="'+cellB+';text-align:center;color:#888">라인 없음</td></tr>'))+'</tbody>'+
       '<tfoot>'+
-        (lineCurrencies.length ? (
-          '<tr style="font-weight:700;background:#f9f9f9">'+
-            '<td colspan="6" style="'+cellB+';text-align:right">'+esc(lineCurrencies.join('/'))+' Total</td>'+
-            '<td style="'+cellB+';text-align:right">'+fmt2(drSum)+'</td>'+
-            '<td style="'+cellB+';text-align:right">'+fmt2(crSum)+'</td>'+
-          '</tr>'
-        ) : '')+
+        // 통화가 여러 개면 통화마다 한 행씩 낸다 (EUR Total / USD Total …)
+        lineCurrencies.map(function(cur){
+          var s = _fxSums[cur] || {dr:0, cr:0};
+          return '<tr style="font-weight:700;background:#f9f9f9">'+
+            '<td colspan="6" style="'+cellB+';text-align:right">'+esc(cur)+' Total</td>'+
+            '<td style="'+cellB+';text-align:right">'+fmt2(s.dr)+'</td>'+
+            '<td style="'+cellB+';text-align:right">'+fmt2(s.cr)+'</td>'+
+          '</tr>';
+        }).join('')+
         '<tr style="font-weight:700;background:#f9f9f9">'+
           '<td colspan="6" style="'+cellB+';text-align:right">KRW Total</td>'+
           '<td style="'+cellB+';text-align:right">'+fmtK(v.TotalDR_KRW)+'</td>'+
@@ -6344,7 +6357,7 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
         '</tr>'+
       '</tfoot>'+
     '</table>'+
-    '<div style="font-size:8.5px;color:#666;margin-top:2px">* DEBIT/CREDIT 합계는 각 라인 원 통화 기준 단순 합산입니다. KRW 환산 합계는 상단 KRW TOTAL을 참고하세요.</div>'+
+    '<div style="font-size:8.5px;color:#666;margin-top:2px">* 외화 Total 은 같은 통화 라인끼리만 합산합니다. 전체 KRW 환산 합계는 아래 KRW Total 행을 참고하세요.</div>'+
 
     '<div style="font-weight:700;margin-top:12px;padding:4px 2px;border-bottom:2px solid #000">Authorization</div>'+
     '<table style="width:100%;border-collapse:collapse;border:1px solid #000;font-size:10px;text-align:center;table-layout:fixed">'+
