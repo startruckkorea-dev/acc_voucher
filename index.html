@@ -5038,13 +5038,22 @@ async function loadAdminList() {
   try {
     // 전표와 결재선을 동시에 읽는다. 순서대로 기다리면 그만큼 두 배로 걸린다.
     // 결재선은 한 번만 읽어 「진행 상태」와 「멈춘 전표」 판정에 함께 쓴다.
+    //
+    // 목록 화면에 필요한 필드만 받는다. 전표에는 회계 라인(LinesJSON)처럼
+    // 목록에서 쓰지 않는 큰 값이 들어 있어, 그대로 받으면 응답이 몇 배로 커진다.
+    // 상세보기와 Excel 은 각자 다시 조회하므로 여기서 다 받을 필요가 없다.
+    const REQ_FIELDS = 'Title,VoucherType,Status,RequesterEmail,BPName,PurposeTitle,'
+                     + 'Purpose,TotalDR_KRW,TotalCR_KRW,SubmittedDate,B1DocNo';
+    const APR_FIELDS = 'RequestID,ApprovalOrder,ApproverRole,ApproverName,ApproverEmail,Status';
     const [data, _aprAll] = await Promise.all([
-      apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_REQUESTS}/items?$expand=fields&$top=999`),
+      apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_REQUESTS}/items`
+             + `?expand=fields(select=${REQ_FIELDS})&$top=999`),
       (async () => {
         const out = [];
         try {
           await _forEachAprVolume(async (vol) => {
-            const d = await apiAll(`${GRAPH}/sites/${siteId}/lists/${vol.id}/items?$expand=fields&$top=999`);
+            const d = await apiAll(`${GRAPH}/sites/${siteId}/lists/${vol.id}/items`
+                                   + `?expand=fields(select=${APR_FIELDS})&$top=999`);
             out.push(...d.value);
             return [];
           });
