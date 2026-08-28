@@ -4908,10 +4908,31 @@ function accRelatedRank(v) {
 }
 
 // _accQuickView 에는 「어느 담당자 기준으로 볼지」의 이메일이 들어간다. 빈 값이면 전체.
-function accSetQuickView(email) {
+async function accSetQuickView(email) {
   _accQuickView = (_accQuickView === email) ? '' : email;
-  applyAdminFilters();
-  accRenderQuickBar();
+  // 누를 때마다 서버에서 다시 읽는다.
+  // 캐시만 다시 거르면 다른 사람이 방금 결재한 건이 반영되지 않아,
+  // 담당자가 최신 상태인 줄 알고 지나칠 수 있다.
+  await accReloadAdmin();
+}
+
+// 목록을 다시 읽고 화면을 갱신한다. 진행 중에는 칩을 잠가 연타를 막는다.
+let _accReloading = false;
+async function accReloadAdmin() {
+  if (_accReloading) return;
+  _accReloading = true;
+  const bar = document.getElementById('acc-quick-bar');
+  if (bar) { bar.style.opacity = '.55'; bar.style.pointerEvents = 'none'; }
+  try {
+    await loadAdminList();       // 안에서 applyAdminFilters·accRenderQuickBar 까지 수행
+  } catch(e) {
+    console.warn('[관리자] 새로고침 실패:', e && e.message);
+    applyAdminFilters();         // 실패해도 화면은 현재 데이터로 맞춰 둔다
+  } finally {
+    _accReloading = false;
+    const b2 = document.getElementById('acc-quick-bar');
+    if (b2) { b2.style.opacity = ''; b2.style.pointerEvents = ''; }
+  }
 }
 
 function accRenderQuickBar() {
