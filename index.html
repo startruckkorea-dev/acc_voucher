@@ -821,6 +821,9 @@ if (new URLSearchParams(location.search).get('openId')) {
     <button id="btn-vol-manage" onclick="openVolumeModal()" title="Approvals 리스트 세대를 추가하거나 전환합니다"
       style="padding:3px 10px;background:#fff;color:#605e5c;border:1px solid #d2d0ce;border-radius:4px;font-size:.72rem;cursor:pointer;white-space:nowrap;font-family:inherit">세대 관리</button>
   </div>
+  <!-- ACC 담당자 빠른 보기 — 설정 파일에 등록된 담당자와 IT 에게만 보인다 -->
+  <div id="acc-quick-bar" style="display:none;align-items:center;flex-wrap:wrap;gap:7px;margin-bottom:12px;padding:9px 13px;background:#fcfdfe;border:1px solid #eef2f6;border-radius:10px"></div>
+
   <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
     <select id="admin-status" onchange="applyAdminFilters()" style="border:1px solid #d2d0ce;border-radius:4px;padding:6px 10px;font-size:.72rem;font-family:inherit">
       <option value="">전체 상태</option>
@@ -4841,6 +4844,125 @@ async function switchAprVolume(code) {
 }
 
 let adminListRaw = [];
+// ── ACC 담당자 전용 빠른 보기 ──────────────────────────────────────────
+// AP·AR·GL·Accounting Head·CFO 담당자는 「내가 결재할 차례인 건」과
+// 「내가 올린 건」을 따로 보려고 관리자 탭을 계속 새로고침하고,
+// 몇 차에서 멈췄는지 보려고 전표를 하나씩 열어야 했다.
+// 설정 파일에 등록된 담당자에게만 요약 바를 띄우고, 한 번 눌러 걸러 보게 한다.
+const ACC_ROLE_KEYS = [
+  ['ACC-Voucher_AP',         'AP 담당',         'AP',  '#0f766e'],
+  ['ACC-Voucher_AR',         'AR 담당',         'AR',  '#7c3aed'],
+  ['ACC-Voucher_GL',         'GL 담당',         'GL',  '#b45309'],
+  ['ACC-Voucher_ACCOUNTING', 'Accounting Head', 'ACC', '#0078d4'],
+  ['ACC-Voucher_CFO',        'CFO',             'CFO', '#a4262c'],
+];
+
+let _accMyRoles = [];      // 이 사용자가 맡은 역할 이름
+let _accQuickView = '';    // 지금 보고 있는 담당자 이메일 (빈 값이면 전체)
+
+// IT 담당자로 보고 있는가 (역할을 맡지 않았지만 ACC-Voucher_IT 에 등록된 경우)
+function _isItViewer() {
+  return _accMyRoles.length === 1 && _accMyRoles[0] === 'IT';
+}
+
+// 특정 역할의 담당자 이메일
+function accRoleEmail(key) {
+  return ((cfgVal(_sysConfig, key) || {}).email || '').trim().toLowerCase();
+}
+
+function accDetectMyRoles() {
+  const me = (user?.email || user?.username || '').trim().toLowerCase();
+  if (!me || !_sysConfig) return [];
+  const roles = ACC_ROLE_KEYS
+    .filter(([k]) => ((cfgVal(_sysConfig, k) || {}).email || '').trim().toLowerCase() === me)
+    .map(([, label]) => label);
+  // IT 담당자(ACC-Voucher_IT)는 역할을 맡고 있지 않아도 화면을 볼 수 있어야 한다.
+  // 문의가 들어왔을 때 담당자와 같은 화면으로 확인해야 상황을 파악할 수 있다.
+  if (!roles.length && IT_EMAILS.map(e=>e.toLowerCase()).includes(me)) return ['IT'];
+  return roles;
+}
+
+// 지금 고른 담당자가 결재할 차례인 건
+function accIsMyTurn(v) {
+  return !!_accQuickView && (v._curEmail || '') === _accQuickView;
+}
+
+// 특정 이메일과 관련된 전표인지 — 그 사람이 올렸거나 결재선에 있는 것.
+function accRelatedTo(v, email) {
+  if (!email) return false;
+  if ((v.RequesterEmail || '').trim().toLowerCase() === email) return true;
+  return (v._line || []).some(a => (a.email || '') === email);
+}
+// 지금 고른 보기에 해당하는 전표인지
+function accIsRelated(v) {
+  if (!_accQuickView) return true;
+  return accRelatedTo(v, _accQuickView);
+}
+
+// 정렬 우선순위 — 내가 처리할 차례가 맨 위, 그다음 진행 중, 끝난 건은 아래로.
+function accRelatedRank(v) {
+  if (accIsMyTurn(v)) return 0;
+  const st = (v.Status || '').trim();
+  if (st === '대기') return 1;
+  return 2;   // 승인완료 · 반려 · 철회
+}
+
+// _accQuickView 에는 「어느 담당자 기준으로 볼지」의 이메일이 들어간다. 빈 값이면 전체.
+function accSetQuickView(email) {
+  _accQuickView = (_accQuickView === email) ? '' : email;
+  applyAdminFilters();
+  accRenderQuickBar();
+}
+
+function accRenderQuickBar() {
+  const bar = document.getElementById('acc-quick-bar');
+  if (!bar) return;
+  if (!_accMyRoles.length) { bar.style.display = 'none'; return; }
+
+  const me   = (user?.email || user?.username || '').trim().toLowerCase();
+  const isIt = _isItViewer();
+  const rows = adminListRaw || [];
+
+  // 보여 줄 역할 — 본인이 맡은 역할만. IT 는 전부.
+  const shown = ACC_ROLE_KEYS.filter(([k, label]) =>
+    isIt || (accRoleEmail(k) === me && accRoleEmail(k)));
+
+  if (!shown.length) { bar.style.display = 'none'; return; }
+
+  const chip = (key, full, short, color) => {
+    const email = accRoleEmail(key);
+    if (!email) return '';
+    const on   = _accQuickView === email;
+    const rel  = rows.filter(v => accRelatedTo(v, email));
+    const todo = rel.filter(v => (v._curEmail || '') === email).length;
+    const who  = ((cfgVal(_sysConfig, key) || {}).name || '').trim();
+    return '<button onclick="accSetQuickView(\'' + email + '\')" '
+      + 'title="' + escHtmlAttr(full + (who ? ' · ' + who : '') + ' — 올린 것과 결재선에 포함된 것을 모두 봅니다.') + '" '
+      + 'style="display:inline-flex;align-items:center;gap:6px;padding:6px 13px;border-radius:20px;cursor:pointer;'
+      + 'font-family:inherit;font-size:.75rem;font-weight:700;white-space:nowrap;transition:all .12s;'
+      + (on ? 'background:' + color + ';color:#fff;border:1px solid ' + color + ';box-shadow:0 1px 5px ' + color + '55'
+            : 'background:#fff;color:' + color + ';border:1px solid ' + color + '44')
+      + '">'
+      + '<span style="font-weight:800;letter-spacing:.3px">' + short + '</span>'
+      + '<span style="font-size:.8rem;font-weight:800;opacity:' + (on ? '1' : '.85') + '">' + rel.length + '</span>'
+      + (todo ? '<span style="font-size:.63rem;font-weight:800;padding:1px 6px;border-radius:8px;'
+                + (on ? 'background:rgba(255,255,255,.26);color:#fff' : 'background:#fff4e5;color:#b45309')
+                + '">' + todo + '</span>' : '')
+      + '</button>';
+  };
+
+  bar.style.display = 'flex';
+  bar.innerHTML =
+      '<span style="font-size:.71rem;color:#94a3b8;font-weight:600;white-space:nowrap">'
+    + (isIt ? 'ACC Team' : '내 담당') + '</span>'
+    + '<span style="width:1px;height:16px;background:#e2e8f0"></span>'
+    + shown.map(([k, full, short, color]) => chip(k, full, short, color)).join('')
+    + (_accQuickView
+        ? '<button onclick="accSetQuickView(\'\')" style="background:none;border:none;color:#64748b;font-size:.73rem;cursor:pointer;font-family:inherit;text-decoration:underline;margin-left:2px">전체 보기</button>'
+        : '')
+    + '<span style="margin-left:auto;font-size:.66rem;color:#cbd5e1;white-space:nowrap">숫자 = 관련 건 · 주황 = 결재 대기</span>';
+}
+
 async function loadAdminList() {
   _adminPgState.page = 0;
   const body = document.getElementById('admin-body');
@@ -4853,6 +4975,35 @@ async function loadAdminList() {
     adminListRaw = data.value
       .map(item=>({_spId:item.id,...item.fields}))
       .sort((a,b)=>new Date(b.SubmittedDate||0)-new Date(a.SubmittedDate||0));
+    // 각 전표의 결재선을 함께 담는다. 담당자별 빠른 보기에서
+    // 「누가 결재선에 있는지」와 「지금 누구 차례인지」를 판단하는 데 쓴다.
+    try {
+      const _aprByReq = {};
+      await _forEachAprVolume(async (vol) => {
+        const d = await apiAll(`${GRAPH}/sites/${siteId}/lists/${vol.id}/items?$expand=fields&$top=999`);
+        d.value.forEach(i => {
+          const f2 = i.fields, rid = String(f2.RequestID);
+          (_aprByReq[rid] = _aprByReq[rid] || []).push({
+            order : f2.ApprovalOrder || 0,
+            role  : f2.ApproverRole || '',
+            name  : f2.ApproverName || '',
+            email : (f2.ApproverEmail || '').toLowerCase(),
+            status: ((f2.Status && f2.Status.Value) ? f2.Status.Value : f2.Status || '').trim(),
+          });
+        });
+        return [];
+      });
+      adminListRaw.forEach(v => {
+        const line = (_aprByReq[String(v._spId)] || []).sort((a,b)=>a.order-b.order);
+        v._line = line;
+        const cur = line.find(a => a.status === '대기');
+        v._curEmail = cur ? cur.email : '';
+      });
+    } catch(e) { console.warn('[관리자] 결재 진행 정보 조회 실패:', e && e.message); }
+
+    _accMyRoles = accDetectMyRoles();
+    accRenderQuickBar();
+
     // 진행이 멈춘 전표 식별 — 전표는 '대기'인데 '대기' 결재 행이 하나도 없는 건.
     // 철회가 중간에 끊기면 생기며, 겉으로는 정상 대기처럼 보여 방치되기 쉽다.
     // 표식은 IT 담당자(config: ACC-Voucher_IT)에게만 보이므로, 대상이 아니면 조회 자체를 생략한다.
@@ -4882,16 +5033,27 @@ async function loadAdminList() {
 }
 
 function applyAdminFilters() {
+  accRenderQuickBar();
   _adminPgState.page = 0;
   const fs = (document.getElementById('admin-status')||{value:''}).value;
   const ft = (document.getElementById('admin-type')||{value:''}).value;
   const fk = ((document.getElementById('admin-search')||{value:''}).value||'').toLowerCase();
   adminListCache = adminListRaw.filter(v=>{
+    // 담당자 빠른 보기 — 고른 담당자와 관련된 전표만
+    if(_accQuickView && !accIsRelated(v)) return false;
     if(fs && v.Status!==fs) return false;
     if(ft && v.VoucherType!==ft) return false;
     if(fk && !(v.RequesterEmail||'').toLowerCase().includes(fk) && !(v.Title||'').toLowerCase().includes(fk) && !(v.BPName||'').toLowerCase().includes(fk)) return false;
     return true;
   });
+  // 담당자 보기에서는 그 사람이 처리할 차례인 건을 맨 위로 올린다.
+  if (_accQuickView) {
+    adminListCache.sort((a, b) => {
+      const r = accRelatedRank(a) - accRelatedRank(b);
+      if (r) return r;
+      return new Date(b.SubmittedDate||0) - new Date(a.SubmittedDate||0);
+    });
+  }
   const countEl = document.getElementById('admin-count');
   if(countEl) countEl.textContent = '총 '+adminListCache.length+'건';
   renderAdminList();
