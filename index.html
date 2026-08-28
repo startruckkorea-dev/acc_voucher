@@ -4909,6 +4909,23 @@ function accRelatedRank(v) {
 
 // _accQuickView 에는 「어느 담당자 기준으로 볼지」의 이메일이 들어간다. 빈 값이면 전체.
 async function accSetQuickView(email) {
+  const me = (user?.email || user?.username || '').trim().toLowerCase();
+  // 칩은 다섯 역할 모두 보이지만, 열어 볼 수 있는 건 본인 것뿐이다.
+  // 이미 관리자 탭에 들어온 사람이라 「권한 없음」은 맞지 않다.
+  // 「이 보기는 담당자 본인 화면」이라는 점을 알려 주고, 전체 목록은 그대로 쓸 수 있음을 덧붙인다.
+  if (email && email !== me && !_isItViewer()) {
+    const info = ACC_ROLE_KEYS.find(([k]) => accRoleEmail(k) === email);
+    const who  = info ? (((cfgVal(_sysConfig, info[0]) || {}).name || '').trim() || email) : email;
+    const role = info ? info[1] : '';
+    showAccAlert(
+      'Personal view',
+      (role ? role + ' · ' : '') + who + '\n\n'
+      + 'This shortcut opens that person\'s own queue, so it is available to them only.\n\n'
+      + 'You can still review every voucher in the table below —\n'
+      + 'use the status, type, or keyword filters to narrow it down.',
+      '👤');
+    return;
+  }
   _accQuickView = (_accQuickView === email) ? '' : email;
   // 누를 때마다 서버에서 다시 읽는다.
   // 캐시만 다시 거르면 다른 사람이 방금 결재한 건이 반영되지 않아,
@@ -4941,47 +4958,57 @@ function accRenderQuickBar() {
   if (!_accMyRoles.length) { bar.style.display = 'none'; return; }
 
   const me   = (user?.email || user?.username || '').trim().toLowerCase();
-  const isIt = _isItViewer();
   const rows = adminListRaw || [];
 
-  // 보여 줄 역할 — 본인이 맡은 역할만. IT 는 전부.
-  const shown = ACC_ROLE_KEYS.filter(([k, label]) =>
-    isIt || (accRoleEmail(k) === me && accRoleEmail(k)));
-
-  if (!shown.length) { bar.style.display = 'none'; return; }
-
-  const chip = (key, full, short, color) => {
+  // 칩은 다섯 역할 모두 그린다. 담당자가 누구인지 서로 알 수 있어야 하기 때문.
+  // 다만 열어 볼 수 있는 건 본인 것뿐이고, IT 는 전부 열 수 있다.
+  const chip = ([key, full, short, color]) => {
     const email = accRoleEmail(key);
     if (!email) return '';
-    const on   = _accQuickView === email;
-    const rel  = rows.filter(v => accRelatedTo(v, email));
-    const todo = rel.filter(v => (v._curEmail || '') === email).length;
-    const who  = ((cfgVal(_sysConfig, key) || {}).name || '').trim();
-    return '<button onclick="accSetQuickView(\'' + email + '\')" '
-      + 'title="' + escHtmlAttr(full + (who ? ' · ' + who : '') + ' — 올린 것과 결재선에 포함된 것을 모두 봅니다.') + '" '
-      + 'style="display:inline-flex;align-items:center;gap:6px;padding:6px 13px;border-radius:20px;cursor:pointer;'
-      + 'font-family:inherit;font-size:.75rem;font-weight:700;white-space:nowrap;transition:all .12s;'
-      + (on ? 'background:' + color + ';color:#fff;border:1px solid ' + color + ';box-shadow:0 1px 5px ' + color + '55'
-            : 'background:#fff;color:' + color + ';border:1px solid ' + color + '44')
+    const who   = ((cfgVal(_sysConfig, key) || {}).name || '').trim() || email.split('@')[0];
+    const allow = _isItViewer() || email === me;
+    const on    = _accQuickView === email;
+    const rel   = rows.filter(v => accRelatedTo(v, email));
+    const todo  = rel.filter(v => (v._curEmail || '') === email).length;
+
+    return '<button onclick="accSetQuickView(\'' + email + '\')"'
+      + ' title="' + escHtmlAttr(full + ' · ' + who) + '"'
+      + ' style="display:inline-flex;align-items:center;gap:7px;padding:5px 6px 5px 5px;border-radius:18px;'
+      + 'cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .14s;'
+      + (on    ? 'background:' + color + ';border:1px solid ' + color + ';box-shadow:0 2px 6px ' + color + '40'
+       : allow ? 'background:#fff;border:1px solid #e2e8f0'
+               : 'background:#fff;border:1px solid #eef2f6;opacity:.62')
       + '">'
-      + '<span style="font-weight:800;letter-spacing:.3px">' + short + '</span>'
-      + '<span style="font-size:.8rem;font-weight:800;opacity:' + (on ? '1' : '.85') + '">' + rel.length + '</span>'
-      + (todo ? '<span style="font-size:.63rem;font-weight:800;padding:1px 6px;border-radius:8px;'
-                + (on ? 'background:rgba(255,255,255,.26);color:#fff' : 'background:#fff4e5;color:#b45309')
-                + '">' + todo + '</span>' : '')
+      // 역할 배지
+      + '<span style="display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:20px;'
+        + 'border-radius:11px;font-size:.62rem;font-weight:800;letter-spacing:.4px;'
+        + (on ? 'background:rgba(255,255,255,.24);color:#fff' : 'background:' + color + '14;color:' + color)
+        + '">' + short + '</span>'
+      // 담당자 이름
+      + '<span style="font-size:.74rem;font-weight:600;'
+        + (on ? 'color:#fff' : 'color:#334155') + '">' + escHtml(who) + '</span>'
+      // 건수
+      + '<span style="font-size:.72rem;font-weight:700;'
+        + (on ? 'color:rgba(255,255,255,.85)' : 'color:#94a3b8') + '">' + rel.length + '</span>'
+      // 결재 대기
+      + (todo
+          ? '<span style="display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;'
+            + 'border-radius:9px;font-size:.61rem;font-weight:800;'
+            + (on ? 'background:rgba(255,255,255,.9);color:' + color : 'background:#fff4e5;color:#b45309')
+            + '">' + todo + '</span>'
+          : '<span style="width:3px"></span>')
       + '</button>';
   };
 
   bar.style.display = 'flex';
   bar.innerHTML =
-      '<span style="font-size:.71rem;color:#94a3b8;font-weight:600;white-space:nowrap">'
-    + (isIt ? 'ACC Team' : '내 담당') + '</span>'
-    + '<span style="width:1px;height:16px;background:#e2e8f0"></span>'
-    + shown.map(([k, full, short, color]) => chip(k, full, short, color)).join('')
+      '<span style="font-size:.68rem;color:#b6c2cf;font-weight:700;letter-spacing:.6px;white-space:nowrap">ACC TEAM</span>'
+    + '<span style="width:1px;height:15px;background:#e8edf2"></span>'
+    + ACC_ROLE_KEYS.map(chip).join('')
     + (_accQuickView
-        ? '<button onclick="accSetQuickView(\'\')" style="background:none;border:none;color:#64748b;font-size:.73rem;cursor:pointer;font-family:inherit;text-decoration:underline;margin-left:2px">전체 보기</button>'
-        : '')
-    + '<span style="margin-left:auto;font-size:.66rem;color:#cbd5e1;white-space:nowrap">숫자 = 관련 건 · 주황 = 결재 대기</span>';
+        ? '<button onclick="accSetQuickView(\'\')" style="background:none;border:none;color:#94a3b8;'
+          + 'font-size:.71rem;cursor:pointer;font-family:inherit;padding:4px 8px">Show all</button>'
+        : '');
 }
 
 async function loadAdminList() {
