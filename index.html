@@ -5676,6 +5676,10 @@ async function openVoucherSP(spId, fromTab){
   let v = voucherListCache.find(x=>x._spId===spId)
     || adminListCache.find(x=>x._spId===spId)
     || (approvalQueueCache.find(x=>x._voucher?._spId===spId)?._voucher);
+  // 관리자 목록은 화면에 필요한 필드만 받는다(조회 속도 때문).
+  // 회계 라인·환율·첨부 링크가 빠져 있어 그대로 상세를 그리면 「라인 없음」이 된다.
+  // 라인이 없는 캐시는 없는 것으로 보고 아래에서 전표를 다시 읽는다.
+  if(v && v.LinesJSON === undefined) v = null;
   if(!v){
     // 캐시에 없으면(예: URL로 바로 진입) SharePoint에서 직접 조회
     try{
