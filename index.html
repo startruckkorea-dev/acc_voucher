@@ -412,6 +412,10 @@ table.pt-tbl tfoot td{background:#eef1f5;font-weight:700;border-top:2px solid #1
 .tab-btn:hover:not(.active) { background: #f3f2f1; }
 .badge{display:none;background:#a4262c;color:#fff;border-radius:10px;padding:1px 6px;font-size:.65rem;margin-left:5px;font-weight:700}
 
+@keyframes accSpin { to { transform: rotate(360deg); } }
+#admin-refresh-ico.spin { animation: accSpin .8s linear infinite; }
+#admin-refresh:hover { background:#f3f2f1; }
+#admin-refresh:disabled { opacity:.6; cursor:default; }
 .list-table{width:100%;border-collapse:collapse;font-size:.82rem;min-width:800px}
 .list-table tbody tr[onclick]{cursor:pointer}
 .list-table tbody tr[onclick]:hover{background:#f0f6ff}
@@ -846,6 +850,10 @@ if (new URLSearchParams(location.search).get('openId')) {
     <input type="text" id="admin-search" oninput="applyAdminFilters()" placeholder="신청자/Title/BP명" style="border:1px solid #d2d0ce;border-radius:4px;padding:6px 10px;font-size:.72rem;font-family:inherit;min-width:200px">
     <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
       <span style="font-size:.82rem;color:#605e5c;font-weight:500" id="admin-count"></span>
+      <button id="admin-refresh" onclick="accReloadAdmin()" title="목록을 다시 불러옵니다. 지금 고른 담당자·필터는 그대로 유지됩니다."
+        style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:#fff;color:#605e5c;border:1px solid #d2d0ce;border-radius:4px;font-size:.8rem;cursor:pointer;white-space:nowrap;font-family:inherit">
+        <span id="admin-refresh-ico" style="display:inline-block;font-size:.86rem;line-height:1">↻</span>새로고침
+      </button>
       <button onclick="exportAdminExcel()" style="padding:6px 14px;background:#107c10;color:#fff;border:none;border-radius:4px;font-size:.82rem;cursor:pointer;white-space:nowrap">📊 Excel 내보내기</button>
     </div>
   </div>
@@ -4938,8 +4946,13 @@ let _accReloading = false;
 async function accReloadAdmin() {
   if (_accReloading) return;
   _accReloading = true;
+  // 지금 고른 담당자와 필터는 그대로 둔 채 데이터만 새로 읽는다.
   const bar = document.getElementById('acc-quick-bar');
+  const btn = document.getElementById('admin-refresh');
+  const ico = document.getElementById('admin-refresh-ico');
   if (bar) { bar.style.opacity = '.55'; bar.style.pointerEvents = 'none'; }
+  if (btn) btn.disabled = true;
+  if (ico) ico.classList.add('spin');
   try {
     await loadAdminList();       // 안에서 applyAdminFilters·accRenderQuickBar 까지 수행
   } catch(e) {
@@ -4948,7 +4961,11 @@ async function accReloadAdmin() {
   } finally {
     _accReloading = false;
     const b2 = document.getElementById('acc-quick-bar');
+    const t2 = document.getElementById('admin-refresh');
+    const i2 = document.getElementById('admin-refresh-ico');
     if (b2) { b2.style.opacity = ''; b2.style.pointerEvents = ''; }
+    if (t2) t2.disabled = false;
+    if (i2) i2.classList.remove('spin');
   }
 }
 
@@ -5019,35 +5036,46 @@ async function loadAdminList() {
   await loadVolumeConfig(); applyCurrentVolume();
   refreshVolStatusBar();
   try {
-    const data = await apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_REQUESTS}/items?$expand=fields&$top=999`);
+    // 전표와 결재선을 동시에 읽는다. 순서대로 기다리면 그만큼 두 배로 걸린다.
+    // 결재선은 한 번만 읽어 「진행 상태」와 「멈춘 전표」 판정에 함께 쓴다.
+    const [data, _aprAll] = await Promise.all([
+      apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_REQUESTS}/items?$expand=fields&$top=999`),
+      (async () => {
+        const out = [];
+        try {
+          await _forEachAprVolume(async (vol) => {
+            const d = await apiAll(`${GRAPH}/sites/${siteId}/lists/${vol.id}/items?$expand=fields&$top=999`);
+            out.push(...d.value);
+            return [];
+          });
+        } catch(e) { console.warn('[관리자] 결재 정보 조회 실패:', e && e.message); }
+        return out;
+      })(),
+    ]);
+
     adminListRaw = data.value
       .map(item=>({_spId:item.id,...item.fields}))
       .sort((a,b)=>new Date(b.SubmittedDate||0)-new Date(a.SubmittedDate||0));
-    // 각 전표의 결재선을 함께 담는다. 담당자별 빠른 보기에서
+
+    // 읽어 둔 결재행을 전표별로 묶는다. 담당자별 빠른 보기에서
     // 「누가 결재선에 있는지」와 「지금 누구 차례인지」를 판단하는 데 쓴다.
-    try {
-      const _aprByReq = {};
-      await _forEachAprVolume(async (vol) => {
-        const d = await apiAll(`${GRAPH}/sites/${siteId}/lists/${vol.id}/items?$expand=fields&$top=999`);
-        d.value.forEach(i => {
-          const f2 = i.fields, rid = String(f2.RequestID);
-          (_aprByReq[rid] = _aprByReq[rid] || []).push({
-            order : f2.ApprovalOrder || 0,
-            role  : f2.ApproverRole || '',
-            name  : f2.ApproverName || '',
-            email : (f2.ApproverEmail || '').toLowerCase(),
-            status: ((f2.Status && f2.Status.Value) ? f2.Status.Value : f2.Status || '').trim(),
-          });
-        });
-        return [];
+    const _aprByReq = {};
+    _aprAll.forEach(i2 => {
+      const f2 = i2.fields, rid = String(f2.RequestID);
+      (_aprByReq[rid] = _aprByReq[rid] || []).push({
+        order : f2.ApprovalOrder || 0,
+        role  : f2.ApproverRole || '',
+        name  : f2.ApproverName || '',
+        email : (f2.ApproverEmail || '').toLowerCase(),
+        status: ((f2.Status && f2.Status.Value) ? f2.Status.Value : f2.Status || '').trim(),
       });
-      adminListRaw.forEach(v => {
-        const line = (_aprByReq[String(v._spId)] || []).sort((a,b)=>a.order-b.order);
-        v._line = line;
-        const cur = line.find(a => a.status === '대기');
-        v._curEmail = cur ? cur.email : '';
-      });
-    } catch(e) { console.warn('[관리자] 결재 진행 정보 조회 실패:', e && e.message); }
+    });
+    adminListRaw.forEach(v => {
+      const line = (_aprByReq[String(v._spId)] || []).sort((a,b)=>a.order-b.order);
+      v._line = line;
+      const cur = line.find(a => a.status === '대기');
+      v._curEmail = cur ? cur.email : '';
+    });
 
     _accMyRoles = accDetectMyRoles();
     accRenderQuickBar();
@@ -5057,20 +5085,16 @@ async function loadAdminList() {
     // 표식은 IT 담당자(config: ACC-Voucher_IT)에게만 보이므로, 대상이 아니면 조회 자체를 생략한다.
     const _itForStuck = IT_EMAILS.map(e=>e.toLowerCase())
       .includes((user?.email||user?.username||'').trim().toLowerCase());
+    // 위에서 이미 읽은 결재행으로 판단한다. 같은 목록을 한 번 더 부르지 않는다.
     if(!_itForStuck) { _stuckReqIds = new Set(); }
-    else try {
-      const pend = new Set();
-      await _forEachAprVolume(async (vol) => {
-        const d = await apiAll(`${GRAPH}/sites/${siteId}/lists/${vol.id}/items?$expand=fields&$filter=fields/Status eq '대기'&$top=999`);
-        d.value.forEach(i => pend.add(String(i.fields.RequestID)));
-        return [];
-      });
+    else {
       _stuckReqIds = new Set(
-        adminListRaw.filter(v => (v.Status||'').trim()==='대기' && !pend.has(String(v._spId)))
+        adminListRaw.filter(v => (v.Status||'').trim()==='대기'
+                              && !(v._line||[]).some(a => a.status === '대기'))
                     .map(v => String(v._spId))
       );
       if(_stuckReqIds.size) console.warn('[관리자] 진행이 멈춘 전표:', [..._stuckReqIds].join(', '));
-    } catch(e) { _stuckReqIds = new Set(); console.warn('[관리자] 진행 상태 점검 실패:', e && e.message); }
+    }
   } catch(e) {
     console.error('loadAdminList error:', e);
     adminListRaw = [];
