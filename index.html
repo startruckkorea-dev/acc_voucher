@@ -5007,7 +5007,9 @@ function accIsRelated(v) {
   return accRelatedTo(v, _accQuickView);
 }
 
-// 정렬 우선순위 — 내가 처리할 차례가 맨 위, 그다음 진행 중, 끝난 건은 아래로.
+// 정렬 우선순위 판정. 08-30 부터 목록 정렬에는 쓰지 않는다(신청일 순으로 통일).
+// 지우지 않고 남겨 둔다 — 「처리할 차례만 보기」 같은 요청이 오면 다시 쓸 판정이고,
+// 08-28 에 미사용 함수를 지우다 인접 함수까지 잘려 관리자 탭이 백지가 된 적이 있다.
 function accRelatedRank(v) {
   if (!v) return 2;   // 필드가 없는 항목은 맨 뒤로. 여기서 멈추면 목록 전체가 안 나온다.
   if (accIsMyTurn(v)) return 0;
@@ -5199,14 +5201,14 @@ function applyAdminFilters() {
     if(fk && !(v.RequesterEmail||'').toLowerCase().includes(fk) && !(v.Title||'').toLowerCase().includes(fk) && !(v.BPName||'').toLowerCase().includes(fk)) return false;
     return true;
   });
-  // 담당자 보기에서는 그 사람이 처리할 차례인 건을 맨 위로 올린다.
-  if (_accQuickView) {
-    adminListCache.sort((a, b) => {
-      const r = accRelatedRank(a) - accRelatedRank(b);
-      if (r) return r;
-      return new Date(b.SubmittedDate||0) - new Date(a.SubmittedDate||0);
-    });
-  }
+  // 정렬은 건드리지 않는다. adminListRaw 가 이미 신청일 최신순이고,
+  // filter 는 순서를 그대로 유지하므로 담당자 칩을 켜도 전체 보기와 같은 순서가 된다.
+  //
+  // 08-28 에는 여기서 「그 사람이 처리할 차례 → 진행 중 → 완료」 순으로 다시 정렬했다.
+  // 그런데 Status 열은 「처리할 차례」와 「진행 중」을 똑같은 대기 배지로 보여 주기 때문에,
+  // 화면에는 근거 없이 날짜만 뒤섞인 것처럼 보였다(08-30 지적).
+  // 담당자별 처리 대기 건수는 칩의 주황 배지가 이미 알려 주고, 「대기」만 보려면
+  // 상태 필터가 있다. 목록의 순서는 어느 칩을 눌러도 신청일 하나로 고정한다.
   const countEl = document.getElementById('admin-count');
   if(countEl) countEl.textContent = '총 '+adminListCache.length+'건';
   renderAdminList();
