@@ -3321,13 +3321,15 @@ function renderLines() {
     // Advance Payment(ADV)/Settlement(SET)의 BP 라인은 Cost/Profit Center가 잠겨있지 않고 실제 값(하드코딩 기본값 포함)을 편집할 수 있으므로
     // "🔒 비활성화"로 가리지 않고 실제 값을 보여준다.
     const ccIsLocked = l._lockCC && curType!=='ADV' && curType!=='SET';
-    const cpTxt = ccIsLocked ? '<span style="color:#c7c6c4">🔒 비활성화</span>' : (l.cctrName ? `${l.cctr} ${l.cctrName}` : (l.cctr ? l.cctr : (l.pcName ? `${l.pc} ${l.pcName}` : (l.pc || '-'))));
-    const subTxt  = ccIsLocked ? '<span style="color:#c7c6c4">🔒</span>' : (l.subpcName ? `${l.subpc} ${l.subpcName}` : (l.subpc ? l.subpc : '-'));
-    const glTxt   = l.gl   ? l.gl : '-';
+    // 🔒 배지는 코드가 만든 마크업이라 그대로 두고, 사용자 입력 부분만 이스케이프한다.
+    // 통째로 감싸면 배지가 글자로 보인다.
+    const cpTxt = ccIsLocked ? '<span style="color:#c7c6c4">🔒 비활성화</span>' : (l.cctrName ? `${escHtml(l.cctr)} ${escHtml(l.cctrName)}` : (l.cctr ? escHtml(l.cctr) : (l.pcName ? `${escHtml(l.pc)} ${escHtml(l.pcName)}` : (escHtml(l.pc) || '-'))));
+    const subTxt  = ccIsLocked ? '<span style="color:#c7c6c4">🔒</span>' : (l.subpcName ? `${escHtml(l.subpc)} ${escHtml(l.subpcName)}` : (l.subpc ? escHtml(l.subpc) : '-'));
+    const glTxt   = l.gl   ? escHtml(l.gl) : '-';
     const amtFmtTxt = l.currency==='KRW' ? Math.round(amt).toLocaleString('en') : fmt(amt);
     const drTxt = l.drcr==='DR' && amt ? `<span style="color:#0078d4">${amtFmtTxt}</span>` : '<span style="color:#a19f9d">-</span>';
     const crTxt = l.drcr==='CR' && amt ? `<span style="color:#d83b01">${amtFmtTxt}</span>` : '<span style="color:#a19f9d">-</span>';
-    const glDescTxt = (l._lockCC && !l.glName) ? '<span style="color:#c7c6c4">🔒 BP 선택 대기</span>' : (l.glName||'-');
+    const glDescTxt = (l._lockCC && !l.glName) ? '<span style="color:#c7c6c4">🔒 BP 선택 대기</span>' : (escHtml(l.glName)||'-');
     // 주BP/추가BP/VAT 라인은 _lockCC 플래그로 예약 표시 → 회색 배경의 "고정 라인" 느낌 부여
     // (GL/Fixed Asset 선택 시에는 애초에 예약 라인 자체가 생성되지 않으므로 이 로직이 적용되지 않음)
     const isReservedRow = !!l._lockCC;
@@ -3342,8 +3344,8 @@ function renderLines() {
       <td style="font-size:12px;white-space:nowrap;${idBg};${restBg}">${l.gl ? lockIcon+glTxt : glTxt}</td>
       <td style="font-size:11px;${idBg};${restBg}">${cpTxt}</td>
       <td style="font-size:11px;${idBg};${restBg}">${subTxt}</td>
-      <td style="font-size:11px;color:#605e5c;${idBg};${restBg}">${l.lineDesc ? lockIcon+l.lineDesc : (isReservedRow ? lockIcon+'-' : '-')}</td>
-      <td style="font-size:11px;${restBg}">${l.currency||'EUR'}</td>
+      <td style="font-size:11px;color:#605e5c;${idBg};${restBg}">${l.lineDesc ? lockIcon+escHtml(l.lineDesc) : (isReservedRow ? lockIcon+'-' : '-')}</td>
+      <td style="font-size:11px;${restBg}">${escHtml(l.currency)||'EUR'}</td>
       <td style="text-align:right;font-weight:600;${restBg}">${drTxt}</td>
       <td style="text-align:right;font-weight:600;${restBg}">${crTxt}</td>
       <td style="text-align:right;font-weight:600;color:#323130;${restBg}">${totalTxt}</td>
@@ -5531,6 +5533,9 @@ function renderAccChangeLog(logJson){
 }
 
 // ── B1 Doc No./Posting 변경 이력 렌더링 (SSC PKF 담당자 변경 이력과 동일 카드 스타일) ──
+// B1 Doc No.(modal-b1docno)는 자유 입력이고 이 이력은 상세보기를 여는 모두에게 보인다.
+// 바로 위 renderAccChangeLog 와 같은 기준으로 값을 전부 escHtml 에 통과시킨다.
+// (postColor 는 '완료' 여부로 고정 색상만 돌려주므로 style 안에 들어가도 안전하다)
 function renderB1ChangeLog(logJson) {
   const el = document.getElementById('b1-change-log');
   if(!el) return;
@@ -5543,10 +5548,10 @@ function renderB1ChangeLog(logJson) {
     '<div id="b1-change-log-list" style="background:#f0f6ff;border:1px solid #c7e0f4;border-radius:6px;overflow:hidden;max-height:220px;overflow-y:auto">' +
     logs.map((log,i,arr)=>
       '<div style="padding:8px 12px;'+(i===arr.length-1?'':'border-bottom:1px solid #c7e0f4')+'">' +
-        '<div style="font-size:.68rem;color:#a19f9d">'+(log.changedAt||'')+'</div>' +
-        '<div style="font-size:.72rem;color:#323130;margin-top:2px">변경자: <b>'+(log.changedBy||'')+'</b></div>' +
-        '<div style="font-size:.72rem;color:#323130;margin-top:2px">B1 Doc No.: <span style="color:#605e5c">'+(log.fromB1||'-')+'</span> → <span style="font-weight:700;color:#0078d4">'+(log.toB1||'-')+'</span></div>' +
-        '<div style="font-size:.72rem;color:#323130;margin-top:2px">Posting: <span style="color:'+postColor(log.fromPosting||'미완료')+';font-weight:600">'+(log.fromPosting||'미완료')+'</span> → <span style="font-weight:700;color:'+postColor(log.toPosting||'미완료')+'">'+(log.toPosting||'미완료')+'</span></div>' +
+        '<div style="font-size:.68rem;color:#a19f9d">'+escHtml(log.changedAt||'')+'</div>' +
+        '<div style="font-size:.72rem;color:#323130;margin-top:2px">변경자: <b>'+escHtml(log.changedBy||'')+'</b></div>' +
+        '<div style="font-size:.72rem;color:#323130;margin-top:2px">B1 Doc No.: <span style="color:#605e5c">'+escHtml(log.fromB1||'-')+'</span> → <span style="font-weight:700;color:#0078d4">'+escHtml(log.toB1||'-')+'</span></div>' +
+        '<div style="font-size:.72rem;color:#323130;margin-top:2px">Posting: <span style="color:'+postColor(log.fromPosting||'미완료')+';font-weight:600">'+escHtml(log.fromPosting||'미완료')+'</span> → <span style="font-weight:700;color:'+postColor(log.toPosting||'미완료')+'">'+escHtml(log.toPosting||'미완료')+'</span></div>' +
       '</div>'
     ).join('') +
     '</div>';
@@ -5801,19 +5806,22 @@ async function openVoucherSP(spId, fromTab){
 
   const lineRows = lines_data.map((l,i)=>{
     const amt = parseFloat(l.amount)||0;
-    const cpTxt = l.cctrName ? `${l.cctr} ${l.cctrName}` : (l.cctr ? l.cctr : (l.pcName ? `${l.pc} ${l.pcName}` : (l.pc || '-')));
+    // 회계 라인 값은 전부 사용자 입력에서 온다(LinesJSON 은 클라이언트가 보낸 값 그대로 저장).
+    // 이 표는 결재자·Accounting·CFO·관리자가 남의 전표를 열 때 그려지므로 반드시 이스케이프한다.
+    // Purpose·Purpose Title 은 이미 escHtml 을 거치는데 이 표만 빠져 있었다.
+    const cpTxt = l.cctrName ? `${escHtml(l.cctr)} ${escHtml(l.cctrName)}` : (l.cctr ? escHtml(l.cctr) : (l.pcName ? `${escHtml(l.pc)} ${escHtml(l.pcName)}` : (escHtml(l.pc) || '-')));
     const amtTxt = l.currency==='KRW' ? Math.round(amt).toLocaleString('en') : amt.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
     const drTxt = l.drcr==='DR' && amt ? `<span style="color:#0078d4">${amtTxt}</span>` : '<span style="color:#a19f9d">-</span>';
     const crTxt = l.drcr==='CR' && amt ? `<span style="color:#d83b01">${amtTxt}</span>` : '<span style="color:#a19f9d">-</span>';
     return `
     <tr style="border-bottom:1px solid #f3f2f1">
       <td style="padding:6px 7px;color:#605e5c;font-size:.74rem">${i+1}</td>
-      <td style="padding:6px 7px;font-size:.74rem">${l.glName||'-'}</td>
-      <td style="padding:6px 7px;font-size:.74rem">${l.gl||'-'}</td>
+      <td style="padding:6px 7px;font-size:.74rem">${escHtml(l.glName)||'-'}</td>
+      <td style="padding:6px 7px;font-size:.74rem">${escHtml(l.gl)||'-'}</td>
       <td style="padding:6px 7px;font-size:.74rem">${cpTxt}</td>
-      <td style="padding:6px 7px;font-size:.74rem">${codeName(l.subpc,l.subpcName)||'-'}</td>
-      <td style="padding:6px 7px;font-size:.74rem;max-width:120px;overflow:hidden;text-overflow:ellipsis">${l.lineDesc||'-'}</td>
-      <td style="padding:6px 7px;font-size:.74rem">${l.currency||'-'}</td>
+      <td style="padding:6px 7px;font-size:.74rem">${escHtml(codeName(l.subpc,l.subpcName))||'-'}</td>
+      <td style="padding:6px 7px;font-size:.74rem;max-width:120px;overflow:hidden;text-overflow:ellipsis" title="${escHtmlAttr(l.lineDesc||'')}">${escHtml(l.lineDesc)||'-'}</td>
+      <td style="padding:6px 7px;font-size:.74rem">${escHtml(l.currency)||'-'}</td>
       <td style="padding:6px 7px;text-align:right;font-weight:600;font-size:.74rem">${drTxt}</td>
       <td style="padding:6px 7px;text-align:right;font-weight:600;font-size:.74rem">${crTxt}</td>
     </tr>`;
