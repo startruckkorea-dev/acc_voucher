@@ -286,8 +286,10 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
    table-layout 을 고정하면 표가 래퍼를 넘지 않아 끌지 않고 모든 열을 볼 수 있다.
    (관리자 탭 1b4f647 · 작성 탭 회계표 3c1529e 와 같은 방식) */
 #tab-list .voucher-table { table-layout: fixed; width: 100%; }
+/* Title 을 자르지 않으려면 폭이 필요하다. 열 12개라 여백 1px 이 12px 이므로
+   여기서 회수해 Title 쪽으로 돌린다. */
 #tab-list .voucher-table th,
-#tab-list .voucher-table td { padding-left: 7px; padding-right: 7px; }
+#tab-list .voucher-table td { padding-left: 4px; padding-right: 4px; }
 /* 폭은 헤더가 정한다(64bee52). 헤더가 nowrap 이면 긴 제목이 열을 밀어내므로 줄바꿈을 허용한다. */
 #tab-list .voucher-table th { font-size: .7rem; white-space: normal; line-height: 1.25; }
 /* 지정 폭을 넘는 내용은 말줄임으로 접는다. 전체 내용은 마우스를 올리면 보인다. */
@@ -535,18 +537,18 @@ if (new URLSearchParams(location.search).get('openId')) {
       <table class="voucher-table">
         <thead>
           <tr>
-            <th style="width:34px">번호</th>
-            <th style="width:118px">신청자</th>
-            <th style="width:146px">Title</th>
-            <th style="width:68px">유형</th>
-            <th style="width:106px">BP명</th>
-            <th style="width:112px">Purpose Title</th>
-            <th style="width:100px">Purpose</th>
-            <th style="width:100px;text-align:right">DR(KRW)</th>
-            <th style="width:100px;text-align:right">CR(KRW)</th>
-            <th style="width:86px">상태</th>
-            <th style="width:112px">신청일</th>
-            <th style="width:110px;text-align:center">Withdraw</th>
+            <th style="width:30px">번호</th>
+            <th style="width:96px">신청자</th>
+            <th style="width:194px">Title</th>
+            <th style="width:60px">유형</th>
+            <th style="width:96px">BP명</th>
+            <th style="width:119px">Purpose Title</th>
+            <th style="width:119px">Purpose</th>
+            <th style="width:96px;text-align:right">DR(KRW)</th>
+            <th style="width:96px;text-align:right">CR(KRW)</th>
+            <th style="width:80px">상태</th>
+            <th style="width:106px">신청일</th>
+            <th style="width:100px;text-align:center">Withdraw</th>
           </tr>
         </thead>
         <tbody id="list-body"></tbody>
