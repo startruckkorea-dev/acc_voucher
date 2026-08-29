@@ -778,7 +778,7 @@ if (new URLSearchParams(location.search).get('openId')) {
       </div>
       <!-- 엑셀 계열을 붙였을 때만 나타난다. 결재자가 화면에서 그대로 보게 되므로
            인쇄 범위가 어긋나 있으면 표가 잘려 읽을 수 없다. -->
-      <div id="xls-layout-note" style="display:none;margin-top:8px;font-size:.72rem;color:#8a6116;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:6px;padding:9px 12px;line-height:1.65"></div>
+      <div id="xls-layout-note" style="display:none;margin-top:8px;font-size:.72rem;color:#8a6116;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:6px;padding:8px 12px;line-height:1.5"></div>
       <div class="file-list" id="acc-file-list"></div>
 
       <div class="section-title">6. 결재라인 (Authorization)</div>
@@ -3616,11 +3616,15 @@ function updateXlsLayoutNote(){
     XLS_EXT.includes((f.name||'').split('.').pop().toLowerCase()));
   if(!hits.length){ el.style.display='none'; el.innerHTML=''; return; }
   el.style.display='block';
+  // 파일이 여러 개면 한 줄에 이어 붙이지 않고 번호를 매겨 나눈다.
+  // 이름이 길어 한 줄에 뭉치면 어느 파일인지 알아보기 어렵다.
+  const list = hits.map((f, i) =>
+    '<div style="margin-top:2px;color:#a37a1e">대상 파일 ' + (i + 1) + ' : ' + escHtml(f.name) + '</div>'
+  ).join('');
   el.innerHTML =
-      '<div style="font-weight:700;margin-bottom:3px">⚠️ Excel 파일은 페이지 레이아웃을 확인해 주세요</div>'
-    + '<div>결재자는 파일을 그대로 열어 봅니다. 인쇄 범위가 맞지 않으면 표가 잘리거나 여러 장으로 쪼개져 내용을 확인하기 어렵습니다.</div>'
-    + '<div style="margin-top:5px">인쇄 영역 · 용지 방향 · 배율(한 페이지에 맞추기)을 확인한 뒤 저장해 주세요.</div>'
-    + '<div style="margin-top:5px;color:#a37a1e">대상 파일 : ' + hits.map(f=>escHtml(f.name)).join(', ') + '</div>';
+      '<div style="font-weight:700">⚠️ 첨부된 Excel 파일의 페이지 레이아웃을 확인해 주세요</div>'
+    + '<div style="margin-top:2px">인쇄 영역 · 용지 방향 · 배율(한 페이지에 맞추기)을 확인한 뒤 저장해 주세요.</div>'
+    + '<div style="margin-top:4px">' + list + '</div>';
 }
 
 function renderAccFiles(){
