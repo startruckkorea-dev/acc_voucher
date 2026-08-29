@@ -4919,12 +4919,12 @@ let adminListRaw = [];
 // 「내가 올린 건」을 따로 보려고 관리자 탭을 계속 새로고침하고,
 // 몇 차에서 멈췄는지 보려고 전표를 하나씩 열어야 했다.
 // 설정 파일에 등록된 담당자에게만 요약 바를 띄우고, 한 번 눌러 걸러 보게 한다.
+// 빠른 보기 칩에 띄울 담당자. AP·AR·GL 세 역할만 둔다.
+// Accounting Head·CFO 는 전 전표를 결재하는 자리라 칩으로 걸러 볼 실익이 없다.
 const ACC_ROLE_KEYS = [
-  ['ACC-Voucher_AP',         'AP 담당',         '#107c10'],
-  ['ACC-Voucher_AR',         'AR 담당',         '#107c10'],
-  ['ACC-Voucher_GL',         'GL 담당',         '#107c10'],
-  ['ACC-Voucher_ACCOUNTING', 'Accounting Head', '#107c10'],
-  ['ACC-Voucher_CFO',        'CFO',             '#107c10'],
+  ['ACC-Voucher_AP', 'AP 담당', '#107c10'],
+  ['ACC-Voucher_AR', 'AR 담당', '#107c10'],
+  ['ACC-Voucher_GL', 'GL 담당', '#107c10'],
 ];
 
 let _accMyRoles = [];      // 이 사용자가 맡은 역할 이름
