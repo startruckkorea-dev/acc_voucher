@@ -422,6 +422,11 @@ table.pt-tbl tfoot td{background:#eef1f5;font-weight:700;border-top:2px solid #1
 .list-table th,.list-table td{white-space:nowrap}
 .list-table th{padding:9px 12px;text-align:left;background:#f3f2f1;border-bottom:1px solid #edebe9;font-weight:600;color:#323130;font-size:.75rem}
 .list-table td{padding:9px 12px;border-bottom:1px solid #edebe9;color:#323130}
+/* 관리자 목록은 열이 13개라 여백까지 더하면 화면을 넘는다.
+   이 표에서만 좌우 여백을 줄여 모든 열이 한 화면에 들어가게 한다. */
+#tab-admin .list-table th,
+#tab-admin .list-table td{padding-left:7px;padding-right:7px}
+#tab-admin .list-table th{font-size:.7rem}
 .list-table tr:hover td{background:#f9f8f7}
 </style>
 <script>
@@ -859,9 +864,23 @@ if (new URLSearchParams(location.search).get('openId')) {
   </div>
   <div class="card" style="padding:0;overflow-x:auto">
     <table class="list-table">
-      <thead><tr>
-        <th style="width:40px">번호</th><th>신청자</th><th>Title</th><th>유형</th><th>BP명</th><th>Purpose Title</th><th>Purpose</th><th style="text-align:right">DR(KRW Total)</th><th style="text-align:right">CR(KRW Total)</th><th>Status</th><th>신청일</th><th style="width:120px">B1 Doc No.</th><th style="width:80px;text-align:center">Posting</th>
-      </tr></thead>
+      <thead>
+        <tr style="font-size:.7rem">
+          <th style="width:34px">번호</th>
+          <th style="width:112px">신청자</th>
+          <th style="width:152px">Title</th>
+          <th style="width:42px">유형</th>
+          <th style="width:104px">BP명</th>
+          <th style="width:124px">Purpose Title</th>
+          <th style="width:124px">Purpose</th>
+          <th style="width:92px">DR(KRW)</th>
+          <th style="width:92px">CR(KRW)</th>
+          <th style="width:60px">Status</th>
+          <th style="width:98px">신청일</th>
+          <th style="width:82px">B1 Doc No.</th>
+          <th style="width:54px">Posting</th>
+        </tr>
+      </thead>
       <tbody id="admin-body">
         <tr><td colspan="12" style="text-align:center;padding:40px;color:#a19f9d">전체 전표 목록이 여기에 표시됩니다.</td></tr>
       </tbody>
@@ -5514,21 +5533,21 @@ function renderAdminList(){
     // 저장값을 그대로 쓰면 목록과 상세가 서로 다르게 보인다. 판정 기준을 한 곳으로 통일.
     const postingDone = b1DocNo.trim() ? '완료' : '';
     return `<tr onclick="openVoucherSP('${v._spId}','admin')">
-    <td style="color:#a19f9d;font-size:.78rem">${reverseNo}</td>
-    <td style="font-size:.78rem;color:#605e5c">${v.RequesterEmail||'-'}</td>
-    <td style="font-size:.75rem;color:#0078d4">${v.Title||'-'}</td>
-    <td><span class="type-badge t-${v.VoucherType}">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span></td>
-    <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem;color:#605e5c" title="${escHtmlAttr(v.BPName||'')}">${escHtml(v.BPName)||'-'}</td>
-    <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem" title="${escHtmlAttr(spText(v.PurposeTitle||''))}">${escHtml(spText(v.PurposeTitle))||'-'}</td>
-    <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem">${escHtml(spText(v.Purpose))||'-'}</td>
-    <td style="text-align:right;font-weight:700;color:#0078d4;font-size:.78rem">${fmtK(v.TotalDR_KRW)}</td>
-    <td style="text-align:right;font-weight:700;color:#c0392b;font-size:.78rem">${fmtK(v.TotalCR_KRW)}</td>
-    <td><span class="${stMap[v.Status]||'badge-대기'}">${stLabel[v.Status]||v.Status}</span>${stuckMark(v)}</td>
-    <td style="font-size:.78rem;color:#605e5c">${fmtDate(v.SubmittedDate)}</td>
-    <td style="font-size:.75rem;color:#323130">
+    <td style="color:#a19f9d;font-size:.73rem">${reverseNo}</td>
+    <td style="font-size:.73rem;color:#605e5c;max-width:118px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.RequesterEmail||'-'}</td>
+    <td style="font-size:.72rem;color:#0078d4;max-width:158px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.Title||'-'}</td>
+    <td><span class="type-badge t-${v.VoucherType}" style="font-size:.62rem;padding:1px 5px">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span></td>
+    <td style="max-width:112px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.73rem;color:#605e5c">${escHtml(v.BPName)||'-'}</td>
+    <td style="max-width:132px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.73rem">${escHtml(spText(v.PurposeTitle))||'-'}</td>
+    <td style="max-width:132px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.73rem;color:#605e5c">${escHtml(spText(v.Purpose))||'-'}</td>
+    <td style="text-align:right;font-weight:700;color:#0078d4;font-size:.73rem">${fmtK(v.TotalDR_KRW)}</td>
+    <td style="text-align:right;font-weight:700;color:#c0392b;font-size:.73rem">${fmtK(v.TotalCR_KRW)}</td>
+    <td><span class="${stMap[v.Status]||'badge-대기'}" style="font-size:.63rem;padding:1px 6px">${stLabel[v.Status]||v.Status}</span>${stuckMark(v)}</td>
+    <td style="font-size:.72rem;color:#605e5c;white-space:nowrap">${fmtDate(v.SubmittedDate)}</td>
+    <td style="font-size:.72rem;color:#323130;max-width:86px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
       ${b1DocNo || '<span style="color:#a19f9d">-</span>'}
     </td>
-    <td style="text-align:center;font-size:.75rem">
+    <td style="text-align:center;font-size:.72rem">
       ${postingDone==='완료' ? '<span style="color:#107c10;font-weight:600">✅ 완료</span>' : '<span style="color:#a19f9d">미완료</span>'}
     </td>
   </tr>`;
