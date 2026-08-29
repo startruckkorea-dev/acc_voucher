@@ -4892,12 +4892,12 @@ function accDetectMyRoles() {
 
 // 지금 고른 담당자가 결재할 차례인 건
 function accIsMyTurn(v) {
-  return !!_accQuickView && (v._curEmail || '') === _accQuickView;
+  return !!_accQuickView && !!v && (v._curEmail || '') === _accQuickView;
 }
 
 // 특정 이메일과 관련된 전표인지 — 그 사람이 올렸거나 결재선에 있는 것.
 function accRelatedTo(v, email) {
-  if (!email) return false;
+  if (!email || !v) return false;
   if ((v.RequesterEmail || '').trim().toLowerCase() === email) return true;
   return (v._line || []).some(a => (a.email || '') === email);
 }
@@ -4909,6 +4909,7 @@ function accIsRelated(v) {
 
 // 정렬 우선순위 — 내가 처리할 차례가 맨 위, 그다음 진행 중, 끝난 건은 아래로.
 function accRelatedRank(v) {
+  if (!v) return 2;   // 필드가 없는 항목은 맨 뒤로. 여기서 멈추면 목록 전체가 안 나온다.
   if (accIsMyTurn(v)) return 0;
   const st = (v.Status || '').trim();
   if (st === '대기') return 1;
