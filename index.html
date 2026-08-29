@@ -5927,8 +5927,10 @@ async function openVoucherSP(spId, fromTab){
       </div>
     </div>
 
-    <!-- B1 Doc No./Posting 변경 이력 — 편집은 관리자만 하지만 이력은 누구나 본다.
-         신청자와 결재자도 자기 전표가 언제 처리됐는지 알 수 있어야 한다. -->
+    <!-- Accounting 담당자 변경 이력 — 결재선이 누구로 바뀌었는지는
+         신청자와 결재자도 알아야 하므로 어느 탭에서든 보여 준다. -->
+    <div id="acc-change-log" style="margin-top:16px"></div>
+    <!-- B1 Doc No./Posting 변경 이력 — 회계 처리 기록이라 관리자 탭에서만 -->
     <div id="b1-change-log" style="margin-top:16px"></div>
 
     <!-- Accounting 담당자 변경 모달 -->
@@ -5980,7 +5982,6 @@ async function openVoucherSP(spId, fromTab){
       <div id="admin-comment-closed" style="display:none;font-size:.78rem;color:#a19f9d;padding:8px 0">Comments are closed for this voucher. Existing comments remain visible.</div>
       <!-- 등록된 의견은 B1 변경 이력과 동일한 형태의 별도 이력 블록으로 아래에 표시 -->
       <div id="admin-comments-list" style="margin-top:12px"></div>
-      <div id="acc-change-log"></div>
     </div>
 
     <div class="det-sec" style="margin-top:16px">결재 이력</div>
@@ -6051,14 +6052,14 @@ async function openVoucherSP(spId, fromTab){
     b1Section.style.display = 'block';
     document.getElementById('modal-b1docno').value = v.B1DocNo||'';
     updatePostingBadge();
-    renderAccChangeLog(v.AccChangeLog||'');
+    renderB1ChangeLog(v.B1ChangeLog);
   } else if(b1Section) {
     b1Section.style.display = 'none';
+    renderB1ChangeLog('');   // 관리자 탭이 아니면 B1 이력은 감춘다
   }
-  // 변경 이력은 어느 탭에서 열었든 보여 준다.
-  // 입력은 관리자만 하지만, 신청자와 결재자도 자기 전표가 언제 어떻게
-  // 처리됐는지 알 수 있어야 한다.
-  renderB1ChangeLog(v.B1ChangeLog);
+  // Accounting 담당자 변경 이력은 어느 탭에서든 보여 준다.
+  // 결재선이 누구로 바뀌었는지는 신청자와 결재자도 알아야 한다.
+  renderAccChangeLog(v.AccChangeLog||'');
   // PKF 담당자가 범위 밖 전표를 연 경우, 섹션이 왜 안 보이는지 알려준다(빈 화면이면 오해 소지가 크다)
   const pkfNoticeEl = document.getElementById('pkf-scope-notice');
   // 설정 파일을 못 읽으면 권한 명단이 통째로 비어, 관리자·PKF 인 사람도 섹션이 조용히 사라진다.
