@@ -4909,7 +4909,8 @@ function accDetectMyRoles() {
   return roles;
 }
 
-// 지금 고른 담당자가 결재할 차례인 건
+// 지금 고른 담당자가 결재할 차례인 건.
+// 남의 칩을 볼 때도 그 담당자 기준이라, 「그 사람이 처리할 건」이 맨 위로 온다.
 function accIsMyTurn(v) {
   return !!_accQuickView && !!v && (v._curEmail || '') === _accQuickView;
 }
