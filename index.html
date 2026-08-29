@@ -741,7 +741,7 @@ if (new URLSearchParams(location.search).get('openId')) {
           <button class="btn btn-add" onclick="addLine()">＋ 라인 추가</button>
           <button class="btn btn-add" id="btn-add-bp" onclick="openBpModalExtra()" title="추가 BP를 선택하면 2.BP정보 아래와 회계 라인에 표시됩니다">＋ BP 추가</button>
           <button class="btn btn-add" id="btn-add-vat" onclick="addVatLineSmart()" title="VAT 라인을 추가합니다. 이미 VAT 라인이 있으면 그 아래에, 없으면 BP 라인 아래에 추가됩니다.">＋ VAT 라인 추가</button>
-          <button class="btn btn-add" id="btn-paste-line" onclick="pasteLine()" style="display:none" title="복사한 라인을 새 라인으로 붙여넣기">⧉ 붙여넣기</button>
+          <button class="btn btn-add" id="btn-paste-line" onclick="pasteLine()" style="display:none" title="복사한 라인을 새 라인으로 붙여넣기">붙여넣기</button>
         </div>
       </div>
       <div class="lines-scroll">
@@ -757,7 +757,7 @@ if (new URLSearchParams(location.search).get('openId')) {
               <th style="width:98px;text-align:right">DR(DEBIT)</th>
               <th style="width:98px;text-align:right">CR(CREDIT)</th>
               <th style="width:104px;text-align:right">Total(KRW)</th>
-              <th style="width:28px"></th>
+              <th style="width:52px;text-align:center">관리</th>
             </tr>
           </thead>
           <tbody id="lines-body"></tbody>
@@ -3253,7 +3253,7 @@ function copyLine(i) {
   _lineClipboard = {drcr:l.drcr, gl:l.gl, glName:l.glName, cctr:l.cctr, cctrName:l.cctrName, pc:l.pc, pcName:l.pcName, subpc:l.subpc, subpcName:l.subpcName, lineDesc:l.lineDesc, currency:l.currency, amount:l.amount};
   const btn = document.getElementById('btn-paste-line');
   if(btn) btn.style.display = 'inline-block';
-  showAccAlert('라인을 복사했습니다', '"⧉ 붙여넣기" 버튼으로 새 라인에 붙여넣을 수 있습니다.', '⧉');
+  showAccAlert('라인을 복사했습니다', '아래 「붙여넣기」 버튼으로 새 라인에 넣을 수 있습니다.', '✔');
 }
 function pasteLine() {
   if(!_lineClipboard) return;
@@ -3311,7 +3311,7 @@ function renderLines() {
       <td style="text-align:right;font-weight:600;${restBg}">${drTxt}</td>
       <td style="text-align:right;font-weight:600;${restBg}">${crTxt}</td>
       <td style="text-align:right;font-weight:600;color:#323130;${restBg}">${totalTxt}</td>
-      <td style="white-space:nowrap">${isReservedRow ? '' : `<button class="btn-del" onclick="event.stopPropagation();copyLine(${i})" title="라인 복사">⧉</button>`}${isVatRow ? '' : `<button class="btn-del" onclick="event.stopPropagation();deleteLine(${i})">✕</button>`}</td>
+      <td style="white-space:nowrap">${isReservedRow ? '' : `<button class="btn-del" onclick="event.stopPropagation();copyLine(${i})" title="라인 복사">❐</button>`}${isVatRow ? '' : `<button class="btn-del" onclick="event.stopPropagation();deleteLine(${i})">✕</button>`}</td>
     </tr>`;
   }).join('');
   updateTotals();
