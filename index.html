@@ -4946,10 +4946,14 @@ function accDetectMyRoles() {
   const roles = ACC_ROLE_KEYS
     .filter(([k]) => ((cfgVal(_sysConfig, k) || {}).email || '').trim().toLowerCase() === me)
     .map(([, label]) => label);
-  // IT 담당자(ACC-Voucher_IT)는 역할을 맡고 있지 않아도 화면을 볼 수 있어야 한다.
-  // 문의가 들어왔을 때 담당자와 같은 화면으로 확인해야 상황을 파악할 수 있다.
-  if (!roles.length && IT_EMAILS.map(e=>e.toLowerCase()).includes(me)) return ['IT'];
-  return roles;
+  if (roles.length) return roles;
+  // 담당 역할이 없어도 관리자 탭에 들어올 수 있는 사람이면 바를 띄운다.
+  // 칩은 어차피 누구나 눌러 볼 수 있고, 아래 표에서도 전건이 보인다.
+  // 여기서만 막으면 Accounting Head·CFO 처럼 결재를 총괄하는 자리가
+  // 담당자별로 걸러 보지 못하게 된다.
+  if (IT_EMAILS.map(e=>e.toLowerCase()).includes(me)) return ['IT'];
+  if (ADMIN_EMAILS.map(e=>e.toLowerCase()).includes(me)) return ['관리자'];
+  return [];
 }
 
 // 지금 고른 담당자가 결재할 차례인 건.
