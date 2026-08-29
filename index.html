@@ -100,9 +100,12 @@ html.standalone-detail.detail-ready #standalone-loader { display: none !importan
 /* ── Account Lines ── */
 .lines-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .lines-scroll { overflow-x: auto; }
+/* 회계 라인은 열이 10개라 기본 폭으로는 가로 스크롤이 생긴다.
+   지정한 열 폭대로 줄어들게 table-layout 을 고정한다. */
+table.lines { table-layout: fixed; width: 100%; }
 table.lines { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 900px; }
-table.lines th { background: #f3f2f1; padding: 7px 8px; text-align: left; border: 1px solid #edebe9; font-size: 11px; font-weight: 600; color: #605e5c; white-space: nowrap; }
-table.lines td { padding: 4px 6px; border: 1px solid #edebe9; vertical-align: middle; }
+table.lines th { background: #f3f2f1; padding: 6px 5px; text-align: left; border: 1px solid #edebe9; font-size: 10.5px; font-weight: 600; color: #605e5c; white-space: normal; line-height: 1.3; }
+table.lines td { padding: 4px 4px; border: 1px solid #edebe9; vertical-align: middle; }
 table.lines tr:hover td { background: #f0f6ff; }
 table.lines input, table.lines select { padding: 5px 6px; font-size: 12px; border: 1px solid #d2d0ce; border-radius: 3px; width: 100%; }
 table.lines input:focus, table.lines select:focus { outline: none; border-color: #0078d4; }
@@ -535,7 +538,7 @@ if (new URLSearchParams(location.search).get('openId')) {
         <div style="display:flex;align-items:center;gap:6px;font-weight:400">
           <span style="font-size:.72rem;color:#0078d4;font-weight:600;white-space:nowrap">기존 전표 불러오기</span>
           <input type="text" id="load-voucher-id" placeholder="예: ACC-Voucher-20**-**-**_ID-**" style="width:220px;border:1px solid #d2d0ce;border-radius:4px;padding:5px 9px;font-size:.74rem">
-          <button onclick="loadExistingVoucher()" style="padding:5px 12px;border:none;border-radius:4px;background:#0078d4;color:#fff;font-size:.74rem;cursor:pointer;white-space:nowrap">📥 불러오기</button>
+          <button onclick="loadExistingVoucher()" style="padding:5px 12px;border:none;border-radius:4px;background:#0078d4;color:#fff;font-size:.74rem;cursor:pointer;white-space:nowrap">⤵ 불러오기</button>
         </div>
       </div>
       <details id="pt-panel">
@@ -738,23 +741,23 @@ if (new URLSearchParams(location.search).get('openId')) {
           <button class="btn btn-add" onclick="addLine()">＋ 라인 추가</button>
           <button class="btn btn-add" id="btn-add-bp" onclick="openBpModalExtra()" title="추가 BP를 선택하면 2.BP정보 아래와 회계 라인에 표시됩니다">＋ BP 추가</button>
           <button class="btn btn-add" id="btn-add-vat" onclick="addVatLineSmart()" title="VAT 라인을 추가합니다. 이미 VAT 라인이 있으면 그 아래에, 없으면 BP 라인 아래에 추가됩니다.">＋ VAT 라인 추가</button>
-          <button class="btn btn-add" id="btn-paste-line" onclick="pasteLine()" style="display:none" title="복사한 라인을 새 라인으로 붙여넣기">📥 붙여넣기</button>
+          <button class="btn btn-add" id="btn-paste-line" onclick="pasteLine()" style="display:none" title="복사한 라인을 새 라인으로 붙여넣기">⧉ 붙여넣기</button>
         </div>
       </div>
       <div class="lines-scroll">
         <table class="lines">
           <thead>
             <tr>
-              <th style="min-width:160px">G/L Account Description</th>
-              <th style="width:120px">G/L Acc No.</th>
-              <th style="min-width:140px">Cost/Profit Center</th>
-              <th style="min-width:120px">Sub_PC</th>
-              <th style="min-width:110px">Description</th>
-              <th style="width:70px">Curr</th>
-              <th style="width:120px;text-align:right">DR(DEBIT)</th>
-              <th style="width:120px;text-align:right">CR(CREDIT)</th>
-              <th style="width:130px;text-align:right">Total(KRW)</th>
-              <th style="width:32px"></th>
+              <th style="width:150px">G/L Account Description</th>
+              <th style="width:82px">G/L Acc No.</th>
+              <th style="width:112px">Cost/Profit Center</th>
+              <th style="width:88px">Sub_PC</th>
+              <th style="width:104px">Description</th>
+              <th style="width:52px">Curr</th>
+              <th style="width:98px;text-align:right">DR(DEBIT)</th>
+              <th style="width:98px;text-align:right">CR(CREDIT)</th>
+              <th style="width:104px;text-align:right">Total(KRW)</th>
+              <th style="width:28px"></th>
             </tr>
           </thead>
           <tbody id="lines-body"></tbody>
@@ -1771,7 +1774,7 @@ async function boot(account) {
     document.documentElement.classList.add('detail-loading');
   }
 
-  document.getElementById('app').style.maxWidth='960px';
+  document.getElementById('app').style.maxWidth='1040px';
   document.getElementById('app-header').style.display='flex';
   // 괄호 안은 권한 판정에 실제로 쓰이는 주소를 보여준다(게스트는 UPN이 아닌 외부 실주소)
   document.getElementById('user-name').textContent=(account.name||account.username)+' ('+(user.email||account.username)+')';
@@ -2295,7 +2298,9 @@ function switchTab(tab) {
   });
   // 바우처 작성은 좁은 너비, 목록/결재함/관리자는 넓은 레이아웃 (GW 동일)
   const appEl = document.getElementById('app');
-  if(appEl) appEl.style.maxWidth = tab==='new' ? '960px' : '1280px';
+  // 회계 라인은 열이 10개라 960px 에서는 가로 스크롤이 생긴다.
+  // 작성 탭을 조금 넓혀 표가 한 화면에 들어가게 한다.
+  if(appEl) appEl.style.maxWidth = tab==='new' ? '1040px' : '1280px';
   if(tab==='list') loadMyList();
   if(tab==='appr') loadApprovalQueue();
   if(tab==='admin') loadAdminList();
@@ -3248,7 +3253,7 @@ function copyLine(i) {
   _lineClipboard = {drcr:l.drcr, gl:l.gl, glName:l.glName, cctr:l.cctr, cctrName:l.cctrName, pc:l.pc, pcName:l.pcName, subpc:l.subpc, subpcName:l.subpcName, lineDesc:l.lineDesc, currency:l.currency, amount:l.amount};
   const btn = document.getElementById('btn-paste-line');
   if(btn) btn.style.display = 'inline-block';
-  showAccAlert('라인을 복사했습니다', '"📥 붙여넣기" 버튼으로 새 라인에 붙여넣을 수 있습니다.', '📤');
+  showAccAlert('라인을 복사했습니다', '"⧉ 붙여넣기" 버튼으로 새 라인에 붙여넣을 수 있습니다.', '⧉');
 }
 function pasteLine() {
   if(!_lineClipboard) return;
@@ -3306,7 +3311,7 @@ function renderLines() {
       <td style="text-align:right;font-weight:600;${restBg}">${drTxt}</td>
       <td style="text-align:right;font-weight:600;${restBg}">${crTxt}</td>
       <td style="text-align:right;font-weight:600;color:#323130;${restBg}">${totalTxt}</td>
-      <td style="white-space:nowrap">${isReservedRow ? '' : `<button class="btn-del" onclick="event.stopPropagation();copyLine(${i})" title="라인 복사">📤</button>`}${isVatRow ? '' : `<button class="btn-del" onclick="event.stopPropagation();deleteLine(${i})">✕</button>`}</td>
+      <td style="white-space:nowrap">${isReservedRow ? '' : `<button class="btn-del" onclick="event.stopPropagation();copyLine(${i})" title="라인 복사">⧉</button>`}${isVatRow ? '' : `<button class="btn-del" onclick="event.stopPropagation();deleteLine(${i})">✕</button>`}</td>
     </tr>`;
   }).join('');
   updateTotals();
