@@ -2047,15 +2047,13 @@ function applyTodayExchangeRate() {
         return r&&r.rate>0?`<span><b>${cur}</b> ${Number(r.rate).toLocaleString()}</span>`:'';
       }).filter(Boolean).join('<span style="color:#d2d0ce;margin:0 4px">|</span>');
       const labelDate = hasToday ? today : (fallbackDate||today);
-      // 두 줄로 둔다. 첫 줄은 날짜와 환율(정작 봐야 할 값), 둘째 줄은 안내.
-      // 셋으로 나누면 안내가 환율보다 눈에 먼저 들어와 정작 숫자를 놓친다.
+      // 날짜 · 환율 · 안내를 각각 한 줄씩 둔다.
+      // 날짜와 환율을 한 줄에 붙이면 통화가 많을 때 줄이 넘쳐 읽기 어렵다.
       banner.style.display='block';
-      banner.innerHTML = `<div style="background:#f0f6ff;border:1px solid #c7e0f4;border-radius:4px;padding:7px 14px;margin-top:10px;line-height:1.55">`
-        + `<div style="display:flex;align-items:baseline;flex-wrap:wrap;gap:0 10px">`
-          + `<span style="color:#0078d4;font-weight:600;font-size:12px;white-space:nowrap">${labelDate} 기준 환율</span>`
-          + `<span style="font-size:12px;color:#323130">${parts}</span>`
-        + `</div>`
-        + `<div style="font-size:11px;color:#a19f9d">오늘 날짜로 자동 기입됩니다. 수정이 필요하면 BU Admin 에게 확인해 주세요. 이전 날짜가 보이면 <b>Ctrl+Shift+R</b> 로 새로고침하세요.</div>`
+      banner.innerHTML = `<div style="background:#f0f6ff;border:1px solid #c7e0f4;border-radius:4px;padding:8px 14px;margin-top:10px;line-height:1.6">`
+        + `<div style="color:#0078d4;font-weight:600;font-size:12px">${labelDate} 기준 환율</div>`
+        + `<div style="font-size:12px;color:#323130">${parts}</div>`
+        + `<div style="font-size:11px;color:#a19f9d;margin-top:2px">오늘 날짜로 자동 기입됩니다. 수정이 필요한 경우 또는 환율 정보가 보이지 않는 경우 BU Admin 에게 확인해 주세요.</div>`
       + `</div>`;
     }
   }
