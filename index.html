@@ -294,6 +294,10 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 #tab-list .voucher-table th { font-size: .7rem; white-space: normal; line-height: 1.25; }
 /* 지정 폭을 넘는 내용은 말줄임으로 접는다. 전체 내용은 마우스를 올리면 보인다. */
 #tab-list .voucher-table td { overflow: hidden; text-overflow: ellipsis; }
+/* 금액은 오른쪽, 그 다음 상태는 가운데 정렬이라 둘이 바짝 붙어 보인다.
+   금액 열 오른쪽에만 여백을 조금 더 줘서 사이를 띄운다. */
+#tab-list .voucher-table th:nth-child(9),
+#tab-list .voucher-table td:nth-child(9) { padding-right: 10px; }
 .type-badge { padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
 .t-AP { background: #e1f0ff; color: #004578; }
 .t-AP_IMS { background: #e8eaf6; color: #283593; }
@@ -537,18 +541,18 @@ if (new URLSearchParams(location.search).get('openId')) {
       <table class="voucher-table">
         <thead>
           <tr>
-            <th style="width:30px">번호</th>
+            <th style="width:30px;text-align:center">번호</th>
             <th style="width:96px">신청자</th>
             <th style="width:194px">Title</th>
-            <th style="width:60px">유형</th>
-            <th style="width:96px">BP명</th>
-            <th style="width:119px">Purpose Title</th>
-            <th style="width:119px">Purpose</th>
-            <th style="width:96px;text-align:right">DR(KRW)</th>
-            <th style="width:96px;text-align:right">CR(KRW)</th>
-            <th style="width:80px">상태</th>
-            <th style="width:106px">신청일</th>
-            <th style="width:100px;text-align:center">Withdraw</th>
+            <th style="width:60px;text-align:center">유형</th>
+            <th style="width:84px">BP명</th>
+            <th style="width:140px">Purpose Title</th>
+            <th style="width:142px">Purpose</th>
+            <th style="width:88px;text-align:right">DR(KRW)</th>
+            <th style="width:88px;text-align:right">CR(KRW)</th>
+            <th style="width:72px;text-align:center">상태</th>
+            <th style="width:106px;text-align:center">신청일</th>
+            <th style="width:92px;text-align:center">Withdraw</th>
           </tr>
         </thead>
         <tbody id="list-body"></tbody>
@@ -5657,17 +5661,17 @@ function renderList(){
     return `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
   };
   body.innerHTML=list.map((v,i)=>`<tr onclick="openVoucherSP('${v._spId}','mylist')">
-    <td style="color:#a19f9d;font-size:.73rem">${list.length-i}</td>
+    <td style="color:#a19f9d;font-size:.73rem;text-align:center">${list.length-i}</td>
     <td style="font-size:.73rem;color:#605e5c" title="${escHtmlAttr(v.RequesterEmail||'')}">${v.RequesterEmail||'-'}</td>
     <td style="font-size:.72rem;color:#0078d4" title="${escHtmlAttr(v.Title||'')}">${v.Title||'-'}</td>
-    <td><span class="type-badge t-${v.VoucherType}" style="font-size:.62rem;padding:1px 5px">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span></td>
+    <td style="text-align:center"><span class="type-badge t-${v.VoucherType}" style="font-size:.62rem;padding:1px 5px">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span></td>
     <td style="font-size:.73rem;color:#605e5c" title="${escHtmlAttr(v.BPName||'')}">${escHtml(v.BPName)||'-'}</td>
     <td style="font-size:.73rem" title="${escHtmlAttr(spText(v.PurposeTitle||''))}">${escHtml(spText(v.PurposeTitle))||'-'}</td>
     <td style="font-size:.73rem;color:#605e5c" title="${escHtmlAttr(spText(v.Purpose||''))}">${escHtml(spText(v.Purpose))||'-'}</td>
     <td style="text-align:right;font-weight:700;color:#0078d4;font-size:.73rem" title="${fmtK(v.TotalDR_KRW)}">${fmtK(v.TotalDR_KRW)}</td>
     <td style="text-align:right;font-weight:700;color:#c0392b;font-size:.73rem" title="${fmtK(v.TotalCR_KRW)}">${fmtK(v.TotalCR_KRW)}</td>
-    <td><span class="${stMap[v.Status]||'badge-대기'}" style="font-size:.63rem;padding:1px 6px">${stLabel[v.Status]||v.Status}</span></td>
-    <td style="font-size:.72rem;color:#605e5c">${fmtDate(v.SubmittedDate)}</td>
+    <td style="text-align:center"><span class="${stMap[v.Status]||'badge-대기'}" style="font-size:.63rem;padding:1px 6px">${stLabel[v.Status]||v.Status}</span></td>
+    <td style="font-size:.72rem;color:#605e5c;text-align:center">${fmtDate(v.SubmittedDate)}</td>
     <td onclick="event.stopPropagation()" style="text-align:center">${v.Status==='대기'?`<button onclick="confirmWithdraw('${v._spId}')" style="background:#ef4444;color:#fff;border:none;border-radius:4px;padding:3px 12px;font-size:.75rem;cursor:pointer;font-family:inherit;white-space:nowrap">Withdraw</button>`:''}</td>
   </tr>`).join('');
 }
