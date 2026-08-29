@@ -768,11 +768,17 @@ if (new URLSearchParams(location.search).get('openId')) {
       </div>
 
       <div class="section-title">5. 첨부파일</div>
-      <div style="font-size:12px;color:#605e5c;margin-bottom:8px">세금계산서 또는 Invoice를 첨부해주세요. (최대 20MB)</div>
+      <div style="font-size:12px;color:#605e5c;margin-bottom:8px">
+        세금계산서 또는 Invoice를 첨부해주세요. (최대 20MB)<br>
+        <span style="color:#8a6116">Excel·CSV 파일은 인쇄 범위가 맞는지 확인한 뒤 첨부해 주세요.</span>
+      </div>
       <div class="file-area" onclick="document.getElementById('acc-file-input').click()">
         <input type="file" id="acc-file-input" multiple onchange="onAccFileSelect(event)">
         <div class="hint">📎 클릭하여 파일 첨부 (최대 20MB)</div>
       </div>
+      <!-- 엑셀 계열을 붙였을 때만 나타난다. 결재자가 화면에서 그대로 보게 되므로
+           인쇄 범위가 어긋나 있으면 표가 잘려 읽을 수 없다. -->
+      <div id="xls-layout-note" style="display:none;margin-top:8px;font-size:.72rem;color:#8a6116;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:6px;padding:9px 12px;line-height:1.65"></div>
       <div class="file-list" id="acc-file-list"></div>
 
       <div class="section-title">6. 결재라인 (Authorization)</div>
@@ -3599,8 +3605,27 @@ function onAccFileSelect(e) {
   renderAccFiles();
 }
 function removeAccFile(i){ accFiles.splice(i,1); renderAccFiles(); }
+// 엑셀 계열을 붙였는지 확인하고 안내 배너를 보여 준다.
+// 결재자는 브라우저에서 파일을 그대로 열어 보므로, 인쇄 범위가 어긋나 있으면
+// 표가 여러 장으로 쪼개지거나 잘려 내용을 확인할 수 없다.
+const XLS_EXT = ['xlsx','xls','xlsm','xlsb','csv'];
+function updateXlsLayoutNote(){
+  const el = document.getElementById('xls-layout-note');
+  if(!el) return;
+  const hits = (accFiles||[]).filter(f =>
+    XLS_EXT.includes((f.name||'').split('.').pop().toLowerCase()));
+  if(!hits.length){ el.style.display='none'; el.innerHTML=''; return; }
+  el.style.display='block';
+  el.innerHTML =
+      '<div style="font-weight:700;margin-bottom:3px">⚠️ Excel 파일은 페이지 레이아웃을 확인해 주세요</div>'
+    + '<div>결재자는 파일을 그대로 열어 봅니다. 인쇄 범위가 맞지 않으면 표가 잘리거나 여러 장으로 쪼개져 내용을 확인하기 어렵습니다.</div>'
+    + '<div style="margin-top:5px">인쇄 영역 · 용지 방향 · 배율(한 페이지에 맞추기)을 확인한 뒤 저장해 주세요.</div>'
+    + '<div style="margin-top:5px;color:#a37a1e">대상 파일 : ' + hits.map(f=>escHtml(f.name)).join(', ') + '</div>';
+}
+
 function renderAccFiles(){
   const totalMB=accFiles.reduce((s,f)=>s+f.size,0)/1024/1024;
+  updateXlsLayoutNote();
   document.getElementById('acc-file-list').innerHTML = accFiles.map((f,i)=>
     `<div class="file-item"><span>📄 ${f.name} <span style="color:#a19f9d">(${(f.size/1024/1024).toFixed(2)}MB)</span></span><button onclick="removeAccFile(${i})">✕</button></div>`
   ).join('')+(accFiles.length?`<div style="font-size:11px;color:#605e5c;text-align:right;margin-top:4px">합계: ${totalMB.toFixed(2)}MB / 20MB</div>`:'');
