@@ -282,6 +282,16 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 .voucher-table th { background: #f3f2f1; padding: 9px 10px; text-align: left; border-bottom: 2px solid #edebe9; font-size: 12px; font-weight: 600; color: #605e5c; white-space: nowrap; }
 .voucher-table td { padding: 10px 10px; border-bottom: 1px solid #edebe9; vertical-align: middle; white-space: nowrap; }
 .voucher-table tr:hover td { background: #f0f6ff; cursor: pointer; }
+/* 내 전표 목록은 열이 12개라 지정 폭을 무시하고 내용대로 늘어나 가로 스크롤이 생겼다.
+   table-layout 을 고정하면 표가 래퍼를 넘지 않아 끌지 않고 모든 열을 볼 수 있다.
+   (관리자 탭 1b4f647 · 작성 탭 회계표 3c1529e 와 같은 방식) */
+#tab-list .voucher-table { table-layout: fixed; width: 100%; }
+#tab-list .voucher-table th,
+#tab-list .voucher-table td { padding-left: 7px; padding-right: 7px; }
+/* 폭은 헤더가 정한다(64bee52). 헤더가 nowrap 이면 긴 제목이 열을 밀어내므로 줄바꿈을 허용한다. */
+#tab-list .voucher-table th { font-size: .7rem; white-space: normal; line-height: 1.25; }
+/* 지정 폭을 넘는 내용은 말줄임으로 접는다. 전체 내용은 마우스를 올리면 보인다. */
+#tab-list .voucher-table td { overflow: hidden; text-overflow: ellipsis; }
 .type-badge { padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
 .t-AP { background: #e1f0ff; color: #004578; }
 .t-AP_IMS { background: #e8eaf6; color: #283593; }
@@ -523,7 +533,22 @@ if (new URLSearchParams(location.search).get('openId')) {
       </div>
       <div style="overflow-x:auto">
       <table class="voucher-table">
-        <thead><tr><th style="width:40px">번호</th><th>신청자</th><th>Title</th><th>유형</th><th>BP명</th><th>Purpose Title</th><th>Purpose</th><th style="text-align:right">DR(KRW Total)</th><th style="text-align:right">CR(KRW Total)</th><th>상태</th><th>신청일</th><th style="width:90px;text-align:center">Withdraw</th></tr></thead>
+        <thead>
+          <tr>
+            <th style="width:34px">번호</th>
+            <th style="width:118px">신청자</th>
+            <th style="width:146px">Title</th>
+            <th style="width:68px">유형</th>
+            <th style="width:106px">BP명</th>
+            <th style="width:112px">Purpose Title</th>
+            <th style="width:100px">Purpose</th>
+            <th style="width:100px;text-align:right">DR(KRW)</th>
+            <th style="width:100px;text-align:right">CR(KRW)</th>
+            <th style="width:86px">상태</th>
+            <th style="width:112px">신청일</th>
+            <th style="width:110px;text-align:center">Withdraw</th>
+          </tr>
+        </thead>
         <tbody id="list-body"></tbody>
       </table>
       </div>
@@ -5625,17 +5650,17 @@ function renderList(){
     return `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
   };
   body.innerHTML=list.map((v,i)=>`<tr onclick="openVoucherSP('${v._spId}','mylist')">
-    <td style="color:#a19f9d;font-size:.78rem">${list.length-i}</td>
-    <td style="font-size:.78rem;color:#605e5c">${v.RequesterEmail||'-'}</td>
-    <td style="font-size:.75rem;color:#0078d4">${v.Title||'-'}</td>
-    <td><span class="type-badge t-${v.VoucherType}">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span></td>
-    <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem;color:#605e5c" title="${escHtmlAttr(v.BPName||'')}">${escHtml(v.BPName)||'-'}</td>
-    <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem" title="${escHtmlAttr(spText(v.PurposeTitle||''))}">${escHtml(spText(v.PurposeTitle))||'-'}</td>
-    <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem" title="${escHtmlAttr(spText(v.Purpose||''))}">${escHtml(spText(v.Purpose))||'-'}</td>
-    <td style="text-align:right;font-weight:700;color:#0078d4;font-size:.78rem">${fmtK(v.TotalDR_KRW)}</td>
-    <td style="text-align:right;font-weight:700;color:#c0392b;font-size:.78rem">${fmtK(v.TotalCR_KRW)}</td>
-    <td><span class="${stMap[v.Status]||'badge-대기'}">${stLabel[v.Status]||v.Status}</span></td>
-    <td style="font-size:.78rem;color:#605e5c">${fmtDate(v.SubmittedDate)}</td>
+    <td style="color:#a19f9d;font-size:.73rem">${list.length-i}</td>
+    <td style="font-size:.73rem;color:#605e5c" title="${escHtmlAttr(v.RequesterEmail||'')}">${v.RequesterEmail||'-'}</td>
+    <td style="font-size:.72rem;color:#0078d4" title="${escHtmlAttr(v.Title||'')}">${v.Title||'-'}</td>
+    <td><span class="type-badge t-${v.VoucherType}" style="font-size:.62rem;padding:1px 5px">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span></td>
+    <td style="font-size:.73rem;color:#605e5c" title="${escHtmlAttr(v.BPName||'')}">${escHtml(v.BPName)||'-'}</td>
+    <td style="font-size:.73rem" title="${escHtmlAttr(spText(v.PurposeTitle||''))}">${escHtml(spText(v.PurposeTitle))||'-'}</td>
+    <td style="font-size:.73rem;color:#605e5c" title="${escHtmlAttr(spText(v.Purpose||''))}">${escHtml(spText(v.Purpose))||'-'}</td>
+    <td style="text-align:right;font-weight:700;color:#0078d4;font-size:.73rem" title="${fmtK(v.TotalDR_KRW)}">${fmtK(v.TotalDR_KRW)}</td>
+    <td style="text-align:right;font-weight:700;color:#c0392b;font-size:.73rem" title="${fmtK(v.TotalCR_KRW)}">${fmtK(v.TotalCR_KRW)}</td>
+    <td><span class="${stMap[v.Status]||'badge-대기'}" style="font-size:.63rem;padding:1px 6px">${stLabel[v.Status]||v.Status}</span></td>
+    <td style="font-size:.72rem;color:#605e5c">${fmtDate(v.SubmittedDate)}</td>
     <td onclick="event.stopPropagation()" style="text-align:center">${v.Status==='대기'?`<button onclick="confirmWithdraw('${v._spId}')" style="background:#ef4444;color:#fff;border:none;border-radius:4px;padding:3px 12px;font-size:.75rem;cursor:pointer;font-family:inherit;white-space:nowrap">Withdraw</button>`:''}</td>
   </tr>`).join('');
 }
