@@ -5681,16 +5681,22 @@ function renderB1ChangeLog(logJson) {
   let logs = [];
   if(logJson) { try { logs = JSON.parse(logJson); } catch(e){ logs=[]; } }
   if(!logs.length){ el.innerHTML=''; return; }
-  const postColor = p => p==='완료' ? '#107c10' : '#a4262c';
+  // Posting 값은 SharePoint 에 '완료' / '미완료' 로 저장된다(saveB1Doc).
+  // 저장값을 바꾸면 예전 기록과 어긋나므로 화면에 그릴 때만 영문으로 옮긴다.
+  // 바로 위 Accounting Approver Change History 가 영문이라 표기를 맞춘다.
+  const isDone = p => String(p||'').trim() === '완료';
+  const postColor = p => isDone(p) ? '#107c10' : '#a4262c';
+  const postText  = p => isDone(p) ? 'Completed' : 'Not posted';
   el.innerHTML =
-    '<div style="font-size:.75rem;font-weight:700;color:#0078d4;padding:5px 9px;background:#f0f6ff;border-left:3px solid #0078d4;border-radius:3px;margin-bottom:6px">🔄 B1 Doc No. / Posting 변경 이력</div>' +
+    '<div style="font-size:.75rem;font-weight:700;color:#0078d4;padding:5px 9px;background:#f0f6ff;border-left:3px solid #0078d4;border-radius:3px;margin-bottom:6px">'
+    + '🔄 B1 Doc No. / Posting Change History (' + logs.length + ')</div>' +
     '<div id="b1-change-log-list" style="background:#f0f6ff;border:1px solid #c7e0f4;border-radius:6px;overflow:hidden;max-height:220px;overflow-y:auto">' +
     logs.map((log,i,arr)=>
       '<div style="padding:8px 12px;'+(i===arr.length-1?'':'border-bottom:1px solid #c7e0f4')+'">' +
         '<div style="font-size:.68rem;color:#a19f9d">'+escHtml(log.changedAt||'')+'</div>' +
-        '<div style="font-size:.72rem;color:#323130;margin-top:2px">변경자: <b>'+escHtml(log.changedBy||'')+'</b></div>' +
+        '<div style="font-size:.72rem;color:#323130;margin-top:3px">Changed by: <b>'+escHtml(log.changedBy||'')+'</b></div>' +
         '<div style="font-size:.72rem;color:#323130;margin-top:2px">B1 Doc No.: <span style="color:#605e5c">'+escHtml(log.fromB1||'-')+'</span> → <span style="font-weight:700;color:#0078d4">'+escHtml(log.toB1||'-')+'</span></div>' +
-        '<div style="font-size:.72rem;color:#323130;margin-top:2px">Posting: <span style="color:'+postColor(log.fromPosting||'미완료')+';font-weight:600">'+escHtml(log.fromPosting||'미완료')+'</span> → <span style="font-weight:700;color:'+postColor(log.toPosting||'미완료')+'">'+escHtml(log.toPosting||'미완료')+'</span></div>' +
+        '<div style="font-size:.72rem;color:#323130;margin-top:2px">Posting status: <span style="color:'+postColor(log.fromPosting)+';font-weight:600">'+postText(log.fromPosting)+'</span> → <span style="font-weight:700;color:'+postColor(log.toPosting)+'">'+postText(log.toPosting)+'</span></div>' +
       '</div>'
     ).join('') +
     '</div>';
