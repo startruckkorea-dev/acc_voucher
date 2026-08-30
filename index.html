@@ -3775,18 +3775,30 @@ function updateXlsLayoutNote(){
   // 공식 양식 PDF 는 첨부 Excel 을 Graph 의 ?format=pdf 로 변환해 뒤에 붙이는데,
   // 이때 파일에 저장된 페이지 설정이 그대로 쓰인다. 화면이 아니라 인쇄 모양이 증빙에 남는다.
   // 그 사실을 첫 줄에 두고, 나머지는 실제로 손댈 것만 짧게 남긴다.
+  // 가장 확실한 방법은 사용자가 직접 PDF 로 저장해 붙이는 것이다.
+  // 그러면 변환 단계가 없어 보이는 그대로 증빙에 남는다. 이걸 권장으로 맨 앞에 두고,
+  // 아래 체크리스트는 그래도 Excel 을 그대로 붙일 때의 대안으로 내린다.
   el.innerHTML =
       '<div style="font-weight:700;font-size:.74rem">⚠️ 첨부한 Excel의 인쇄 모양 확인이 필요합니다</div>'
     + '<div style="margin-top:2px">공식 양식 PDF 출력 시 첨부 Excel 이 <b>저장된 페이지 설정 그대로</b> '
     + 'PDF 로 변환되어 붙습니다. 화면이 아니라 인쇄 모양이 증빙으로 남습니다.</div>'
-    + '<ul style="margin:5px 0 0;padding-left:15px;line-height:1.45">'
+    // 권장 — 배너 안에서 한 단계 도드라지게 왼쪽 띠를 준다
+    + '<div style="display:flex;align-items:flex-start;gap:7px;margin-top:7px;'
+    + 'background:#fffdf6;border-left:3px solid #d9a441;border-radius:0 6px 6px 0;padding:6px 10px">'
+    + '<span style="flex-shrink:0;background:#8a6116;color:#fff;border-radius:4px;'
+    + 'padding:1px 7px;font-size:.62rem;font-weight:700;letter-spacing:.02em;line-height:1.6">권장</span>'
+    + '<span style="line-height:1.45"><b>Excel 을 PDF 로 저장한 뒤 첨부</b>하시면 변환 단계가 없어 '
+    + '보이는 그대로 증빙에 남습니다.</span>'
+    + '</div>'
+    + '<div style="margin-top:7px;font-weight:600;color:#8a6116">Excel 을 그대로 첨부하실 경우</div>'
+    + '<ul style="margin:3px 0 0;padding-left:15px;line-height:1.45">'
     + tip('첨부 전 <b>인쇄 미리보기</b>로 증빙이 온전히 나오는지 확인')
     + tip('<b>페이지 나누기 미리보기</b>로 잘리는 열 확인 — 잘리면 「<b>모든 열을 한 페이지에 맞추기</b>」')
     + tip('여러 장이면 <b>머리글 행 반복</b> 지정 '
         + '<span style="color:#8a6116">(페이지 레이아웃 → 인쇄 제목 → 반복할 행)</span>')
     + tip('설정은 <b>시트마다 따로</b> — 시트가 여럿이면 각각 확인')
     + '</ul>'
-    + '<div style="margin-top:6px;padding-top:5px;border-top:1px dashed #ecd9a8">'
+    + '<div style="margin-top:7px;padding-top:5px;border-top:1px dashed #ecd9a8">'
     + '<span style="color:#8a6116">대상</span> &nbsp;' + list + '</div>';
 }
 
