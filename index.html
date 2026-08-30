@@ -5681,12 +5681,13 @@ function renderB1ChangeLog(logJson) {
   let logs = [];
   if(logJson) { try { logs = JSON.parse(logJson); } catch(e){ logs=[]; } }
   if(!logs.length){ el.innerHTML=''; return; }
-  // Posting 값은 SharePoint 에 '완료' / '미완료' 로 저장된다(saveB1Doc).
-  // 저장값을 바꾸면 예전 기록과 어긋나므로 화면에 그릴 때만 영문으로 옮긴다.
-  // 바로 위 Accounting Approver Change History 가 영문이라 표기를 맞춘다.
+  // Posting 상태값은 화면 어디서나 '완료' / '미완료' 로 쓴다.
+  //   관리자 목록 Posting 열(5460행) · 상세 화면 Posting 표시(5759행) · 여기
+  // 라벨(Changed by · Posting status)만 영문이고 값은 한글이다.
+  // 이력에서만 Completed / Not posted 로 바꿨더니 같은 값이 화면마다 달리 보여 되돌렸다.
   const isDone = p => String(p||'').trim() === '완료';
   const postColor = p => isDone(p) ? '#107c10' : '#a4262c';
-  const postText  = p => isDone(p) ? 'Completed' : 'Not posted';
+  const postText  = p => isDone(p) ? '완료' : '미완료';
   el.innerHTML =
     '<div style="font-size:.75rem;font-weight:700;color:#0078d4;padding:5px 9px;background:#f0f6ff;border-left:3px solid #0078d4;border-radius:3px;margin-bottom:6px">'
     + '🔄 B1 Doc No. / Posting Change History (' + logs.length + ')</div>' +
