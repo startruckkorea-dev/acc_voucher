@@ -315,6 +315,16 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
    금액 열 오른쪽에만 여백을 조금 더 줘서 사이를 띄운다. */
 #tab-list .voucher-table th:nth-child(9),
 #tab-list .voucher-table td:nth-child(9) { padding-right: 10px; }
+/* 결재함도 같은 방식으로 고정한다. 12개 열이 지정 폭을 무시하고 늘어나
+   가로 스크롤이 생기던 것을 막는다(내 전표 목록 f6ba550 과 동일). */
+#tab-appr .list-table { table-layout: fixed; width: 100%; }
+#tab-appr .list-table th,
+#tab-appr .list-table td { padding-left: 4px; padding-right: 4px; }
+#tab-appr .list-table th { font-size: .7rem; white-space: normal; line-height: 1.25; }
+#tab-appr .list-table td { overflow: hidden; text-overflow: ellipsis; }
+/* 오른쪽 정렬 금액과 가운데 정렬 배지가 이웃하는 자리만 따로 띄운다 */
+#tab-appr .list-table th:nth-child(9),
+#tab-appr .list-table td:nth-child(9) { padding-right: 10px; }
 .type-badge { padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
 .t-AP { background: #e1f0ff; color: #004578; }
 .t-AP_IMS { background: #e8eaf6; color: #283593; }
@@ -871,7 +881,7 @@ if (new URLSearchParams(location.search).get('openId')) {
   <div class="card" style="padding:0;overflow-x:auto">
     <table class="list-table">
       <thead><tr>
-        <th style="width:40px">번호</th><th>신청자</th><th>Title</th><th>유형</th><th>BP명</th><th>Purpose Title</th><th>Purpose</th><th style="text-align:right">DR(KRW Total)</th><th style="text-align:right">CR(KRW Total)</th><th>Status</th><th>신청일</th><th>처리</th>
+        <th style="width:30px;text-align:center">번호</th><th style="width:92px">신청자</th><th style="width:196px">Title</th><th style="width:60px;text-align:center">유형</th><th style="width:84px">BP명</th><th style="width:128px">Purpose Title</th><th style="width:124px">Purpose</th><th style="width:88px;text-align:right">DR(KRW)</th><th style="width:88px;text-align:right">CR(KRW)</th><th style="width:72px;text-align:center">Status</th><th style="width:106px">신청일</th><th style="width:124px;text-align:center">처리</th>
       </tr></thead>
       <tbody id="appr-body">
         <tr><td colspan="12" style="text-align:center;padding:40px;color:#a19f9d">결재 대기 중인 전표가 없습니다.</td></tr>
@@ -4768,17 +4778,17 @@ function renderApprovalQueue() {
     const v = item._voucher;
     if(!v._spId) console.warn('[ApprQueue] _voucher 매칭 실패 - RequestID:', item.RequestID);
     return `<tr onclick="openVoucherSP('${v._spId}','approval')" style="cursor:pointer">
-      <td style="color:#a19f9d;font-size:.78rem">${i+1}</td>
-      <td style="font-size:.78rem;color:#605e5c">${v.RequesterEmail||'-'}</td>
-      <td style="font-size:.75rem;color:#0078d4">${v.Title||'-'}</td>
-      <td><span class="type-badge t-${v.VoucherType}">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span></td>
-      <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem;color:#605e5c" title="${escHtmlAttr(v.BPName||'')}">${escHtml(v.BPName)||'-'}</td>
-      <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem" title="${escHtmlAttr(spText(v.PurposeTitle||''))}">${escHtml(spText(v.PurposeTitle))||'-'}</td>
-      <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem">${escHtml(spText(v.Purpose))||'-'}</td>
-      <td style="text-align:right;font-weight:700;color:#0078d4;font-size:.78rem">${fmtK(v.TotalDR_KRW)}</td>
-      <td style="text-align:right;font-weight:700;color:#c0392b;font-size:.78rem">${fmtK(v.TotalCR_KRW)}</td>
-      <td><span class="${stMap[v.Status]||'badge-대기'}">${stLabel[v.Status]||v.Status}</span></td>
-      <td style="font-size:.78rem;color:#605e5c">${fmtDate(v.SubmittedDate)}</td>
+      <td style="color:#a19f9d;font-size:.73rem;text-align:center">${i+1}</td>
+      <td style="font-size:.73rem;color:#605e5c" title="${escHtmlAttr(v.RequesterEmail||'')}">${v.RequesterEmail||'-'}</td>
+      <td style="font-size:.72rem;color:#0078d4" title="${escHtmlAttr(v.Title||'')}">${v.Title||'-'}</td>
+      <td style="text-align:center"><span class="type-badge t-${v.VoucherType}" style="font-size:.62rem;padding:1px 5px">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span></td>
+      <td style="font-size:.73rem;color:#605e5c" title="${escHtmlAttr(v.BPName||'')}">${escHtml(v.BPName)||'-'}</td>
+      <td style="font-size:.73rem" title="${escHtmlAttr(spText(v.PurposeTitle||''))}">${escHtml(spText(v.PurposeTitle))||'-'}</td>
+      <td style="font-size:.73rem" title="${escHtmlAttr(spText(v.Purpose||''))}">${escHtml(spText(v.Purpose))||'-'}</td>
+      <td style="text-align:right;font-weight:700;color:#0078d4;font-size:.73rem" title="${fmtK(v.TotalDR_KRW)}">${fmtK(v.TotalDR_KRW)}</td>
+      <td style="text-align:right;font-weight:700;color:#c0392b;font-size:.73rem" title="${fmtK(v.TotalCR_KRW)}">${fmtK(v.TotalCR_KRW)}</td>
+      <td style="text-align:center"><span class="${stMap[v.Status]||'badge-대기'}" style="font-size:.63rem;padding:1px 6px">${stLabel[v.Status]||v.Status}</span></td>
+      <td style="font-size:.72rem;color:#605e5c">${fmtDate(v.SubmittedDate)}</td>
       <td onclick="event.stopPropagation()" style="text-align:center;white-space:nowrap">
         <button class="btn-approve" style="padding:4px 10px;font-size:.72rem;background:#107c10;color:#fff;border:none;border-radius:4px;cursor:pointer;margin-right:4px" onclick="showApprConfirm(${item._apprId},'승인',${item.RequestID},'${v._aprCode||''}')">승인</button>
         <button class="btn-reject" style="padding:4px 10px;font-size:.72rem;background:#a4262c;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="showApprConfirm(${item._apprId},'반려',${item.RequestID},'${v._aprCode||''}')">반려</button>
