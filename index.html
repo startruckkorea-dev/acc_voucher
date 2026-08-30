@@ -3715,24 +3715,25 @@ function updateXlsLayoutNote(){
   // 예전 문구는 「한 페이지에 맞추기」를 그냥 요구했다. 시트가 여럿이거나 행이 많으면
   // 애초에 한 장에 들어가지 않아, 받는 쪽에서는 지킬 수 없는 안내였다.
   // 지금은 「한 장에 못 넣어도 괜찮다」를 먼저 말하고, 그때 무엇을 맞추면 되는지를 적는다.
-  const tip = (t) =>
-    '<li style="margin-top:3px">' + t + '</li>';
+  const tip = (t) => '<li>' + t + '</li>';
 
+  // 「인쇄 설정을 확인해 달라」만으로는 왜 필요한지 알 수 없어 그냥 지나친다.
+  // 공식 양식 PDF 는 첨부 Excel 을 Graph 의 ?format=pdf 로 변환해 뒤에 붙이는데,
+  // 이때 파일에 저장된 페이지 설정이 그대로 쓰인다. 화면이 아니라 인쇄 모양이 증빙에 남는다.
+  // 그 사실을 첫 줄에 두고, 나머지는 실제로 손댈 것만 짧게 남긴다.
   el.innerHTML =
-      '<div style="font-weight:700;font-size:.75rem">📄 첨부하신 Excel의 인쇄 모양을 한 번만 봐주세요</div>'
-    + '<div style="margin-top:3px">결재자와 회계 담당자는 받은 파일을 그대로 열거나 인쇄해서 봅니다. '
-    + '저장하실 때의 모양이 그대로 전달됩니다.</div>'
-    + '<ul style="margin:6px 0 0;padding-left:16px;line-height:1.55">'
-    + tip('용지 방향은 <b>가로</b>, 인쇄 영역은 실제 내용 범위로 잡아 주세요.')
-    + tip('<b>한 장에 다 넣지 않으셔도 됩니다.</b> 대신 「<b>모든 열을 한 페이지에 맞추기</b>」만 켜 두시면, '
-        + '세로로 몇 장이 되더라도 열이 잘리지 않습니다.')
-    + tip('여러 장이 된다면 <b>머리글 행 반복</b>을 지정해 주세요. '
-        + '<span style="color:#8a6116">페이지 레이아웃 → 인쇄 제목 → 반복할 행</span>')
-    + tip('<b>설정은 시트마다 따로</b>입니다. 시트가 여러 개면 각각 확인이 필요합니다.')
-    + tip('저장 전 <b>페이지 나누기 미리보기</b>로 잘리는 열이 없는지 보시면 확실합니다.')
+      '<div style="font-weight:700;font-size:.74rem">⚠️ 첨부한 Excel의 인쇄 모양 확인이 필요합니다</div>'
+    + '<div style="margin-top:2px">공식 양식 PDF 출력 시 첨부 Excel 이 <b>저장된 페이지 설정 그대로</b> '
+    + 'PDF 로 변환되어 붙습니다. 화면이 아니라 인쇄 모양이 증빙으로 남습니다.</div>'
+    + '<ul style="margin:5px 0 0;padding-left:15px;line-height:1.45">'
+    + tip('첨부 전 <b>인쇄 미리보기</b>로 증빙이 온전히 나오는지 확인')
+    + tip('<b>페이지 나누기 미리보기</b>로 잘리는 열 확인 — 잘리면 「<b>모든 열을 한 페이지에 맞추기</b>」')
+    + tip('여러 장이면 <b>머리글 행 반복</b> 지정 '
+        + '<span style="color:#8a6116">(페이지 레이아웃 → 인쇄 제목 → 반복할 행)</span>')
+    + tip('설정은 <b>시트마다 따로</b> — 시트가 여럿이면 각각 확인')
     + '</ul>'
-    + '<div style="margin-top:7px;padding-top:6px;border-top:1px dashed #ecd9a8">'
-    + '<span style="color:#8a6116">확인 대상</span> &nbsp;' + list + '</div>';
+    + '<div style="margin-top:6px;padding-top:5px;border-top:1px dashed #ecd9a8">'
+    + '<span style="color:#8a6116">대상</span> &nbsp;' + list + '</div>';
 }
 
 function renderAccFiles(){
