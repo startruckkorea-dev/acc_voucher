@@ -246,11 +246,28 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 #lines-expand .lx-close{background:none;border:1px solid #d2d0ce;border-radius:6px;width:30px;height:30px;
   font-size:1rem;color:#605e5c;cursor:pointer;line-height:1;flex-shrink:0}
 #lines-expand .lx-close:hover{background:#f3f2f1}
-#lines-expand .lx-body{overflow:auto;padding:16px 20px;flex:1}
-#lines-expand table{width:100%;border-collapse:collapse;font-size:.82rem}
-#lines-expand thead th{position:sticky;top:0;background:#f3f2f1;padding:9px 10px;text-align:left;
-  color:#605e5c;font-weight:700;font-size:.74rem;white-space:nowrap;z-index:1}
-#lines-expand tbody td{padding:8px 10px;border-bottom:1px solid #f3f2f1;vertical-align:top}
+/* 머리글을 맨 위에 붙여 두려면 스크롤 영역에 위쪽 여백이 없어야 한다.
+   여백이 있으면 그만큼의 띠가 머리글 위에 남아 직전 줄이 비쳐 보인다. */
+#lines-expand .lx-body{overflow:auto;padding:0;flex:1}
+/* 원본 표는 border-collapse:collapse 인데, 그 상태에서는 thead th 의 position:sticky 가
+   브라우저에 따라 무시되거나 어긋난다. 확대 보기에서는 separate 로 바꾸고
+   칸 구분선을 각 셀의 box-shadow 로 그린다(선이 셀과 함께 움직인다). */
+#lines-expand .lx-table{width:100%;border-collapse:separate;border-spacing:0;font-size:.8rem}
+#lines-expand .lx-table thead th{position:sticky;top:0;z-index:5;
+  background:#eef1f5;color:#3b4453;font-weight:700;font-size:.72rem;letter-spacing:.01em;
+  white-space:nowrap;text-align:left;padding:11px 12px;
+  box-shadow:inset 0 -1px 0 #cbd2da, 0 3px 6px rgba(0,0,0,.06)}
+/* 본문 셀에 배경을 준다. 배경이 없으면 스크롤된 줄이 머리글 뒤로 비쳐 보인다. */
+#lines-expand .lx-table tbody td{background:#fff;padding:9px 12px;vertical-align:top;border:0;
+  box-shadow:inset 0 -1px 0 #f0efee;line-height:1.45}
+#lines-expand .lx-table tbody tr:nth-child(even) td{background:#fafbfc}
+#lines-expand .lx-table tbody tr:hover td{background:#f0f6ff}
+/* No 열은 좁게 가운데, 금액 열은 숫자 폭을 고정해 자릿수가 세로로 맞게 */
+#lines-expand .lx-table th:first-child,
+#lines-expand .lx-table td:first-child{width:52px;text-align:center;color:#a19f9d;padding-left:18px}
+#lines-expand .lx-table th:last-child,
+#lines-expand .lx-table td:last-child{padding-right:20px}
+#lines-expand .lx-table td:nth-last-child(-n+2){font-variant-numeric:tabular-nums;white-space:nowrap}
 #lines-expand .lx-foot{padding:12px 20px;border-top:1px solid #edebe9;background:#faf9f8;flex-shrink:0}
 @media print{ #lines-expand.open{position:static;background:none;padding:0}
   #lines-expand .lx-box{max-width:none;max-height:none;box-shadow:none}
@@ -3265,8 +3282,21 @@ function openLinesExpand() {
   const clone = table.cloneNode(true);
   clone.style.minWidth = '';          // 원본의 min-width:800px 은 확대 보기에서 불필요
   clone.style.fontSize = '';
+  // 원본은 border-collapse:collapse 다. 그대로 두면 머리글의 position:sticky 가
+  // 어긋나 본문 줄 사이에 끼어 보인다. 확대 보기에서는 separate 로 바꾼다.
+  clone.style.borderCollapse = 'separate';
+  clone.style.borderSpacing = '0';
+  clone.classList.add('lx-table');
+  // 셀에 박힌 인라인 여백·글자 크기를 걷어내 확대 보기 CSS 가 적용되게 한다.
+  // 정렬(text-align)과 색은 금액 열 오른쪽 정렬 등 의미가 있으므로 그대로 둔다.
+  clone.querySelectorAll('th,td').forEach(c => { c.style.padding = ''; c.style.fontSize = ''; });
+  // 머리글 배경은 tr 이 아니라 th 에 있어야 스크롤될 때 뒤가 비치지 않는다.
+  const htr = clone.querySelector('thead tr');
+  if (htr) { htr.style.background = ''; }
+  clone.querySelectorAll('thead th').forEach(c => { c.style.color = ''; c.style.fontWeight = ''; });
   body.innerHTML = '';
   body.appendChild(clone);
+  body.scrollTop = 0;                 // 이전에 열었던 위치가 남지 않게
 
   // 합계 줄(표 바로 다음 형제)도 함께 보여준다
   const totals = table.parentElement && table.parentElement.nextElementSibling;
