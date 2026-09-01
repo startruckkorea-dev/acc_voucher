@@ -5190,6 +5190,11 @@ async function accReloadAdmin() {
   }
 }
 
+// 결재행이 아직 안 왔는지. 관리자 목록은 전표를 먼저 그리고 결재행을 뒤에서 받는데,
+// 그 사이에는 「신청자 본인 건」 만 세어져 숫자가 9 → 75 로 바뀐다.
+// 틀린 숫자를 잠깐이라도 보여 주지 않도록, 준비되기 전에는 「…」 로 두고 누르지 못하게 한다.
+let _accLineReady = false;
+
 function accRenderQuickBar() {
   const bar = document.getElementById('acc-quick-bar');
   if (!bar) return;
@@ -5207,14 +5212,18 @@ function accRenderQuickBar() {
     const on    = _accQuickView === email;
     const rel   = rows.filter(v => accRelatedTo(v, email));
     const todo  = rel.filter(v => (v._curEmail || '') === email).length;
-    return '<button onclick="accSetQuickView(\'' + email + '\')" title="' + escHtmlAttr(full + ' · ' + who) + '"'
+    // 결재행이 오기 전에는 숫자 대신 「…」. 누르면 잘못된 목록이 보이므로 클릭도 막는다.
+    const _wait = !_accLineReady;
+    return '<button ' + (_wait ? 'disabled' : 'onclick="accSetQuickView(\'' + email + '\')"')
+      + ' title="' + escHtmlAttr(full + ' · ' + who + (_wait ? ' (집계 중)' : '')) + '"'
       + ' style="display:inline-flex;align-items:center;gap:7px;padding:5px 12px 5px 11px;border-radius:18px;'
-      + 'cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .14s;'
+      + 'font-family:inherit;white-space:nowrap;transition:all .14s;'
+      + (_wait ? 'cursor:default;opacity:.55;' : 'cursor:pointer;')
       + (on ? 'background:' + color + ';border:1px solid ' + color + ';box-shadow:0 2px 6px ' + color + '40'
             : 'background:#fff;border:1px solid #e2e8f0')
       + '">'
       + '<span style="font-size:.74rem;font-weight:600;' + (on ? 'color:#fff' : 'color:#334155') + '">' + escHtml(who) + '</span>'
-      + '<span style="font-size:.72rem;font-weight:700;' + (on ? 'color:rgba(255,255,255,.85)' : 'color:#94a3b8') + '">' + rel.length + '</span>'
+      + '<span style="font-size:.72rem;font-weight:700;' + (on ? 'color:rgba(255,255,255,.85)' : 'color:#94a3b8') + '">' + (_wait ? '…' : rel.length) + '</span>'
       + (todo
           ? '<span style="display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;'
             + 'border-radius:9px;font-size:.61rem;font-weight:800;'
@@ -5279,6 +5288,7 @@ async function loadAdminList() {
     // 전표만으로 표를 먼저 그린다. 결재선이 아직 없으면 「담당자별 빠른 보기」 만
     // 비어 있고 목록·필터·검색은 모두 정상으로 동작한다.
     adminListRaw.forEach(v => { v._line = []; v._curEmail = ''; });
+    _accLineReady = false;              // 아직 결재행이 없다 — 칩은 「…」 로 나온다
     _accMyRoles = accDetectMyRoles();
     applyAdminFilters();
 
@@ -5305,6 +5315,7 @@ async function loadAdminList() {
       v._curEmail = cur ? cur.email : '';
     });
 
+    _accLineReady = true;               // 결재행이 도착했다 — 이제 실제 숫자를 보여 준다
     _accMyRoles = accDetectMyRoles();
     accRenderQuickBar();
 
