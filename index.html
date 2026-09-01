@@ -5252,26 +5252,38 @@ async function loadAdminList() {
     const REQ_FIELDS = 'Title,VoucherType,Status,RequesterEmail,BPName,PurposeTitle,'
                      + 'Purpose,TotalDR_KRW,TotalCR_KRW,SubmittedDate,B1DocNo';
     const APR_FIELDS = 'RequestID,ApprovalOrder,ApproverRole,ApproverName,ApproverEmail,Status';
-    const [data, _aprAll] = await Promise.all([
-      apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_REQUESTS}/items`
-             + `?expand=fields(select=${REQ_FIELDS})&$top=999`),
-      (async () => {
-        const out = [];
-        try {
-          await _forEachAprVolume(async (vol) => {
-            const d = await apiAll(`${GRAPH}/sites/${siteId}/lists/${vol.id}/items`
-                                   + `?expand=fields(select=${APR_FIELDS})&$top=999`);
-            out.push(...d.value);
-            return [];
-          });
-        } catch(e) { console.warn('[관리자] 결재 정보 조회 실패:', e && e.message); }
-        return out;
-      })(),
-    ]);
+    // 결재행은 전표의 5~6배다(전표 한 장에 결재자가 5~6명). 세대가 둘이면 그 두 배다.
+    // 둘을 함께 기다리면 표가 나오기까지 그만큼 늦어진다.
+    // 전표만 먼저 받아 표를 그리고, 결재행은 뒤에서 받아 채운다.
+    // 표는 바로 보이고, 담당자별 빠른 보기의 숫자만 잠깐 뒤에 나타난다.
+    const _aprPromise = (async () => {
+      const out = [];
+      try {
+        await _forEachAprVolume(async (vol) => {
+          const d = await apiAll(`${GRAPH}/sites/${siteId}/lists/${vol.id}/items`
+                                 + `?expand=fields(select=${APR_FIELDS})&$top=999`);
+          out.push(...d.value);
+          return [];
+        });
+      } catch(e) { console.warn('[관리자] 결재 정보 조회 실패:', e && e.message); }
+      return out;
+    })();
+
+    const data = await apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_REQUESTS}/items`
+           + `?expand=fields(select=${REQ_FIELDS})&$top=999`);
 
     adminListRaw = data.value
       .map(item=>({_spId:item.id,...item.fields}))
       .sort((a,b)=>new Date(b.SubmittedDate||0)-new Date(a.SubmittedDate||0));
+
+    // 전표만으로 표를 먼저 그린다. 결재선이 아직 없으면 「담당자별 빠른 보기」 만
+    // 비어 있고 목록·필터·검색은 모두 정상으로 동작한다.
+    adminListRaw.forEach(v => { v._line = []; v._curEmail = ''; });
+    _accMyRoles = accDetectMyRoles();
+    applyAdminFilters();
+
+    // 여기서부터는 결재행이 도착한 뒤에 한다.
+    const _aprAll = await _aprPromise;
 
     // 읽어 둔 결재행을 전표별로 묶는다. 담당자별 빠른 보기에서
     // 「누가 결재선에 있는지」와 「지금 누구 차례인지」를 판단하는 데 쓴다.
@@ -5311,18 +5323,25 @@ async function loadAdminList() {
       );
       if(_stuckReqIds.size) console.warn('[관리자] 진행이 멈춘 전표:', [..._stuckReqIds].join(', '));
     }
+    // 결재행이 반영됐으니 표를 한 번 더 그린다.
+    // 「진행이 멈춘 전표」 표식과 현재 차례가 이때 나타난다.
+    // 사용자는 그 사이에도 목록을 보고 있으므로 기다리는 시간이 아니다.
+    applyAdminFilters(true);
   } catch(e) {
     console.error('loadAdminList error:', e);
     adminListRaw = [];
     body.innerHTML = '<tr><td colspan="13" style="text-align:center;padding:40px;color:#a19f9d">전표 목록을 불러올 수 없습니다.</td></tr>';
     return;
   }
-  applyAdminFilters();
+  // try 안에서 이미 두 번 그렸다(전표 도착 시 · 결재행 도착 시).
+  // 여기서 또 부르면 보던 페이지가 1페이지로 돌아간다.
 }
 
-function applyAdminFilters() {
+function applyAdminFilters(keepPage) {
   accRenderQuickBar();
-  _adminPgState.page = 0;
+  // 결재행이 늦게 도착해 다시 그릴 때는 보던 페이지를 유지한다.
+  // 그러지 않으면 3페이지를 보던 중에 1페이지로 튕긴다.
+  if (!keepPage) _adminPgState.page = 0;
   const fs = (document.getElementById('admin-status')||{value:''}).value;
   const ft = (document.getElementById('admin-type')||{value:''}).value;
   const fk = ((document.getElementById('admin-search')||{value:''}).value||'').toLowerCase();
