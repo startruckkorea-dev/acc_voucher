@@ -1384,14 +1384,25 @@ async function useVolumeOf(item) {
 // 등록된 모든 Approvals 세대를 순회하며 콜백을 실행하고 결과를 합침 (각 결과엔 _aprCode가 자동 태깅됨)
 // 등록된 모든 Approvals 세대를 "동시에" 조회하고 결과를 합침 (세대가 여러 개여도 왕복은 가장 느린 것 하나만큼만 걸림)
 // 콜백은 전역변수가 아니라 vol.id를 직접 참조해야 함 — 병렬 실행 중에는 전역 LIST_APPROVALS를 신뢰할 수 없기 때문
+// 직전 순회에서 실패한 세대. 호출한 쪽이 확인해 사용자에게 알린다.
+let _volFailed = [];
+function takeVolFailures() { const v = _volFailed; _volFailed = []; return v; }
+
 async function _forEachAprVolume(fn) {
   await loadVolumeConfig();
+  _volFailed = [];
   const results = await Promise.all((VOL_CONFIG.aprVolumes||[]).map(async vol => {
     try {
       const arr = await fn(vol);
       (arr||[]).forEach(item => { item._aprCode = vol.code; });
       return arr || [];
-    } catch(e) { console.warn('[Volume] '+vol.code+' 조회 실패:', e.message); return []; }
+    } catch(e) {
+      // 세대 하나가 실패하면 그 세대의 결재 이력이 통째로 빠진다.
+      // 예전에는 경고만 남겨, 이력이 비어 보여도 「원래 없는 것」 과 구분되지 않았다.
+      console.warn('[Volume] '+vol.code+' 조회 실패:', e.message);
+      _volFailed.push(vol.code);
+      return [];
+    }
   }));
   applyCurrentVolume(); // 다음 단일 작업(신규 작성 등)에 영향 없도록 현재 활성 세대로 복귀
   return results.flat();
@@ -4772,7 +4783,9 @@ function resetForm(){
 // ── List ──
 const TYPE_LABEL={AP:'AP',AP_IMS:'AP (IMS)',AP_CR:'AP (CR)',AR:'AR',GL:'GL',FA:'FA',ADV:'ADV',SET:'SET'};
 const TYPE_LABEL_FULL={AP:'AP - Accounts Payable',AP_IMS:'AP (IMS) - 부품',AP_CR:'AP - Customer Refund',AR:'AR - Accounts Receivable',GL:'GL - General Ledger',FA:'Fixed Asset',ADV:'Advance Payment',SET:'Settlement of Advance'};
-let voucherListCache = []; // SharePoint에서 로드한 내 전표 캐시
+let voucherListCache = [];
+// 직전 조회가 실패했는지. 빈 목록이 「없음」 인지 「못 불러옴」 인지 구분한다.
+let _myListLoadFailed = false; // SharePoint에서 로드한 내 전표 캐시
 
 async function loadMyList() {
   if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
@@ -4782,12 +4795,17 @@ async function loadMyList() {
     `&$filter=fields/RequesterEmail eq '${email}'&$top=500`;
   try {
     const data = await apiAll(url);
+    _myListLoadFailed = false;      // 성공했으니 직전 실패 표시를 지운다
     voucherListCache = data.value
       .map(item=>({_spId:item.id,...item.fields}))
       .sort((a,b)=>new Date(b.SubmittedDate||0)-new Date(a.SubmittedDate||0));
   } catch(e) {
+    // 조회에 실패했는데 빈 목록으로 그리면 「작성된 바우처가 없습니다」 가 뜬다.
+    // 사용자는 전표가 사라졌다고 읽는다 — 못 불러온 것과 없는 것이 구분되지 않는다.
+    // 실패를 표시해 두고 renderList 에서 다른 문구를 내보낸다.
     console.error('loadMyList error:', e);
     voucherListCache = [];
+    _myListLoadFailed = true;
   }
   renderList();
 }
@@ -5319,6 +5337,14 @@ async function loadAdminList() {
 
     // 여기서부터는 결재행이 도착한 뒤에 한다.
     const _aprAll = await _aprPromise;
+    // 세대 하나가 실패했으면 그 세대의 결재 이력이 통째로 빠진 상태다.
+    // 빠른 보기 숫자와 「지금 누구 차례」 가 어긋나므로 그대로 알린다.
+    const _vf = takeVolFailures();
+    if (_vf.length) {
+      // ACC 에는 토스트가 없다. 다른 안내와 같은 방식으로 alert 를 쓴다.
+      alert('결재 이력 일부(' + _vf.join(', ') + ' 세대)를 불러오지 못했습니다.\n'
+          + '담당자별 건수가 실제와 다를 수 있습니다. 새로고침해 주세요.');
+    }
 
     // 읽어 둔 결재행을 전표별로 묶는다. 담당자별 빠른 보기에서
     // 「누가 결재선에 있는지」와 「지금 누구 차례인지」를 판단하는 데 쓴다.
@@ -5847,7 +5873,9 @@ function renderList(){
     Pending:'대기',Draft:'임시저장',Approved:'승인완료',Rejected:'반려'};
   const body=document.getElementById('list-body');
   if(!list.length){
-    body.innerHTML=`<tr><td colspan="12" class="list-empty">${voucherListCache.length?'검색 결과가 없습니다.':'작성된 바우처가 없습니다.'}</td></tr>`;
+    body.innerHTML=`<tr><td colspan="12" class="list-empty">${voucherListCache.length ? '검색 결과가 없습니다.'
+      : (_myListLoadFailed ? '목록을 불러오지 못했습니다. 잠시 후 새로고침해 주세요.'
+                           : '작성된 바우처가 없습니다.')}</td></tr>`;
     return;
   }
   const fmtK=n=>Math.round(n||0).toLocaleString('ko-KR');
