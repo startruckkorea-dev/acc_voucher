@@ -5809,6 +5809,33 @@ function renderB1ChangeLog(logJson) {
   if(listEl) listEl.scrollTop = listEl.scrollHeight; // 최신 기록(맨 아래)이 보이도록 자동 스크롤
 }
 
+// ── 페이지 이동 (APS 공통) ────────────────────────────────────────────
+// 시스템마다 1…234…10 처럼 생략 표시가 달라 지금이 어디쯤인지 가늠하기 어려웠다.
+// 최대 7칸을 이어서 보이는 창으로 통일한다. 창은 끝에 가까워도 7칸을 채워
+// 버튼 위치가 흔들리지 않는다.
+// 처음(«)·마지막(») 버튼을 둔다 — 20쪽이면 › 를 열아홉 번 눌러야 끝에 닿는다.
+function apsPagerHtml(cur, pages, mk) {
+  if (!pages || pages <= 1) return '';
+  cur = Math.max(0, Math.min(cur, pages - 1));
+  const b = (on, act, label, page, title) =>
+    '<button ' + (on ? 'onclick="' + mk(page) + '"' : 'disabled') +
+    (title ? ' title="' + title + '"' : '') +
+    ' style="min-width:30px;padding:4px 9px;border-radius:4px;font-size:.8rem;font-family:inherit;' +
+    'border:1px solid ' + (act ? '#0078d4' : on ? '#d2d0ce' : '#edebe9') + ';' +
+    'background:' + (act ? '#0078d4' : on ? '#fff' : '#f3f2f1') + ';' +
+    'color:' + (act ? '#fff' : on ? '#323130' : '#a19f9d') + ';' +
+    'font-weight:' + (act ? '700' : '400') + ';' +
+    'cursor:' + (on ? 'pointer' : 'default') + '">' + label + '</button>';
+  const start = Math.max(0, Math.min(cur - 3, pages - 7));
+  const end   = Math.min(pages, start + 7);
+  let h = b(cur > 0, false, '&laquo;',  0,        '처음으로')
+        + b(cur > 0, false, '&lsaquo;', cur - 1,  '이전');
+  for (let p = start; p < end; p++) h += b(true, p === cur, String(p + 1), p, '');
+  h += b(cur < pages - 1, false, '&rsaquo;', cur + 1,   '다음')
+     + b(cur < pages - 1, false, '&raquo;',  pages - 1, '마지막으로');
+  return h;
+}
+
 function renderAdminList(){
   const body = document.getElementById('admin-body');
   if(!adminListCache.length){
@@ -5867,17 +5894,9 @@ function renderAdminList(){
   }).join('');
 
   // 페이지네이션 렌더
+  // 전체 페이지를 모두 버튼으로 그리고 있었다. 23쪽이면 버튼이 23개다.
   const pgEl = document.getElementById('admin-pagination');
-  if(pages <= 1) { pgEl.innerHTML = ''; }
-  else {
-    let html = '';
-    html += `<button onclick="adminPgGo(${cur-1})" ${cur===0?'disabled':''} style="padding:5px 10px;border:1px solid #d2d0ce;border-radius:4px;background:#fff;font-size:12px;cursor:pointer">‹</button>`;
-    for(let p=0;p<pages;p++){
-      html += `<button onclick="adminPgGo(${p})" style="padding:5px 10px;border:1px solid ${p===cur?'#0078d4':'#d2d0ce'};border-radius:4px;background:${p===cur?'#0078d4':'#fff'};color:${p===cur?'#fff':'#323130'};font-size:12px;cursor:pointer;font-weight:${p===cur?700:400}">${p+1}</button>`;
-    }
-    html += `<button onclick="adminPgGo(${cur+1})" ${cur===pages-1?'disabled':''} style="padding:5px 10px;border:1px solid #d2d0ce;border-radius:4px;background:#fff;font-size:12px;cursor:pointer">›</button>`;
-    pgEl.innerHTML = html;
-  }
+  if (pgEl) pgEl.innerHTML = apsPagerHtml(cur, pages, function(p){ return 'adminPgGo(' + p + ')'; });
 }
 
 function renderList(){
