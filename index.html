@@ -7207,20 +7207,105 @@ async function downloadPdfDoc(mainDoc, fname) {
   document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);
 }
 
+// ── 병합하지 못한 첨부를 알리는 카드(캔버스 → PNG) ──
+// pdf-lib 기본 폰트는 한글을 못 그리므로 헤더와 같은 방식으로 캔버스에 그려 이미지로 넣는다.
+// kind: 'encrypted' (암호화된 PDF) · 'nolink' (링크 키 없음) · 'failed' (변환 실패)
+async function makeNoticeCardBytes(dataUrlToUint8, kind, name, info) {
+  const S = 2;                               // 선명하게 보이도록 2배로 그린 뒤 절반 크기로 넣는다
+  const W = 430 * S;                         // 카드 폭 430pt
+  const F = '"Malgun Gothic","Apple SD Gothic Neo",sans-serif';
+  const c = document.createElement('canvas'); c.width = W; c.height = 400 * S;
+  const x = c.getContext('2d'); x.scale(S, S);
+  const cw = 430;
+
+  const T = {
+    encrypted: { title: '암호화된 PDF라 병합하지 못했습니다', sub: 'Encrypted PDF — pages could not be merged',
+      lines: ['발급기관이 복사·편집을 제한한 문서(인터넷 발급 증권·전자세금계산서 등)입니다.',
+              '이 출력물에는 내용을 담을 수 없으며, 원본은 전표의 첨부파일 링크에서 열어 확인해 주세요.'],
+      accent: '#b45309', bg: '#fffbeb', border: '#fcd34d', icon: 'lock' },
+    nolink:    { title: '첨부파일 링크 정보가 없습니다', sub: 'Attachment link is missing — file could not be fetched',
+      lines: ['전표에 파일 이름만 남아 있고 저장 위치 키가 없습니다.',
+              '전표를 다시 열어 첨부가 복구되는지 확인하거나 IT 에 문의해 주세요.'],
+      accent: '#b91c1c', bg: '#fef2f2', border: '#fca5a5', icon: 'link' },
+    failed:    { title: '첨부파일을 변환하지 못했습니다', sub: 'Attachment could not be converted to PDF',
+      lines: ['파일을 내려받거나 PDF 로 바꾸는 중 오류가 났습니다.',
+              '잠시 후 다시 출력하거나, 원본은 전표의 첨부파일 링크에서 확인해 주세요.'],
+      accent: '#b91c1c', bg: '#fef2f2', border: '#fca5a5', icon: 'warn' },
+  }[kind] || {};
+
+  // 긴 파일명은 폭에 맞춰 줄바꿈
+  const wrap = (txt, maxW, font) => { x.font = font; const out = []; let cur = '';
+    for (const ch of String(txt)) { if (x.measureText(cur + ch).width > maxW && cur) { out.push(cur); cur = ch; } else cur += ch; }
+    if (cur) out.push(cur); return out.slice(0, 3); };
+  const nameLines = wrap(name, cw - 84, '600 12.5px ' + F);
+  const infoLines = (info ? [info] : []);
+  const bodyLines = [].concat(...T.lines.map(l => wrap(l, cw - 60, '400 11.5px ' + F)));
+  const H = 176 + nameLines.length * 17 + (bodyLines.length * 18) + (infoLines.length ? 22 : 0);
+  c.height = H * S; x.setTransform(S, 0, 0, S, 0, 0);
+
+  const rr = (px, py, pw, ph, r) => { x.beginPath(); x.moveTo(px + r, py); x.arcTo(px + pw, py, px + pw, py + ph, r); x.arcTo(px + pw, py + ph, px, py + ph, r); x.arcTo(px, py + ph, px, py, r); x.arcTo(px, py, px + pw, py, r); x.closePath(); };
+  // 카드
+  rr(0.5, 0.5, cw - 1, H - 1, 14); x.fillStyle = '#fff'; x.fill(); x.strokeStyle = '#d6dde8'; x.lineWidth = 1; x.stroke();
+  // 위쪽 색띠
+  x.save(); rr(0.5, 0.5, cw - 1, H - 1, 14); x.clip(); x.fillStyle = T.accent; x.fillRect(0, 0, cw, 5); x.restore();
+
+  // 아이콘 배지
+  const cx = cw / 2, iy = 46;
+  x.beginPath(); x.arc(cx, iy, 24, 0, Math.PI * 2); x.fillStyle = T.bg; x.fill(); x.strokeStyle = T.border; x.lineWidth = 1.2; x.stroke();
+  x.strokeStyle = T.accent; x.fillStyle = T.accent; x.lineWidth = 2.2; x.lineCap = 'round'; x.lineJoin = 'round';
+  if (T.icon === 'lock') { x.beginPath(); x.arc(cx, iy - 4, 7, Math.PI, 0); x.stroke(); rr(cx - 10, iy - 3, 20, 15, 3); x.fill(); x.fillStyle = '#fff'; x.beginPath(); x.arc(cx, iy + 4, 2, 0, Math.PI * 2); x.fill(); }
+  else if (T.icon === 'link') { x.beginPath(); x.moveTo(cx - 9, iy + 4); x.lineTo(cx - 3, iy - 2); x.moveTo(cx + 3, iy + 2); x.lineTo(cx + 9, iy - 4); x.moveTo(cx - 6, iy - 6); x.lineTo(cx + 6, iy + 6); x.stroke(); }
+  else { x.beginPath(); x.moveTo(cx, iy - 11); x.lineTo(cx + 12, iy + 9); x.lineTo(cx - 12, iy + 9); x.closePath(); x.stroke(); x.beginPath(); x.moveTo(cx, iy - 3); x.lineTo(cx, iy + 3); x.stroke(); x.beginPath(); x.arc(cx, iy + 6.5, 1.3, 0, Math.PI * 2); x.fill(); }
+
+  // 제목·부제
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillStyle = '#0f2744'; x.font = '700 17px ' + F; x.fillText(T.title, cx, 92);
+  x.fillStyle = '#6b7a90'; x.font = '400 11px ' + F; x.fillText(T.sub, cx, 111);
+  // 구분선
+  x.strokeStyle = '#e6ebf2'; x.lineWidth = 1; x.beginPath(); x.moveTo(28, 128); x.lineTo(cw - 28, 128); x.stroke();
+
+  // 파일명 칩
+  let y = 146;
+  const chipH = 14 + nameLines.length * 17;
+  rr(28, y - 8, cw - 56, chipH, 8); x.fillStyle = '#f5f7fa'; x.fill();
+  x.fillStyle = '#1f2937'; x.font = '600 12.5px ' + F;
+  nameLines.forEach((l, i) => x.fillText((i === 0 ? '📎 ' : '') + l, cx, y + 6 + i * 17));
+  y += chipH + 6;
+
+  // 설명
+  x.fillStyle = '#374151'; x.font = '400 11.5px ' + F;
+  bodyLines.forEach((l, i) => x.fillText(l, cx, y + 8 + i * 18));
+  y += bodyLines.length * 18 + 6;
+  if (infoLines.length) { x.fillStyle = '#8a94a6'; x.font = '400 10.5px ' + F; x.fillText(infoLines[0], cx, y + 8); }
+
+  return dataUrlToUint8(c.toDataURL('image/png'));
+}
+
 // ── 첨부파일(세금계산서/Invoice 등) 실제 내용을 PDF 뒤에 병합 (GW exportModalPdf와 동일 패턴) ──
 // 이미지(jpg/png/gif/webp)는 페이지로 직접 삽입, PDF/Office 문서는 Graph API로 PDF 변환 후 페이지째 병합
+// 병합하지 못하는 첨부(암호화된 PDF·링크 키 없음·변환 실패)는 건너뛰지 않고 안내 카드 한 장을 넣는다.
+// 조용히 빠지면 출력물만 보고 "첨부가 없었다"고 읽게 된다(09-07 보험증권 건).
 async function appendAttachmentPagesToDoc(mainDoc, dataUrlToUint8, makeHeaderBytes, contentEl, btn) {
   const { PDFDocument } = PDFLib;
   const A4W=595, A4H=842, marginPt=34, hdrH=22, printW_pt=A4W-marginPt*2;
   const fileLinks = contentEl.querySelectorAll('.file-dl-link');
   if(!fileLinks.length) return;
   const _t = await token();
+  // 안내 페이지: 상단 헤더 + 페이지 한가운데 카드
+  const addNoticePage = async (kind, name, info, hdrSuffix) => {
+    const pg = mainDoc.addPage([A4W, A4H]);
+    const hdrImg = await mainDoc.embedPng(await makeHeaderBytes('첨부파일: ' + name + (hdrSuffix ? ' (' + hdrSuffix + ')' : '')));
+    pg.drawImage(hdrImg, {x:0, y:A4H-hdrH, width:A4W, height:hdrH});
+    const card = await mainDoc.embedPng(await makeNoticeCardBytes(dataUrlToUint8, kind, name, info));
+    const cw = 430, ch = card.height / card.width * cw;     // 2배로 그린 카드를 430pt 폭으로
+    pg.drawImage(card, {x:(A4W-cw)/2, y:(A4H-hdrH)/2 - ch/2 + 20, width:cw, height:ch});
+  };
   for(const link of fileLinks){
     const name = decodeURIComponent(link.dataset.name||'');
     if(!name) continue;
     const dId = decodeURIComponent(link.dataset.drive||'');
     const iId = decodeURIComponent(link.dataset.id||'');
-    if(!dId||!iId) continue;
+    if(!dId||!iId){ await addNoticePage('nolink', name, '', '링크 없음'); continue; }
     const ext = name.split('.').pop().toLowerCase();
     const imgExts = ['jpg','jpeg','png','gif','webp'];
     if(btn) btn.innerHTML = '⏳ '+name.substring(0,20)+'...';
@@ -7250,6 +7335,12 @@ async function appendAttachmentPagesToDoc(mainDoc, dataUrlToUint8, makeHeaderByt
         if(!res.ok) throw new Error('변환실패 '+res.status);
         const pdfBytes = new Uint8Array(await res.arrayBuffer());
         const srcDoc = await PDFDocument.load(pdfBytes, {ignoreEncryption:true});
+        if(srcDoc.isEncrypted){
+          // ignoreEncryption 은 "예외를 내지 말라"는 뜻이지 복호화가 아니다. 이대로 copyPages 하면
+          // 암호문 스트림이 그대로 붙어 뷰어에서 백지·오류 페이지가 된다(SGI 증권·홈택스 계산서 등).
+          await addNoticePage('encrypted', name, 'PDF ' + srcDoc.getPageCount() + ' 페이지  ·  ' + Math.round(pdfBytes.length/1024) + ' KB  ·  암호화 문서', '암호화');
+          continue;
+        }
         const copiedPages = await mainDoc.copyPages(srcDoc, srcDoc.getPageIndices());
         const aHdrBytes2 = await makeHeaderBytes('첨부파일: '+name);
         for(const pg of copiedPages){
@@ -7261,10 +7352,8 @@ async function appendAttachmentPagesToDoc(mainDoc, dataUrlToUint8, makeHeaderByt
       }
     } catch(e){
       console.warn('첨부파일 처리 실패:', name, e.message);
-      const errPage = mainDoc.addPage([A4W, A4H]);
-      const aHdrBytes3 = await makeHeaderBytes('첨부파일: '+name+' (변환 실패)');
-      const aHdrImg3 = await mainDoc.embedPng(aHdrBytes3);
-      errPage.drawImage(aHdrImg3, {x:0,y:A4H-hdrH,width:A4W,height:hdrH});
+      try { await addNoticePage('failed', name, String(e.message||'').slice(0,80), '변환 실패'); }
+      catch(e2){ console.warn('안내 페이지 생성 실패:', e2.message); }
     }
   }
 }
