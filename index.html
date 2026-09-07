@@ -6505,13 +6505,16 @@ function _setApprExtra(html) {
   if (el) el.innerHTML = html || '';
 }
 async function loadApprovalHistory(spId){
-  // ?openId= 로 바로 진입한 경우 목록 탭을 거치지 않아 3개 캐시가 모두 비어 있다.
-  // openVoucherSP()가 SharePoint에서 직접 조회해 _currentVoucherDetail에 담아두므로 그걸 최후 fallback으로 사용.
-  // (예전엔 여기서 조용히 return 해버려서 "결재 이력을 불러오는 중..."에 영원히 멈춰 있었음)
-  const v = voucherListCache.find(x=>x._spId===spId)
+  // 상세가 열려 있으면 openVoucherSP()가 확정해 둔 _currentVoucherDetail 을 먼저 쓴다.
+  // 관리자 목록 캐시는 화면에 필요한 필드만 받아(bba1e8a) RDExemptReason·AdminComments 가 없다.
+  // 그 캐시를 먼저 집으면 RD 승인 제외 박스와 철회 기록이 관리자 탭에서만 빠진다.
+  // (2a526ec 는 openVoucherSP 쪽만 고쳤고, 여기는 같은 얇은 캐시를 그대로 읽고 있었다)
+  // 목록 캐시들은 _currentVoucherDetail 이 아직 없을 때의 fallback 이다.
+  // (예전엔 아무것도 못 찾으면 조용히 return 해버려서 "결재 이력을 불러오는 중..."에 영원히 멈춰 있었음)
+  const v = (window._currentVoucherDetail?._spId===spId ? window._currentVoucherDetail : null)
+    || voucherListCache.find(x=>x._spId===spId)
     || adminListCache.find(x=>x._spId===spId)
-    || (approvalQueueCache.find(x=>x._voucher?._spId===spId)?._voucher)
-    || (window._currentVoucherDetail?._spId===spId ? window._currentVoucherDetail : null);
+    || (approvalQueueCache.find(x=>x._voucher?._spId===spId)?._voucher);
   if(!v){
     const el = document.getElementById('voucher-appr-history');
     if(el) el.innerHTML = '<div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력을 불러올 수 없습니다.</div>';
