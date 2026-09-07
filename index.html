@@ -7213,30 +7213,34 @@ async function downloadPdfDoc(mainDoc, fname) {
 async function makeNoticeCardBytes(dataUrlToUint8, kind, name, info) {
   const S = 2;                               // 선명하게 보이도록 2배로 그린 뒤 절반 크기로 넣는다
   const W = 430 * S;                         // 카드 폭 430pt
-  const F = '"Malgun Gothic","Apple SD Gothic Neo",sans-serif';
+  const F = '"Segoe UI","Apple SD Gothic Neo",sans-serif';   // 화면(Goodwill·ACC 공통)과 같은 서체. 카드 문구는 영문
   const c = document.createElement('canvas'); c.width = W; c.height = 400 * S;
   const x = c.getContext('2d'); x.scale(S, S);
   const cw = 430;
 
   const T = {
-    encrypted: { title: '암호화된 PDF라 병합하지 못했습니다', sub: 'Encrypted PDF — pages could not be merged',
-      lines: ['발급기관이 복사·편집을 제한한 문서(인터넷 발급 증권·전자세금계산서 등)입니다.',
-              '이 출력물에는 내용을 담을 수 없으며, 원본은 전표의 첨부파일 링크에서 열어 확인해 주세요.'],
+    encrypted: { title: 'Encrypted PDF — could not be merged', sub: 'This attachment is protected by its issuer',
+      lines: ['The issuer restricted copying and editing of this document (e-certificates, e-tax invoices, password-protected files, etc.).',
+              'Its contents cannot be included in this printout. Open the original from the attachment link on the voucher.'],
       accent: '#b45309', bg: '#fffbeb', border: '#fcd34d', icon: 'lock' },
-    nolink:    { title: '첨부파일 링크 정보가 없습니다', sub: 'Attachment link is missing — file could not be fetched',
-      lines: ['전표에 파일 이름만 남아 있고 저장 위치 키가 없습니다.',
-              '전표를 다시 열어 첨부가 복구되는지 확인하거나 IT 에 문의해 주세요.'],
+    nolink:    { title: 'Attachment link is missing', sub: 'The file could not be located',
+      lines: ['Only the file name is stored on the voucher — the storage key is missing.',
+              'Reopen the voucher to let it recover the link, or contact IT.'],
       accent: '#b91c1c', bg: '#fef2f2', border: '#fca5a5', icon: 'link' },
-    failed:    { title: '첨부파일을 변환하지 못했습니다', sub: 'Attachment could not be converted to PDF',
-      lines: ['파일을 내려받거나 PDF 로 바꾸는 중 오류가 났습니다.',
-              '잠시 후 다시 출력하거나, 원본은 전표의 첨부파일 링크에서 확인해 주세요.'],
+    failed:    { title: 'Attachment could not be converted', sub: 'Download or PDF conversion failed',
+      lines: ['An error occurred while downloading the file or converting it to PDF (password-protected Office files cannot be converted).',
+              'Try printing again later, or open the original from the attachment link on the voucher.'],
       accent: '#b91c1c', bg: '#fef2f2', border: '#fca5a5', icon: 'warn' },
   }[kind] || {};
 
-  // 긴 파일명은 폭에 맞춰 줄바꿈
+  // 폭에 맞춰 줄바꿈 — 영문은 단어 단위로, 공백 없는 긴 파일명은 글자 단위로 자른다
   const wrap = (txt, maxW, font) => { x.font = font; const out = []; let cur = '';
-    for (const ch of String(txt)) { if (x.measureText(cur + ch).width > maxW && cur) { out.push(cur); cur = ch; } else cur += ch; }
-    if (cur) out.push(cur); return out.slice(0, 3); };
+    const push = (piece) => { if (x.measureText(cur ? cur + ' ' + piece : piece).width <= maxW) { cur = cur ? cur + ' ' + piece : piece; return; }
+      if (cur) { out.push(cur); cur = ''; }
+      if (x.measureText(piece).width <= maxW) { cur = piece; return; }
+      for (const ch of piece) { if (x.measureText(cur + ch).width > maxW && cur) { out.push(cur); cur = ch; } else cur += ch; } };
+    String(txt).split(' ').forEach(push);
+    if (cur) out.push(cur); return out.slice(0, 4); };
   const nameLines = wrap(name, cw - 84, '600 12.5px ' + F);
   const infoLines = (info ? [info] : []);
   const bodyLines = [].concat(...T.lines.map(l => wrap(l, cw - 60, '400 11.5px ' + F)));
@@ -7305,7 +7309,7 @@ async function appendAttachmentPagesToDoc(mainDoc, dataUrlToUint8, makeHeaderByt
     if(!name) continue;
     const dId = decodeURIComponent(link.dataset.drive||'');
     const iId = decodeURIComponent(link.dataset.id||'');
-    if(!dId||!iId){ await addNoticePage('nolink', name, '', '링크 없음'); continue; }
+    if(!dId||!iId){ await addNoticePage('nolink', name, '', 'link missing'); continue; }
     const ext = name.split('.').pop().toLowerCase();
     const imgExts = ['jpg','jpeg','png','gif','webp'];
     if(btn) btn.innerHTML = '⏳ '+name.substring(0,20)+'...';
@@ -7338,7 +7342,7 @@ async function appendAttachmentPagesToDoc(mainDoc, dataUrlToUint8, makeHeaderByt
         if(srcDoc.isEncrypted){
           // ignoreEncryption 은 "예외를 내지 말라"는 뜻이지 복호화가 아니다. 이대로 copyPages 하면
           // 암호문 스트림이 그대로 붙어 뷰어에서 백지·오류 페이지가 된다(SGI 증권·홈택스 계산서 등).
-          await addNoticePage('encrypted', name, 'PDF ' + srcDoc.getPageCount() + ' 페이지  ·  ' + Math.round(pdfBytes.length/1024) + ' KB  ·  암호화 문서', '암호화');
+          await addNoticePage('encrypted', name, 'PDF  ·  ' + srcDoc.getPageCount() + (srcDoc.getPageCount()===1?' page':' pages') + '  ·  ' + Math.round(pdfBytes.length/1024) + ' KB  ·  Encrypted', 'encrypted');
           continue;
         }
         const copiedPages = await mainDoc.copyPages(srcDoc, srcDoc.getPageIndices());
@@ -7352,7 +7356,7 @@ async function appendAttachmentPagesToDoc(mainDoc, dataUrlToUint8, makeHeaderByt
       }
     } catch(e){
       console.warn('첨부파일 처리 실패:', name, e.message);
-      try { await addNoticePage('failed', name, String(e.message||'').slice(0,80), '변환 실패'); }
+      try { await addNoticePage('failed', name, 'Error: ' + String(e.message||'').slice(0,80), 'conversion failed'); }
       catch(e2){ console.warn('안내 페이지 생성 실패:', e2.message); }
     }
   }
