@@ -3899,6 +3899,14 @@ async function rollbackIncompleteVoucher(requestId, voucherId, made, total){
     // 만들어진 결재 행을 먼저 잠가 결재자에게 노출되지 않게 한다
     try {
       const rows = await apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_APPROVALS}/items?$expand=fields&$top=50&$filter=fields/RequestID eq ${parseInt(requestId)}`);
+      // 만든 행이 있는데 조회가 0건이면 조회 실패다. 잠그지 못한 채 전표만 「철회」로 바꾸면
+      // 결재행이 「대기」로 남아 끊긴 상태가 된다. 전표를 「대기」로 두면 관리자 탭의 ⚠ 감지에 걸려 복구할 수 있다.
+      if(made > 0 && !(rows.value||[]).length){
+        console.error('[상신] 되돌리기 중 결재 행 조회가 0건 — 전표를 철회하지 않고 중단. RequestID:', requestId);
+        spDone(false, `결재선이 ${made}/${total}단계만 만들어졌는데 결재 행을 다시 읽어오지 못해 자동 철회를 하지 않았습니다.<br>`
+          + `<b>다시 상신하지 마시고</b> IT팀(stk_it@hyosung.com)에 <b>${voucherId}</b>를 알려주세요.`);
+        return;
+      }
       for(const it of (rows.value||[])){
         await api(`/sites/${siteId}/lists/${LIST_APPROVALS}/items/${it.id}/fields`, 'PATCH', {Status:'철회(잠김)'});
       }
@@ -4305,6 +4313,13 @@ async function saveVoucher(status) {
       try {
         const _chk = await apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_APPROVALS}/items?$expand=fields&$top=50&$filter=fields/RequestID eq ${parseInt(requestId)}`);
         const _cnt = (_chk.value||[]).length;
+        // 0건은 「하나도 안 만들어졌다」가 아니라 「조회가 잘못됐다」다 — 방금 _made 건을 POST 로 만들었다.
+        // 이 경우 되돌리면 정상 전표를 철회하고(되돌리기도 같은 조회를 써서 결재행은 못 잠근다)
+        // 사용자는 다시 상신해 전표가 두 장이 된다. 검증 조회 실패와 같게 다룬다.
+        if(_cnt === 0 && _made > 0){
+          console.warn('[상신] 결재선 검증 조회가 0건 — 조회 실패로 간주, 되돌리지 않음:', _made, '/', approvers.length);
+          spStep('appr','ok', _made+' / '+approvers.length);
+        } else
         if(_cnt < approvers.length){
           spStep('appr','err', _cnt+' / '+approvers.length);
           console.error('[상신] 결재선 개수 불일치:', _cnt, '/', approvers.length);
@@ -5974,6 +5989,15 @@ async function withdrawRequest(spId) {
     // 1차 결재자가 아직 미처리(대기)인 경우에만 철회 가능
     const apprData = await apiAll(`${GRAPH}/sites/${siteId}/lists/${_APR3}/items?$expand=fields&$filter=fields/RequestID eq ${parseInt(spId)}&$top=50`);
     const items = apprData.value.sort((a,b)=>(a.fields.ApprovalOrder||0)-(b.fields.ApprovalOrder||0));
+    // 조회 결과가 비어 있으면 결재행이 없는 게 아니라 조회가 잘못된 것이다(processApproval 과 같은 판단).
+    // 전표에 결재행이 0개일 수는 없다. 이대로 진행하면 잠글 행이 없어 전표만 「철회」가 되고
+    // 결재행은 「대기」로 남는다 — 「철회가 중간에 끊긴 상태」를 코드가 스스로 만드는 셈이다.
+    if(!items.length) {
+      console.error('[철회] 결재 행 조회 결과가 비어 있음 — 철회 중단. RequestID:', spId);
+      showAccAlert('지금은 철회할 수 없습니다.',
+        '결재행을 읽어오지 못했습니다. 잠시 후 다시 시도해 주세요.\n계속 같은 증상이면 IT팀(stk_it@hyosung.com)에 알려주세요.', '⚠️');
+      return;
+    }
     const first = items[0];
     const firstSt = (first?.fields?.Status || '').trim();
     // 철회 가능 여부는 "결재가 실제로 진행됐는가"로 판단한다.
