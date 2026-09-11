@@ -989,7 +989,7 @@ if (new URLSearchParams(location.search).get('openId')) {
       <option value="ADV">Advance Payment</option>
       <option value="SET">Settlement</option>
     </select>
-    <input type="text" id="admin-search" oninput="applyAdminFilters()" placeholder="신청자/Title/BP명" style="border:1px solid #d2d0ce;border-radius:4px;padding:6px 10px;font-size:.72rem;font-family:inherit;min-width:200px">
+    <input type="text" id="admin-search" oninput="applyAdminFilters()" placeholder="신청자/Title/BP명/B1 Doc No." style="border:1px solid #d2d0ce;border-radius:4px;padding:6px 10px;font-size:.72rem;font-family:inherit;min-width:200px">
     <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
       <span style="font-size:.82rem;color:#605e5c;font-weight:500" id="admin-count"></span>
       <button id="admin-refresh" onclick="accReloadAdmin()" title="목록을 다시 불러옵니다. 지금 고른 담당자·필터는 그대로 유지됩니다."
@@ -5465,7 +5465,8 @@ function applyAdminFilters(keepPage) {
     if(_accQuickView && !accIsRelated(v)) return false;
     if(fs && v.Status!==fs) return false;
     if(ft && v.VoucherType!==ft) return false;
-    if(fk && !(v.RequesterEmail||'').toLowerCase().includes(fk) && !(v.Title||'').toLowerCase().includes(fk) && !(v.BPName||'').toLowerCase().includes(fk)) return false;
+    // 검색어: 신청자 · Title · BP명 · B1 Doc No. (B1 번호는 SAP 전기 뒤 찾는 일이 잦다, 09-11)
+    if(fk && !(v.RequesterEmail||'').toLowerCase().includes(fk) && !(v.Title||'').toLowerCase().includes(fk) && !(v.BPName||'').toLowerCase().includes(fk) && !String(v.B1DocNo||'').toLowerCase().includes(fk)) return false;
     return true;
   });
   // 정렬은 건드리지 않는다. adminListRaw 가 이미 신청일 최신순이고,
@@ -5527,7 +5528,7 @@ async function exportAdminExcel(){
     let items = merged.sort((a,b)=>b.id-a.id);
     if(fs) items = items.filter(i=>i.fields.Status===fs);
     if(ft) items = items.filter(i=>i.fields.VoucherType===ft);
-    if(fk) items = items.filter(i=>((i.fields.RequesterEmail||'')+(i.fields.Title||'')+(i.fields.BPName||'')).toLowerCase().includes(fk));
+    if(fk) items = items.filter(i=>((i.fields.RequesterEmail||'')+' '+(i.fields.Title||'')+' '+(i.fields.BPName||'')+' '+(i.fields.B1DocNo||'')).toLowerCase().includes(fk));
     if(!items.length){ showAccAlert('내보낼 데이터가 없습니다.', '', '⚠️'); return; }
     logAction('ACC Voucher', 'Excel 내보내기', { 건수: items.length, 필터: { 상태: fs||'전체', 유형: ft||'전체', 검색어: fk||'' } });
 
@@ -5938,7 +5939,7 @@ function renderList(){
   const list=voucherListCache.filter(v=>{
     if(ft&&v.VoucherType!==ft)return false;
     if(fs&&v.Status!==fs)return false;
-    if(fk&&!v.Purpose?.toLowerCase().includes(fk)&&!v.PurposeTitle?.toLowerCase().includes(fk)&&!v.BPName?.toLowerCase().includes(fk)&&!v.Title?.toLowerCase().includes(fk))return false;
+    if(fk&&!v.Purpose?.toLowerCase().includes(fk)&&!v.PurposeTitle?.toLowerCase().includes(fk)&&!v.BPName?.toLowerCase().includes(fk)&&!v.Title?.toLowerCase().includes(fk)&&!String(v.B1DocNo||'').toLowerCase().includes(fk))return false;
     return true;
   });
   const stMap={'대기':'badge-대기','대기(잠김)':'badge-대기잠김','승인완료':'badge-승인완료','반려':'badge-반려','철회':'badge-철회',
