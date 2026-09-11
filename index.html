@@ -7249,8 +7249,11 @@ function openBatchPdfModal() {
   const draftSt = (typeof DRAFT_STATUS !== 'undefined' ? DRAFT_STATUS : '임시저장');
   _batchRows = (adminListCache || []).filter(v => (v.Status||'').trim() !== draftSt);
   _batchSel = new Set();
-  document.getElementById('batch-date-from').value = '';
-  document.getElementById('batch-date-to').value = '';
+  // 기본 기간: 오늘 기준 최근 3개월 (KST). 사용자는 제한 없이 바꿀 수 있다 — 선택 상한 30이 있어 범위가 넓어도 문제없다.
+  const _now = new Date(Date.now() + 9*3600*1000); const _to = _now.toISOString().slice(0,10);
+  const _fromD = new Date(_now); _fromD.setUTCMonth(_fromD.getUTCMonth() - 3); const _from = _fromD.toISOString().slice(0,10);
+  document.getElementById('batch-date-from').value = _from;
+  document.getElementById('batch-date-to').value = _to;
   renderBatchPdfList();
   document.getElementById('batch-pdf-modal').style.display = 'flex';
 }
@@ -7268,25 +7271,25 @@ function renderBatchPdfList() {
   // 표시 목록이 바뀌면 안 보이는 선택은 지운다
   const visible = new Set(rows.map(v => String(v._spId))); [..._batchSel].forEach(id => { if (!visible.has(id)) _batchSel.delete(id); });
   const sumEl = document.getElementById('batch-pdf-summary');
-  if (sumEl) sumEl.innerHTML = `현재 조건 <b>${rows.length}</b>건${rows.length !== _batchRows.length ? ` <span style="color:#8a8886">(목록 ${_batchRows.length}건 중 날짜 범위 적용)</span>` : ''} · 한 번에 최대 <b>${BATCH_PDF_MAX}</b>건 선택`;
+  if (sumEl) sumEl.innerHTML = `기간 내 <b>${rows.length}</b>건${rows.length !== _batchRows.length ? ` <span style="color:#8a8886">/ 목록 ${_batchRows.length}건</span>` : ''} · 최대 <b>${BATCH_PDF_MAX}</b>건 선택`;
   if (!rows.length) { body.innerHTML = '<div style="padding:28px;text-align:center;color:#8a8886;font-size:.85rem">조건에 해당하는 전표가 없습니다.</div>'; batchUpdateCount(); return; }
   body.innerHTML = `<div style="overflow:auto;border:1px solid #edebe9;border-radius:6px;max-height:50vh">
-    <table class="list-table" id="batch-pdf-table" style="min-width:1040px">
+    <table class="list-table" id="batch-pdf-table" style="min-width:0;width:100%;table-layout:fixed">
       <thead><tr>
         <th style="width:34px;text-align:center"><input type="checkbox" id="batch-chk-all" onchange="batchSelectAll(this.checked)" title="보이는 전표 중 앞 ${BATCH_PDF_MAX}건까지"></th>
-        <th>Title</th><th style="text-align:center">유형</th><th>신청자</th><th>BP명</th><th>Purpose Title</th><th style="text-align:right">DR(KRW)</th><th style="text-align:center">Status</th><th>신청일</th><th>B1 Doc No.</th><th style="text-align:center">Posting</th>
+        <th style="width:196px">Title</th><th style="width:54px;text-align:center">유형</th><th>신청자</th><th style="width:11%">BP명</th><th style="width:19%">Purpose Title</th><th style="width:104px;text-align:right">DR(KRW)</th><th style="width:74px;text-align:center">Status</th><th style="width:112px">신청일</th><th style="width:92px">B1 Doc No.</th><th style="width:70px;text-align:center">Posting</th>
       </tr></thead>
       <tbody>${rows.map(v => { const b1 = (v.B1DocNo||'').trim(); return `<tr onclick="batchToggle('${v._spId}', event)" style="cursor:pointer">
         <td style="text-align:center"><input type="checkbox" class="batch-chk" value="${v._spId}" onclick="event.stopPropagation();batchToggle('${v._spId}')"></td>
-        <td style="font-size:.68rem;color:#0078d4;white-space:nowrap;letter-spacing:-.1px">${escHtml(v.Title||'-')}</td>
+        <td style="font-size:.68rem;color:#0078d4;white-space:nowrap;letter-spacing:-.1px;overflow:hidden;text-overflow:ellipsis">${escHtml(v.Title||'-')}</td>
         <td style="text-align:center"><span class="type-badge t-${escHtml(v.VoucherType||'')}" style="font-size:.62rem;padding:1px 5px">${escHtml(TYPE_LABEL[v.VoucherType]||v.VoucherType||'-')}</span></td>
-        <td style="font-size:.73rem;color:#605e5c;max-width:118px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(v.RequesterEmail||'-')}</td>
-        <td style="max-width:98px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.73rem;color:#605e5c">${escHtml(v.BPName)||'-'}</td>
-        <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.73rem">${escHtml(spText(v.PurposeTitle))||'-'}</td>
+        <td style="font-size:.73rem;color:#605e5c;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(v.RequesterEmail||'')}">${escHtml(v.RequesterEmail||'-')}</td>
+        <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.73rem;color:#605e5c" title="${escHtml(v.BPName||'')}">${escHtml(v.BPName)||'-'}</td>
+        <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.73rem" title="${escHtml(spText(v.PurposeTitle)||'')}">${escHtml(spText(v.PurposeTitle))||'-'}</td>
         <td style="text-align:right;font-weight:700;color:#0078d4;font-size:.73rem">${fmtK(v.TotalDR_KRW)}</td>
         <td style="text-align:center;white-space:nowrap"><span class="${stMap[v.Status]||'badge-대기'}" style="font-size:.63rem;padding:1px 6px;white-space:nowrap">${escHtml(v.Status||'')}</span></td>
         <td style="font-size:.72rem;color:#605e5c;white-space:nowrap">${fmtDate(v.SubmittedDate)}</td>
-        <td style="font-size:.72rem;color:#323130;max-width:86px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(b1) || '<span style="color:#a19f9d">-</span>'}</td>
+        <td style="font-size:.72rem;color:#323130;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(b1) || '<span style="color:#a19f9d">-</span>'}</td>
         <td style="text-align:center;font-size:.72rem;white-space:nowrap">${b1 ? '<span style="color:#107c10;font-weight:600">✅ 완료</span>' : '<span style="color:#a19f9d">미완료</span>'}</td>
       </tr>`; }).join('')}</tbody></table></div>`;
   batchUpdateCount();
@@ -7358,17 +7361,20 @@ async function runBatchPdf() {
   _batchCancel = false;
   const prog = document.getElementById('batch-prog-modal'); prog.style.display = 'flex';
   const list = document.getElementById('batch-prog-list');
-  const rowHtml = (v, st, msg) => { const c = { wait:'#8a8886', run:'#0078d4', ok:'#107c10', fail:'#a4262c', skip:'#8a8886' }[st]; const ic = { wait:'○', run:'◔', ok:'✓', fail:'✕', skip:'–' }[st];
-    return `<div id="bp-${v._spId}" style="display:flex;gap:8px;align-items:flex-start;padding:5px 2px;border-bottom:1px solid #f3f2f1;font-size:.76rem"><span style="width:14px;color:${c};font-weight:700">${ic}</span><span style="flex:1;color:#323130">${escHtml(v.Title||'')}</span><span style="color:${c};white-space:nowrap;max-width:46%;overflow:hidden;text-overflow:ellipsis">${escHtml(msg||'')}</span></div>`; };
+  const rowHtml = (v, st, msg) => { const c = { wait:'#9ca3af', run:'#2b62b5', ok:'#166a43', fail:'#8f2822', skip:'#9ca3af' }[st]; const bg = { wait:'transparent', run:'#f3f7fd', ok:'transparent', fail:'#fdf4f4', skip:'transparent' }[st]; const ic = { wait:'○', run:'◔', ok:'✓', fail:'✕', skip:'–' }[st];
+    return `<div id="bp-${v._spId}" style="display:flex;gap:10px;align-items:center;padding:7px 8px;border-bottom:1px solid #f1f3f6;font-size:.76rem;background:${bg}"><span style="width:16px;text-align:center;color:${c};font-weight:700">${ic}</span><span style="flex:1;color:#1f2937;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(v.Title||'')}</span><span style="color:${c};white-space:nowrap;max-width:46%;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums">${escHtml(msg||'')}</span></div>`; };
   list.innerHTML = targets.map(v => rowHtml(v, 'wait', '대기')).join('');
   const setRow = (v, st, msg) => { const el = document.getElementById('bp-'+v._spId); if (el) el.outerHTML = rowHtml(v, st, msg); };
   const bar = document.getElementById('batch-prog-bar'), txt = document.getElementById('batch-prog-text'), cancelBtn = document.getElementById('batch-prog-cancel'), closeBtn = document.getElementById('batch-prog-close');
-  cancelBtn.style.display = ''; closeBtn.style.display = 'none';
+  const pctEl = document.getElementById('batch-prog-pct'), spin = document.getElementById('batch-prog-spin'), titleEl = document.getElementById('batch-prog-title'), sumEl = document.getElementById('batch-prog-sum');
+  const setPct = (p) => { bar.style.width = p + '%'; if (pctEl) pctEl.textContent = p + '%'; };
+  cancelBtn.style.display = ''; cancelBtn.disabled = false; closeBtn.style.display = 'none'; if (spin) { spin.style.display = ''; spin.style.animation = 'bpspin .9s linear infinite'; }
+  if (titleEl) titleEl.textContent = '공식 PDF 를 만들고 있습니다'; if (sumEl) sumEl.textContent = `${targets.length}건 선택`;
   const files = []; let ok = 0, fail = 0;
   for (let i = 0; i < targets.length; i++) {
     const v = targets[i];
     if (_batchCancel) { setRow(v, 'skip', '취소됨'); continue; }
-    txt.textContent = `${i+1} / ${targets.length} — ${v.Title||''}`; bar.style.width = Math.round((i/targets.length)*100)+'%';
+    txt.textContent = `${i+1} / ${targets.length} — ${v.Title||''}`; setPct(Math.round((i/targets.length)*100));
     setRow(v, 'run', '생성 중');
     try {
       const bytes = await buildOfficialPdfBytes(v, (s) => setRow(v, 'run', s));
@@ -7377,7 +7383,7 @@ async function runBatchPdf() {
     } catch (e) { fail++; setRow(v, 'fail', '실패 · '+(e && e.message || '').slice(0, 60)); console.warn('[일괄 PDF] 실패:', v.Title, e); }
     await new Promise(r => setTimeout(r, 0));
   }
-  bar.style.width = '100%';
+  setPct(100);
   // 묶어서 내려받기
   const now = new Date(Date.now()+9*3600*1000); const ds = now.toISOString().slice(0,16).replace(/[-:T]/g,'').slice(0,12);
   if (files.length) {
@@ -7395,6 +7401,9 @@ async function runBatchPdf() {
     }
   } else txt.textContent = _batchCancel ? '취소되었습니다.' : `만든 파일이 없습니다 (${fail}건 실패).`;
   cancelBtn.style.display = 'none'; closeBtn.style.display = '';
+  if (spin) { spin.style.animation = 'none'; spin.style.borderTopColor = fail ? '#8f2822' : '#166a43'; spin.style.borderColor = fail ? '#f3d0d0' : '#cfe8d8'; spin.style.borderTopColor = fail ? '#8f2822' : '#166a43'; }
+  if (titleEl) titleEl.textContent = _batchCancel ? '중단되었습니다' : (fail ? '완료 — 일부 실패' : '완료');
+  if (sumEl) sumEl.textContent = `성공 ${ok} · 실패 ${fail}` + (_batchCancel ? ` · 취소 ${targets.length - ok - fail}` : '');
   try { logAction('ACC Voucher', '공식 PDF 일괄 내보내기', { 선택: targets.length, 성공: ok, 실패: fail, 취소: _batchCancel }); } catch(e) {}
 }
 function cancelBatchPdf() { _batchCancel = true; document.getElementById('batch-prog-cancel').disabled = true; document.getElementById('batch-prog-text').textContent = '지금 건까지 만들고 멈춥니다 …'; }
@@ -8317,7 +8326,7 @@ function ptApply(){
 <!-- GW 스타일 알림 모달 -->
 <!-- 공식 PDF 일괄 내보내기 — 선택 팝업 -->
 <div id="batch-pdf-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1200;align-items:center;justify-content:center">
-  <div style="background:#fff;border-radius:12px;width:min(960px,94vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.25)">
+  <div style="background:#fff;border-radius:12px;width:min(1320px,96vw);max-height:92vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.25)">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 22px;border-bottom:1px solid #edebe9">
       <div><div style="font-size:1rem;font-weight:700;color:#0f2744">공식 PDF 일괄 내보내기</div><div style="font-size:.76rem;color:#605e5c;margin-top:2px">선택한 전표의 공식 전표 양식(첨부 병합 포함)을 한 번에 만들어 ZIP 으로 내려받습니다.</div></div>
       <button onclick="closeBatchPdfModal()" style="background:none;border:none;font-size:1.3rem;color:#605e5c;cursor:pointer">✕</button>
@@ -8327,7 +8336,8 @@ function ptApply(){
       <input type="date" id="batch-date-from" onchange="renderBatchPdfList()" style="border:1px solid #d2d0ce;border-radius:4px;padding:4px 8px;font-size:.76rem;font-family:inherit">
       <span>~</span>
       <input type="date" id="batch-date-to" onchange="renderBatchPdfList()" style="border:1px solid #d2d0ce;border-radius:4px;padding:4px 8px;font-size:.76rem;font-family:inherit">
-      <button onclick="document.getElementById('batch-date-from').value='';document.getElementById('batch-date-to').value='';renderBatchPdfList()" style="padding:4px 10px;background:#fff;border:1px solid #d2d0ce;border-radius:4px;font-size:.74rem;cursor:pointer">기간 지우기</button>
+      <button onclick="document.getElementById('batch-date-from').value='';document.getElementById('batch-date-to').value='';renderBatchPdfList()" style="padding:4px 10px;background:#fff;border:1px solid #d2d0ce;border-radius:4px;font-size:.74rem;cursor:pointer">전체 기간</button>
+      <span style="font-size:.72rem;color:#8a8886">기본값은 최근 3개월</span>
       <span id="batch-pdf-summary" style="margin-left:auto"></span>
       <span><a href="#" onclick="batchSelectAll(true);return false" style="color:#0078d4;margin-right:10px">모두 선택</a><a href="#" onclick="batchSelectAll(false);return false" style="color:#0078d4">모두 해제</a></span>
     </div>
@@ -8343,21 +8353,30 @@ function ptApply(){
   </div>
 </div>
 <!-- 공식 PDF 일괄 내보내기 — 진행 팝업 -->
-<div id="batch-prog-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1210;align-items:center;justify-content:center">
-  <div style="background:#fff;border-radius:12px;width:min(620px,94vw);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.25)">
-    <div style="padding:18px 22px 10px">
-      <div style="font-size:.98rem;font-weight:700;color:#0f2744">공식 PDF 를 만들고 있습니다</div>
-      <div id="batch-prog-text" style="font-size:.8rem;color:#605e5c;margin-top:4px">준비 중 …</div>
-      <div style="height:8px;background:#edebe9;border-radius:4px;overflow:hidden;margin-top:10px"><div id="batch-prog-bar" style="height:100%;width:0;background:#0078d4;transition:width .3s"></div></div>
+<div id="batch-prog-modal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.42);z-index:1210;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:14px;width:min(640px,94vw);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.28);overflow:hidden">
+    <div style="padding:20px 24px 14px;display:flex;gap:14px;align-items:flex-start">
+      <div id="batch-prog-spin" style="width:38px;height:38px;border-radius:50%;border:3px solid #e5e7eb;border-top-color:#0f2744;animation:bpspin .9s linear infinite;flex-shrink:0;margin-top:2px"></div>
+      <div style="flex:1;min-width:0">
+        <div id="batch-prog-title" style="font-size:.98rem;font-weight:700;color:#0f2744">공식 PDF 를 만들고 있습니다</div>
+        <div id="batch-prog-text" style="font-size:.78rem;color:#6b7280;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">준비 중 …</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+          <div style="flex:1;height:5px;background:#eef1f5;border-radius:3px;overflow:hidden"><div id="batch-prog-bar" style="height:100%;width:0;background:linear-gradient(90deg,#0f2744,#2b62b5);border-radius:3px;transition:width .3s"></div></div>
+          <span id="batch-prog-pct" style="font-size:.74rem;color:#6b7280;min-width:34px;text-align:right">0%</span>
+        </div>
+      </div>
     </div>
-    <div id="batch-prog-list" style="padding:0 22px;overflow:auto;max-height:46vh;border-top:1px solid #edebe9"></div>
-    <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 22px;border-top:1px solid #edebe9;background:#faf9f8;border-radius:0 0 12px 12px">
-      <button id="batch-prog-cancel" onclick="cancelBatchPdf()" style="padding:8px 16px;background:#fff;color:#a4262c;border:1px solid #e6b3b7;border-radius:6px;font-size:.82rem;cursor:pointer">중단</button>
-      <button id="batch-prog-close" onclick="closeBatchProg()" style="display:none;padding:8px 18px;background:#0078d4;color:#fff;border:none;border-radius:6px;font-size:.82rem;font-weight:600;cursor:pointer">닫기</button>
+    <div id="batch-prog-list" style="margin:0 24px;border-top:1px solid #eef1f5;overflow:auto;max-height:44vh"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 24px 16px">
+      <span id="batch-prog-sum" style="font-size:.76rem;color:#6b7280"></span>
+      <div style="display:flex;gap:8px">
+        <button id="batch-prog-cancel" onclick="cancelBatchPdf()" style="padding:8px 16px;background:#fff;color:#8f2822;border:1px solid #e6c2c4;border-radius:8px;font-size:.8rem;cursor:pointer">중단</button>
+        <button id="batch-prog-close" onclick="closeBatchProg()" style="display:none;padding:8px 20px;background:#0f2744;color:#fff;border:none;border-radius:8px;font-size:.8rem;font-weight:600;cursor:pointer">닫기</button>
+      </div>
     </div>
   </div>
 </div>
-
+<style>@keyframes bpspin{to{transform:rotate(360deg)}}</style>
 <div id="acc-alert-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2000;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:12px;padding:28px 32px;max-width:380px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.18);text-align:center">
     <div id="acc-alert-icon" style="font-size:2rem;margin-bottom:10px">✅</div>
