@@ -996,6 +996,7 @@ if (new URLSearchParams(location.search).get('openId')) {
         style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:#fff;color:#605e5c;border:1px solid #d2d0ce;border-radius:4px;font-size:.8rem;cursor:pointer;white-space:nowrap;font-family:inherit">
         <span id="admin-refresh-ico" style="display:inline-block;font-size:.86rem;line-height:1">↻</span>새로고침
       </button>
+      <button onclick="openBatchPdfModal()" title="현재 목록에서 최대 30건을 골라 공식 전표 양식 PDF 를 한 번에 ZIP 으로 내려받습니다" style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:#fff;color:#0f2744;border:1px solid #0f2744;border-radius:4px;font-size:.8rem;font-weight:600;cursor:pointer;white-space:nowrap">📄 공식 PDF 일괄 내보내기</button>
       <button onclick="exportAdminExcel()" style="padding:6px 14px;background:#107c10;color:#fff;border:none;border-radius:4px;font-size:.82rem;cursor:pointer;white-space:nowrap">📊 Excel 내보내기</button>
     </div>
   </div>
@@ -7227,6 +7228,158 @@ async function buildPdfDocFromSegments(segments) {
   return { mainDoc, dataUrlToUint8, makeHeaderBytes };
 }
 
+
+// ══════════════════════════════════════════════════════════════════════
+// 공식 PDF 일괄 내보내기 (관리자 탭, 09-11)
+//  · 현재 필터·검색 결과에서 최대 30건을 골라 공식 양식 PDF(첨부 병합 포함)를 한 번에 만든다
+//  · 한 건씩 만들 때와 같은 경로(buildOfficialVoucherHTML → buildPdfDocFromSegments → 첨부 병합)를
+//    상세 모달 없이 돌리기 위해, 첨부 링크는 AttachmentRef 로 임시 요소를 만들어 넘긴다
+//  · 결과는 ZIP 한 개(JSZip, 필요할 때만 CDN 에서 로드). ZIP 을 못 만들면 개별 다운로드로 대체
+//  · 진행 팝업: 건별 상태(대기 → 생성 중 → 완료/실패), 진행률, 실패 사유. 진행 중 취소 가능
+// ══════════════════════════════════════════════════════════════════════
+const BATCH_PDF_MAX = 30;
+let _batchSel = new Set();
+let _batchCancel = false;
+
+function openBatchPdfModal() {
+  const rows = (adminListCache || []).filter(v => (v.Status||'').trim() !== (typeof DRAFT_STATUS !== 'undefined' ? DRAFT_STATUS : '임시저장'));
+  const shown = rows.slice(0, BATCH_PDF_MAX);
+  _batchSel = new Set();
+  const body = document.getElementById('batch-pdf-body');
+  if (!rows.length) {
+    body.innerHTML = '<div style="padding:28px;text-align:center;color:#8a8886;font-size:.85rem">현재 조건에 해당하는 전표가 없습니다.<br>상태·유형·검색어를 조정한 뒤 다시 열어 주세요.</div>';
+  } else {
+    body.innerHTML = `
+      <div style="font-size:.78rem;color:#605e5c;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+        <span>현재 목록 ${rows.length}건 중 앞 ${shown.length}건을 표시합니다. 한 번에 최대 ${BATCH_PDF_MAX}건까지 선택할 수 있습니다.${rows.length>BATCH_PDF_MAX?' <span style="color:#a6631e">더 뒤의 전표는 검색·필터로 좁혀 주세요.</span>':''}</span>
+        <span><a href="#" onclick="batchSelectAll(true);return false" style="color:#0078d4;margin-right:10px">모두 선택</a><a href="#" onclick="batchSelectAll(false);return false" style="color:#0078d4">모두 해제</a></span>
+      </div>
+      <div style="max-height:52vh;overflow:auto;border:1px solid #edebe9;border-radius:6px">
+      <table style="width:100%;border-collapse:collapse;font-size:.76rem">
+        <thead><tr style="background:#f3f2f1;position:sticky;top:0">
+          <th style="width:34px;padding:7px 6px"><input type="checkbox" id="batch-chk-all" onchange="batchSelectAll(this.checked)"></th>
+          <th style="padding:7px 6px;text-align:left">Title</th><th style="padding:7px 6px;text-align:left">유형</th><th style="padding:7px 6px;text-align:left">신청자</th>
+          <th style="padding:7px 6px;text-align:left">Purpose Title</th><th style="padding:7px 6px;text-align:right">DR(KRW)</th><th style="padding:7px 6px;text-align:left">상태</th><th style="padding:7px 6px;text-align:left">B1 Doc No.</th>
+        </tr></thead>
+        <tbody>${shown.map(v => `<tr style="border-top:1px solid #edebe9;cursor:pointer" onclick="batchToggle('${v._spId}', event)">
+          <td style="text-align:center;padding:6px"><input type="checkbox" class="batch-chk" value="${v._spId}" onclick="event.stopPropagation();batchToggle('${v._spId}')"></td>
+          <td style="padding:6px;color:#0078d4;white-space:nowrap">${escHtml(v.Title||'')}</td><td style="padding:6px">${escHtml(v.VoucherType||'')}</td>
+          <td style="padding:6px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(v.RequesterEmail||'')}</td>
+          <td style="padding:6px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(v.PurposeTitle||'')}</td>
+          <td style="padding:6px;text-align:right;font-variant-numeric:tabular-nums">${Number(v.TotalDR_KRW||0).toLocaleString('ko-KR')}</td>
+          <td style="padding:6px">${escHtml(v.Status||'')}</td><td style="padding:6px">${escHtml(spText(v.B1DocNo||'')||'-')}</td></tr>`).join('')}</tbody>
+      </table></div>`;
+  }
+  batchUpdateCount();
+  document.getElementById('batch-pdf-modal').style.display = 'flex';
+}
+function closeBatchPdfModal() { document.getElementById('batch-pdf-modal').style.display = 'none'; }
+function batchToggle(id, ev) {
+  if (ev && ev.target && ev.target.tagName === 'INPUT') return;
+  const chk = document.querySelector(`.batch-chk[value="${id}"]`); if (!chk) return;
+  if (_batchSel.has(id)) { _batchSel.delete(id); chk.checked = false; }
+  else { if (_batchSel.size >= BATCH_PDF_MAX) { chk.checked = false; return; } _batchSel.add(id); chk.checked = true; }
+  batchUpdateCount();
+}
+function batchSelectAll(on) {
+  _batchSel = new Set();
+  document.querySelectorAll('.batch-chk').forEach(c => { c.checked = on; if (on) _batchSel.add(c.value); });
+  batchUpdateCount();
+}
+function batchUpdateCount() {
+  const n = _batchSel.size; const el = document.getElementById('batch-pdf-count'); if (el) el.textContent = `${n} / ${BATCH_PDF_MAX} 선택`;
+  const btn = document.getElementById('batch-pdf-run'); if (btn) btn.disabled = !n;
+  const all = document.getElementById('batch-chk-all'); if (all) { const total = document.querySelectorAll('.batch-chk').length; all.checked = total > 0 && n === total; }
+}
+
+// 공식 양식 PDF 바이트를 만든다 — exportVoucherPdf 와 같은 경로, 화면 요소 의존 없음
+async function buildOfficialPdfBytes(v0, onStep) {
+  // 관리자 목록은 열을 줄여 받으므로(LinesJSON·AttachmentRef 없음) 전표를 다시 단건 조회한다
+  onStep && onStep('전표 조회');
+  const item = await api('/sites/'+siteId+'/lists/'+LIST_REQUESTS+'/items/'+v0._spId+'?$expand=fields');
+  const v = { ...item.fields, _spId: String(item.id) };
+  let lines_data = []; try { lines_data = JSON.parse(v.LinesJSON||'[]'); } catch(e) {}
+  const apprList = await fetchApprovalListDirect(v);
+  const printHost = document.createElement('div');
+  printHost.style.cssText = 'position:fixed;left:-9999px;top:0;z-index:-1;';
+  printHost.innerHTML = buildOfficialVoucherHTML(v, lines_data, apprList);
+  document.body.appendChild(printHost);
+  let cvs;
+  try { cvs = await html2canvas(printHost.firstElementChild, {scale:2,useCORS:true,allowTaint:true,backgroundColor:'#fff',scrollY:0,windowWidth:800}); }
+  finally { printHost.remove(); }
+  const { mainDoc, dataUrlToUint8, makeHeaderBytes } = await buildPdfDocFromSegments([{cvs, headerText:'STK Accounting Voucher · 공식 전표 양식', orientation:'portrait'}]);
+  // 첨부: AttachmentRef 로 상세 모달과 같은 .file-dl-link 요소를 만들어 병합 루틴에 넘긴다
+  const attHost = document.createElement('div');
+  if (v.AttachmentRef) {
+    const items = spText(v.AttachmentRef).split(';').map(s=>s.trim()).filter(Boolean);
+    attHost.innerHTML = items.map(it => {
+      const [rawName, safeKey] = it.split('||ENC||'); const name = String(rawName||'').trim(); let driveId='', itemId='';
+      try { const d = decodeURIComponent(escape(atob(safeKey))); const k = d.indexOf('###'); driveId = d.substring(0,k); itemId = d.substring(k+3); } catch(e) {}
+      return `<a class="file-dl-link" data-drive="${encodeURIComponent(driveId)}" data-id="${encodeURIComponent(itemId)}" data-name="${encodeURIComponent(name)}"></a>`;
+    }).join('');
+  }
+  const fakeBtn = { set innerHTML(t) { onStep && onStep(String(t).replace(/^⏳\s*/, '')); }, get innerHTML() { return ''; } };
+  await appendAttachmentPagesToDoc(mainDoc, dataUrlToUint8, makeHeaderBytes, attHost, fakeBtn);
+  if (typeof stampDraftWatermark === 'function' && (v.Status||'').trim() === (typeof DRAFT_STATUS !== 'undefined' ? DRAFT_STATUS : '임시저장')) await stampDraftWatermark(mainDoc, dataUrlToUint8);
+  return await mainDoc.save();
+}
+
+async function loadJSZip() {
+  if (window.JSZip) return window.JSZip;
+  await new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'; s.onload = res; s.onerror = () => rej(new Error('JSZip 로드 실패')); document.head.appendChild(s); });
+  return window.JSZip;
+}
+
+async function runBatchPdf() {
+  const ids = [..._batchSel]; if (!ids.length) return;
+  const map = new Map((adminListCache||[]).map(v => [String(v._spId), v]));
+  const targets = ids.map(id => map.get(String(id))).filter(Boolean);
+  closeBatchPdfModal();
+  _batchCancel = false;
+  const prog = document.getElementById('batch-prog-modal'); prog.style.display = 'flex';
+  const list = document.getElementById('batch-prog-list');
+  const rowHtml = (v, st, msg) => { const c = { wait:'#8a8886', run:'#0078d4', ok:'#107c10', fail:'#a4262c', skip:'#8a8886' }[st]; const ic = { wait:'○', run:'◔', ok:'✓', fail:'✕', skip:'–' }[st];
+    return `<div id="bp-${v._spId}" style="display:flex;gap:8px;align-items:flex-start;padding:5px 2px;border-bottom:1px solid #f3f2f1;font-size:.76rem"><span style="width:14px;color:${c};font-weight:700">${ic}</span><span style="flex:1;color:#323130">${escHtml(v.Title||'')}</span><span style="color:${c};white-space:nowrap;max-width:46%;overflow:hidden;text-overflow:ellipsis">${escHtml(msg||'')}</span></div>`; };
+  list.innerHTML = targets.map(v => rowHtml(v, 'wait', '대기')).join('');
+  const setRow = (v, st, msg) => { const el = document.getElementById('bp-'+v._spId); if (el) el.outerHTML = rowHtml(v, st, msg); };
+  const bar = document.getElementById('batch-prog-bar'), txt = document.getElementById('batch-prog-text'), cancelBtn = document.getElementById('batch-prog-cancel'), closeBtn = document.getElementById('batch-prog-close');
+  cancelBtn.style.display = ''; closeBtn.style.display = 'none';
+  const files = []; let ok = 0, fail = 0;
+  for (let i = 0; i < targets.length; i++) {
+    const v = targets[i];
+    if (_batchCancel) { setRow(v, 'skip', '취소됨'); continue; }
+    txt.textContent = `${i+1} / ${targets.length} — ${v.Title||''}`; bar.style.width = Math.round((i/targets.length)*100)+'%';
+    setRow(v, 'run', '생성 중');
+    try {
+      const bytes = await buildOfficialPdfBytes(v, (s) => setRow(v, 'run', s));
+      files.push({ name: 'ACC-Voucher_'+(v.Title||v._spId)+'_공식양식.pdf', bytes });
+      ok++; setRow(v, 'ok', `완료 · ${Math.round(bytes.length/1024)} KB`);
+    } catch (e) { fail++; setRow(v, 'fail', '실패 · '+(e && e.message || '').slice(0, 60)); console.warn('[일괄 PDF] 실패:', v.Title, e); }
+    await new Promise(r => setTimeout(r, 0));
+  }
+  bar.style.width = '100%';
+  // 묶어서 내려받기
+  const now = new Date(Date.now()+9*3600*1000); const ds = now.toISOString().slice(0,16).replace(/[-:T]/g,'').slice(0,12);
+  if (files.length) {
+    txt.textContent = `ZIP 으로 묶는 중 … (${files.length}건)`;
+    try {
+      const JSZip = await loadJSZip(); const zip = new JSZip();
+      files.forEach(f => zip.file(f.name, f.bytes));
+      const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `ACC-Voucher_공식양식_일괄_${ds}_${files.length}건.zip`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+      txt.textContent = `완료 — ${ok}건 성공${fail?` · ${fail}건 실패`:''} · ZIP 1개로 내려받았습니다.`;
+    } catch (e) {
+      console.warn('[일괄 PDF] ZIP 실패 → 개별 다운로드:', e && e.message);
+      for (const f of files) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([f.bytes], {type:'application/pdf'})); a.download = f.name; document.body.appendChild(a); a.click(); await new Promise(r => setTimeout(r, 400)); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); }
+      txt.textContent = `완료 — ${ok}건 성공${fail?` · ${fail}건 실패`:''} · ZIP 을 만들지 못해 파일별로 내려받았습니다.`;
+    }
+  } else txt.textContent = _batchCancel ? '취소되었습니다.' : `만든 파일이 없습니다 (${fail}건 실패).`;
+  cancelBtn.style.display = 'none'; closeBtn.style.display = '';
+  try { logAction('ACC Voucher', '공식 PDF 일괄 내보내기', { 선택: targets.length, 성공: ok, 실패: fail, 취소: _batchCancel }); } catch(e) {}
+}
+function cancelBatchPdf() { _batchCancel = true; document.getElementById('batch-prog-cancel').disabled = true; document.getElementById('batch-prog-text').textContent = '지금 건까지 만들고 멈춥니다 …'; }
+function closeBatchProg() { document.getElementById('batch-prog-modal').style.display = 'none'; }
+
 async function downloadPdfDoc(mainDoc, fname) {
   const finalBytes=await mainDoc.save();
   const finalBlob=new Blob([finalBytes],{type:'application/pdf'});
@@ -8142,6 +8295,39 @@ function ptApply(){
 
 </script>
 <!-- GW 스타일 알림 모달 -->
+<!-- 공식 PDF 일괄 내보내기 — 선택 팝업 -->
+<div id="batch-pdf-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1200;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;width:min(960px,94vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.25)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 22px;border-bottom:1px solid #edebe9">
+      <div><div style="font-size:1rem;font-weight:700;color:#0f2744">📄 공식 PDF 일괄 내보내기</div><div style="font-size:.76rem;color:#605e5c;margin-top:2px">선택한 전표의 공식 전표 양식(첨부 병합 포함)을 한 번에 만들어 ZIP 으로 내려받습니다.</div></div>
+      <button onclick="closeBatchPdfModal()" style="background:none;border:none;font-size:1.3rem;color:#605e5c;cursor:pointer">✕</button>
+    </div>
+    <div id="batch-pdf-body" style="padding:14px 22px;overflow:auto"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 22px;border-top:1px solid #edebe9;background:#faf9f8;border-radius:0 0 12px 12px">
+      <span id="batch-pdf-count" style="font-size:.82rem;font-weight:600;color:#323130">0 / 30 선택</span>
+      <div style="display:flex;gap:8px">
+        <button onclick="closeBatchPdfModal()" style="padding:8px 16px;background:#fff;border:1px solid #d2d0ce;border-radius:6px;font-size:.82rem;cursor:pointer">닫기</button>
+        <button id="batch-pdf-run" onclick="runBatchPdf()" disabled style="padding:8px 18px;background:#0078d4;color:#fff;border:none;border-radius:6px;font-size:.82rem;font-weight:600;cursor:pointer">선택한 전표 PDF 만들기</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- 공식 PDF 일괄 내보내기 — 진행 팝업 -->
+<div id="batch-prog-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1210;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;width:min(620px,94vw);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.25)">
+    <div style="padding:18px 22px 10px">
+      <div style="font-size:.98rem;font-weight:700;color:#0f2744">공식 PDF 를 만들고 있습니다</div>
+      <div id="batch-prog-text" style="font-size:.8rem;color:#605e5c;margin-top:4px">준비 중 …</div>
+      <div style="height:8px;background:#edebe9;border-radius:4px;overflow:hidden;margin-top:10px"><div id="batch-prog-bar" style="height:100%;width:0;background:#0078d4;transition:width .3s"></div></div>
+    </div>
+    <div id="batch-prog-list" style="padding:0 22px;overflow:auto;max-height:46vh;border-top:1px solid #edebe9"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 22px;border-top:1px solid #edebe9;background:#faf9f8;border-radius:0 0 12px 12px">
+      <button id="batch-prog-cancel" onclick="cancelBatchPdf()" style="padding:8px 16px;background:#fff;color:#a4262c;border:1px solid #e6b3b7;border-radius:6px;font-size:.82rem;cursor:pointer">중단</button>
+      <button id="batch-prog-close" onclick="closeBatchProg()" style="display:none;padding:8px 18px;background:#0078d4;color:#fff;border:none;border-radius:6px;font-size:.82rem;font-weight:600;cursor:pointer">닫기</button>
+    </div>
+  </div>
+</div>
+
 <div id="acc-alert-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2000;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:12px;padding:28px 32px;max-width:380px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.18);text-align:center">
     <div id="acc-alert-icon" style="font-size:2rem;margin-bottom:10px">✅</div>
