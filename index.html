@@ -7247,20 +7247,60 @@ let _batchCancel = false;
 let _batchRows = [];
 function openBatchPdfModal() {
   const draftSt = (typeof DRAFT_STATUS !== 'undefined' ? DRAFT_STATUS : '임시저장');
-  _batchRows = (adminListCache || []).filter(v => (v.Status||'').trim() !== draftSt);
+  // 팝업은 관리자 목록 전체(adminListRaw)에서 시작하고 자체 필터(담당자·상태·유형·검색·기간)를 갖는다.
+  // 열 때 관리자 탭의 담당자·상태·유형·검색어를 그대로 이어받아 두 화면이 같은 목록으로 시작한다.
+  _batchRows = (adminListRaw || []).filter(v => (v.Status||'').trim() !== draftSt);
   _batchSel = new Set();
-  // 기본 기간: 오늘 기준 최근 3개월 (KST). 사용자는 제한 없이 바꿀 수 있다 — 선택 상한 30이 있어 범위가 넓어도 문제없다.
-  const _now = new Date(Date.now() + 9*3600*1000); const _to = _now.toISOString().slice(0,10);
-  const _fromD = new Date(_now); _fromD.setUTCMonth(_fromD.getUTCMonth() - 3); const _from = _fromD.toISOString().slice(0,10);
-  document.getElementById('batch-date-from').value = _from;
-  document.getElementById('batch-date-to').value = _to;
+  _batchQuick = _accQuickView || '';
+  document.getElementById('batch-status').value = (document.getElementById('admin-status')||{value:''}).value || '';
+  document.getElementById('batch-type').value = (document.getElementById('admin-type')||{value:''}).value || '';
+  document.getElementById('batch-search').value = (document.getElementById('admin-search')||{value:''}).value || '';
+  batchSetDefaultDates();
+  renderBatchQuickBar();
   renderBatchPdfList();
   document.getElementById('batch-pdf-modal').style.display = 'flex';
 }
-// 날짜(신청일) 범위로 좁힌다 — 화면 필터·검색 결과 안에서 다시 거른다
+let _batchQuick = '';   // 팝업 안 담당자 빠른 보기 (이메일, 빈 값이면 전체)
+function batchSetDefaultDates() {
+  // 기본 기간: 오늘 기준 최근 3개월 (KST). 사용자는 제한 없이 바꿀 수 있다 — 선택 상한 30이 있어 범위가 넓어도 문제없다.
+  const now = new Date(Date.now() + 9*3600*1000); const to = now.toISOString().slice(0,10);
+  const fd = new Date(now); fd.setUTCMonth(fd.getUTCMonth() - 3);
+  document.getElementById('batch-date-from').value = fd.toISOString().slice(0,10);
+  document.getElementById('batch-date-to').value = to;
+}
+function batchSetQuick(email) { _batchQuick = (_batchQuick === email) ? '' : email; renderBatchQuickBar(); renderBatchPdfList(); }
+// 관리자 탭의 ACC TEAM 칩과 같은 모양·같은 판정(accRelatedTo). 숫자는 팝업 목록(_batchRows) 기준.
+function renderBatchQuickBar() {
+  const bar = document.getElementById('batch-quick-bar'); if (!bar) return;
+  if (typeof ACC_ROLE_KEYS === 'undefined' || !_sysConfig) { bar.style.display = 'none'; return; }
+  const chips = ACC_ROLE_KEYS.map(([key, full, color]) => {
+    const email = accRoleEmail(key); if (!email) return '';
+    const who = ((cfgVal(_sysConfig, key) || {}).name || '').trim() || email.split('@')[0];
+    const on = _batchQuick === email; const n = _batchRows.filter(v => accRelatedTo(v, email)).length;
+    return '<button onclick="batchSetQuick(\'' + email + '\')" title="' + escHtmlAttr(full + ' · ' + who) + '"'
+      + ' style="display:inline-flex;align-items:center;gap:7px;padding:5px 12px 5px 11px;border-radius:18px;font-family:inherit;white-space:nowrap;cursor:pointer;transition:all .14s;'
+      + (on ? 'background:' + color + ';border:1px solid ' + color + ';box-shadow:0 2px 6px ' + color + '40' : 'background:#fff;border:1px solid #e2e8f0') + '">'
+      + '<span style="font-size:.74rem;font-weight:600;' + (on ? 'color:#fff' : 'color:#334155') + '">' + escHtml(who) + '</span>'
+      + '<span style="font-size:.72rem;font-weight:700;' + (on ? 'color:rgba(255,255,255,.85)' : 'color:#94a3b8') + '">' + n + '</span></button>';
+  }).join('');
+  if (!chips) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  bar.innerHTML = '<span style="font-size:.68rem;color:#b6c2cf;font-weight:700;letter-spacing:.6px;white-space:nowrap">ACC TEAM</span><span style="width:1px;height:15px;background:#e8edf2"></span>' + chips
+    + (_batchQuick ? '<button onclick="batchSetQuick(\'\')" style="background:none;border:none;color:#94a3b8;font-size:.71rem;cursor:pointer;font-family:inherit;padding:4px 8px">Show all</button>' : '');
+}
+// 담당자 · 상태 · 유형 · 검색어 · 신청일 범위 — 관리자 탭과 같은 판정
 function batchDateFiltered() {
   const f = document.getElementById('batch-date-from').value, t = document.getElementById('batch-date-to').value;
-  return _batchRows.filter(v => { const d = (v.SubmittedDate||'').slice(0,10); if (f && d < f) return false; if (t && d > t) return false; return true; });
+  const fs = (document.getElementById('batch-status')||{value:''}).value, ft = (document.getElementById('batch-type')||{value:''}).value;
+  const fk = ((document.getElementById('batch-search')||{value:''}).value||'').toLowerCase();
+  return _batchRows.filter(v => {
+    if (_batchQuick && !accRelatedTo(v, _batchQuick)) return false;
+    if (fs && v.Status !== fs) return false;
+    if (ft && v.VoucherType !== ft) return false;
+    if (fk && !(v.RequesterEmail||'').toLowerCase().includes(fk) && !(v.Title||'').toLowerCase().includes(fk) && !(v.BPName||'').toLowerCase().includes(fk) && !String(v.B1DocNo||'').toLowerCase().includes(fk)) return false;
+    const d = (v.SubmittedDate||'').slice(0,10); if (f && d < f) return false; if (t && d > t) return false;
+    return true;
+  });
 }
 function renderBatchPdfList() {
   const rows = batchDateFiltered();
@@ -7271,12 +7311,14 @@ function renderBatchPdfList() {
   // 표시 목록이 바뀌면 안 보이는 선택은 지운다
   const visible = new Set(rows.map(v => String(v._spId))); [..._batchSel].forEach(id => { if (!visible.has(id)) _batchSel.delete(id); });
   const sumEl = document.getElementById('batch-pdf-summary');
-  if (sumEl) sumEl.innerHTML = `기간 내 <b>${rows.length}</b>건${rows.length !== _batchRows.length ? ` <span style="color:#8a8886">/ 목록 ${_batchRows.length}건</span>` : ''} · 최대 <b>${BATCH_PDF_MAX}</b>건 선택`;
+  if (sumEl) sumEl.innerHTML = `조건에 맞는 전표 <b>${rows.length}</b>건${rows.length !== _batchRows.length ? ` <span style="color:#8a8886">/ 전체 ${_batchRows.length}건</span>` : ''}`;
+  const selTop = document.getElementById('batch-sel-top');
+  if (selTop) { const k = Math.min(rows.length, BATCH_PDF_MAX); selTop.textContent = rows.length > BATCH_PDF_MAX ? `앞 ${k}건 선택` : `모두 선택 (${k}건)`; selTop.style.display = rows.length ? '' : 'none'; }
   if (!rows.length) { body.innerHTML = '<div style="padding:28px;text-align:center;color:#8a8886;font-size:.85rem">조건에 해당하는 전표가 없습니다.</div>'; batchUpdateCount(); return; }
   body.innerHTML = `<div style="overflow:auto;border:1px solid #edebe9;border-radius:6px;max-height:50vh">
     <table class="list-table" id="batch-pdf-table" style="min-width:0;width:100%;table-layout:fixed">
       <thead><tr>
-        <th style="width:34px;text-align:center"><input type="checkbox" id="batch-chk-all" onchange="batchSelectAll(this.checked)" title="보이는 전표 중 앞 ${BATCH_PDF_MAX}건까지"></th>
+        <th style="width:34px;text-align:center"><input type="checkbox" id="batch-chk-all" onchange="batchSelectAll(this.checked)" title="보이는 순서대로 앞 ${BATCH_PDF_MAX}건까지 선택합니다"></th>
         <th style="width:196px">Title</th><th style="width:54px;text-align:center">유형</th><th>신청자</th><th style="width:11%">BP명</th><th style="width:19%">Purpose Title</th><th style="width:104px;text-align:right">DR(KRW)</th><th style="width:74px;text-align:center">Status</th><th style="width:112px">신청일</th><th style="width:92px">B1 Doc No.</th><th style="width:70px;text-align:center">Posting</th>
       </tr></thead>
       <tbody>${rows.map(v => { const b1 = (v.B1DocNo||'').trim(); return `<tr onclick="batchToggle('${v._spId}', event)" style="cursor:pointer">
@@ -8331,17 +8373,26 @@ function ptApply(){
       <div><div style="font-size:1rem;font-weight:700;color:#0f2744">공식 PDF 일괄 내보내기</div><div style="font-size:.76rem;color:#605e5c;margin-top:2px">선택한 전표의 공식 전표 양식(첨부 병합 포함)을 한 번에 만들어 ZIP 으로 내려받습니다.</div></div>
       <button onclick="closeBatchPdfModal()" style="background:none;border:none;font-size:1.3rem;color:#605e5c;cursor:pointer">✕</button>
     </div>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 22px 0;font-size:.78rem;color:#605e5c">
+    <div id="batch-quick-bar" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 22px 0"></div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 22px 0;font-size:.78rem;color:#605e5c">
+      <select id="batch-status" onchange="renderBatchPdfList()" style="border:1px solid #d2d0ce;border-radius:4px;padding:5px 8px;font-size:.74rem;font-family:inherit">
+        <option value="">전체 상태</option><option value="대기">대기</option><option value="승인완료">승인완료</option><option value="반려">반려</option><option value="철회">철회</option>
+      </select>
+      <select id="batch-type" onchange="renderBatchPdfList()" style="border:1px solid #d2d0ce;border-radius:4px;padding:5px 8px;font-size:.74rem;font-family:inherit">
+        <option value="">전체 유형</option><option value="AP">AP</option><option value="AP_IMS">AP (IMS)</option><option value="AP_CR">AP - Customer Refund</option><option value="AR">AR</option><option value="GL">GL</option><option value="FA">Fixed Asset</option><option value="ADV">Advance Payment</option><option value="SET">Settlement</option>
+      </select>
+      <input type="text" id="batch-search" oninput="renderBatchPdfList()" placeholder="신청자/Title/BP명/B1 Doc No." style="border:1px solid #d2d0ce;border-radius:4px;padding:5px 9px;font-size:.74rem;font-family:inherit;width:220px">
+      <span style="width:1px;height:18px;background:#e8edf2;margin:0 2px"></span>
       <span>신청일</span>
-      <input type="date" id="batch-date-from" onchange="renderBatchPdfList()" style="border:1px solid #d2d0ce;border-radius:4px;padding:4px 8px;font-size:.76rem;font-family:inherit">
+      <input type="date" id="batch-date-from" onchange="renderBatchPdfList()" style="border:1px solid #d2d0ce;border-radius:4px;padding:4px 8px;font-size:.74rem;font-family:inherit">
       <span>~</span>
-      <input type="date" id="batch-date-to" onchange="renderBatchPdfList()" style="border:1px solid #d2d0ce;border-radius:4px;padding:4px 8px;font-size:.76rem;font-family:inherit">
-      <button onclick="document.getElementById('batch-date-from').value='';document.getElementById('batch-date-to').value='';renderBatchPdfList()" style="padding:4px 10px;background:#fff;border:1px solid #d2d0ce;border-radius:4px;font-size:.74rem;cursor:pointer">전체 기간</button>
-      <span style="font-size:.72rem;color:#8a8886">기본값은 최근 3개월</span>
+      <input type="date" id="batch-date-to" onchange="renderBatchPdfList()" style="border:1px solid #d2d0ce;border-radius:4px;padding:4px 8px;font-size:.74rem;font-family:inherit">
+      <button onclick="batchSetDefaultDates();renderBatchPdfList()" title="오늘 기준 최근 3개월" style="padding:4px 10px;background:#fff;border:1px solid #d2d0ce;border-radius:4px;font-size:.72rem;cursor:pointer">기본값: 3개월</button>
+      <button onclick="document.getElementById('batch-date-from').value='';document.getElementById('batch-date-to').value='';renderBatchPdfList()" style="padding:4px 10px;background:#fff;border:1px solid #d2d0ce;border-radius:4px;font-size:.72rem;cursor:pointer">전체 기간</button>
       <span id="batch-pdf-summary" style="margin-left:auto"></span>
-      <span><a href="#" onclick="batchSelectAll(true);return false" style="color:#0078d4;margin-right:10px">모두 선택</a><a href="#" onclick="batchSelectAll(false);return false" style="color:#0078d4">모두 해제</a></span>
+      <span><a href="#" id="batch-sel-top" onclick="batchSelectAll(true);return false" style="color:#0078d4;margin-right:10px">앞 30건 선택</a><a href="#" onclick="batchSelectAll(false);return false" style="color:#0078d4">선택 해제</a></span>
     </div>
-    <div id="batch-pdf-limit" style="display:none;margin:8px 22px 0;padding:6px 10px;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:6px;font-size:.74rem;color:#8a6116">한 번에 30건까지만 만들 수 있습니다. 더 필요하면 이 묶음을 내려받은 뒤 다시 선택해 주세요.</div>
+    <div id="batch-pdf-limit" style="display:none;margin:8px 22px 0;padding:6px 10px;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:6px;font-size:.74rem;color:#8a6116">30건이 선택되었습니다 — 한 번에 만들 수 있는 최대치입니다. 나머지는 이 묶음을 내려받은 뒤 다시 선택해 주세요.</div>
     <div id="batch-pdf-body" style="padding:10px 22px 14px;overflow:auto"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 22px;border-top:1px solid #edebe9;background:#faf9f8;border-radius:0 0 12px 12px">
       <span id="batch-pdf-count" style="font-size:.82rem;font-weight:600;color:#323130">0 / 30 선택</span>
