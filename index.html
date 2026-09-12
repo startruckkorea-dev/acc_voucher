@@ -7249,7 +7249,10 @@ function openBatchPdfModal() {
   const draftSt = (typeof DRAFT_STATUS !== 'undefined' ? DRAFT_STATUS : '임시저장');
   // 팝업은 관리자 목록 전체(adminListRaw)에서 시작하고 자체 필터(담당자·상태·유형·검색·기간)를 갖는다.
   // 열 때 관리자 탭의 담당자·상태·유형·검색어를 그대로 이어받아 두 화면이 같은 목록으로 시작한다.
-  _batchRows = (adminListRaw || []).filter(v => (v.Status||'').trim() !== draftSt);
+  // 원본은 관리자 전체 목록. 혹시 비어 있으면(불러오기 전·오류 뒤) 화면 목록으로 대신하고, 그것도 없으면 안내한다.
+  const src = (adminListRaw && adminListRaw.length) ? adminListRaw : (adminListCache || []);
+  _batchRows = src.filter(v => (v.Status||'').trim() !== draftSt);
+  console.log('[일괄 PDF] 원본', (adminListRaw||[]).length, '/ 화면', (adminListCache||[]).length, '→ 팝업', _batchRows.length);
   _batchSel = new Set();
   _batchQuick = _accQuickView || '';
   document.getElementById('batch-status').value = (document.getElementById('admin-status')||{value:''}).value || '';
@@ -7311,18 +7314,23 @@ function renderBatchPdfList() {
   // 표시 목록이 바뀌면 안 보이는 선택은 지운다
   const visible = new Set(rows.map(v => String(v._spId))); [..._batchSel].forEach(id => { if (!visible.has(id)) _batchSel.delete(id); });
   const sumEl = document.getElementById('batch-pdf-summary');
-  if (sumEl) sumEl.innerHTML = `조건에 맞는 전표 <b>${rows.length}</b>건${rows.length !== _batchRows.length ? ` <span style="color:#8a8886">/ 전체 ${_batchRows.length}건</span>` : ''}`;
+  if (sumEl) sumEl.innerHTML = `조건에 맞는 전표 <b>${rows.length}</b>건 <span style="color:#8a8886">/ 전체 ${_batchRows.length}건</span>`;
   const selTop = document.getElementById('batch-sel-top');
   if (selTop) { const k = Math.min(rows.length, BATCH_PDF_MAX); selTop.textContent = rows.length > BATCH_PDF_MAX ? `앞 ${k}건 선택` : `모두 선택 (${k}건)`; selTop.style.display = rows.length ? '' : 'none'; }
-  if (!rows.length) { body.innerHTML = '<div style="padding:28px;text-align:center;color:#8a8886;font-size:.85rem">조건에 해당하는 전표가 없습니다.</div>'; batchUpdateCount(); return; }
+  if (!rows.length) {
+    body.innerHTML = _batchRows.length
+      ? '<div style="padding:28px;text-align:center;color:#8a8886;font-size:.85rem">조건에 해당하는 전표가 없습니다. 담당자 · 상태 · 유형 · 검색어 · 기간을 조정해 주세요.</div>'
+      : '<div style="padding:28px;text-align:center;color:#8a8886;font-size:.85rem">관리자 목록이 아직 비어 있습니다.<br><button onclick="closeBatchPdfModal();accReloadAdmin();" style="margin-top:10px;padding:6px 14px;background:#fff;border:1px solid #d2d0ce;border-radius:4px;font-size:.78rem;cursor:pointer">목록 다시 불러오기</button></div>';
+    batchUpdateCount(); return;
+  }
   body.innerHTML = `<div style="overflow:auto;border:1px solid #edebe9;border-radius:6px;max-height:50vh">
     <table class="list-table" id="batch-pdf-table" style="min-width:0;width:100%;table-layout:fixed">
       <thead><tr>
         <th style="width:34px;text-align:center"><input type="checkbox" id="batch-chk-all" onchange="batchSelectAll(this.checked)" title="보이는 순서대로 앞 ${BATCH_PDF_MAX}건까지 선택합니다"></th>
         <th style="width:196px">Title</th><th style="width:54px;text-align:center">유형</th><th>신청자</th><th style="width:11%">BP명</th><th style="width:19%">Purpose Title</th><th style="width:104px;text-align:right">DR(KRW)</th><th style="width:74px;text-align:center">Status</th><th style="width:112px">신청일</th><th style="width:92px">B1 Doc No.</th><th style="width:70px;text-align:center">Posting</th>
       </tr></thead>
-      <tbody>${rows.map(v => { const b1 = (v.B1DocNo||'').trim(); return `<tr onclick="batchToggle('${v._spId}', event)" style="cursor:pointer">
-        <td style="text-align:center"><input type="checkbox" class="batch-chk" value="${v._spId}" onclick="event.stopPropagation();batchToggle('${v._spId}')"></td>
+      <tbody>${rows.map(v => { const b1 = (v.B1DocNo||'').trim(); return `<tr onclick="batchOpenDetail('${v._spId}')" style="cursor:pointer" title="클릭하면 상세 내용을 봅니다 · 선택은 왼쪽 체크박스">
+        <td style="text-align:center" onclick="event.stopPropagation();batchToggle('${v._spId}')"><input type="checkbox" class="batch-chk" value="${v._spId}" onclick="event.stopPropagation();batchToggle('${v._spId}')"></td>
         <td style="font-size:.68rem;color:#0078d4;white-space:nowrap;letter-spacing:-.1px;overflow:hidden;text-overflow:ellipsis">${escHtml(v.Title||'-')}</td>
         <td style="text-align:center"><span class="type-badge t-${escHtml(v.VoucherType||'')}" style="font-size:.62rem;padding:1px 5px">${escHtml(TYPE_LABEL[v.VoucherType]||v.VoucherType||'-')}</span></td>
         <td style="font-size:.73rem;color:#605e5c;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(v.RequesterEmail||'')}">${escHtml(v.RequesterEmail||'-')}</td>
@@ -7335,6 +7343,11 @@ function renderBatchPdfList() {
         <td style="text-align:center;font-size:.72rem;white-space:nowrap">${b1 ? '<span style="color:#107c10;font-weight:600">✅ 완료</span>' : '<span style="color:#a19f9d">미완료</span>'}</td>
       </tr>`; }).join('')}</tbody></table></div>`;
   batchUpdateCount();
+}
+// 팝업 안에서 행을 누르면 관리자 탭과 같은 상세 모달을 연다. 팝업은 그대로 두고 상세를 그 위에 띄운다.
+function batchOpenDetail(id) {
+  const m = document.getElementById('voucher-detail-modal'); if (m) m.style.zIndex = '1300';
+  openVoucherSP(String(id), 'admin');
 }
 function closeBatchPdfModal() { document.getElementById('batch-pdf-modal').style.display = 'none'; }
 function batchToggle(id, ev) {
