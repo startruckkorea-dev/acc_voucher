@@ -7264,6 +7264,9 @@ function openBatchPdfModal() {
   document.getElementById('batch-pdf-modal').style.display = 'flex';
 }
 let _batchQuick = '';   // 팝업 안 담당자 빠른 보기 (이메일, 빈 값이면 전체)
+const BATCH_PAGE = 20;  // 관리자 탭과 같은 20건 단위. 선택(_batchSel)은 페이지와 무관하게 유지된다.
+let _batchPage = 0;
+function batchPgGo(p) { _batchPage = Math.max(0, p); renderBatchPdfList(true); }
 function batchSetDefaultDates() {
   // 기본 기간: 오늘 기준 최근 3개월 (KST). 사용자는 제한 없이 바꿀 수 있다 — 선택 상한 30이 있어 범위가 넓어도 문제없다.
   const now = new Date(Date.now() + 9*3600*1000); const to = now.toISOString().slice(0,10);
@@ -7305,8 +7308,11 @@ function batchDateFiltered() {
     return true;
   });
 }
-function renderBatchPdfList() {
+function renderBatchPdfList(keepPage) {
   const rows = batchDateFiltered();
+  if (!keepPage) _batchPage = 0;   // 필터·검색·기간·담당자가 바뀌면 1페이지로
+  const pages = Math.max(1, Math.ceil(rows.length / BATCH_PAGE)); if (_batchPage >= pages) _batchPage = pages - 1;
+  const pageRows = rows.slice(_batchPage * BATCH_PAGE, (_batchPage + 1) * BATCH_PAGE);
   const body = document.getElementById('batch-pdf-body');
   const stMap={'대기':'badge-대기','대기(잠김)':'badge-대기잠김','승인완료':'badge-승인완료','반려':'badge-반려','철회':'badge-철회'};
   const fmtK=n=>Math.round(n||0).toLocaleString('ko-KR');
@@ -7316,7 +7322,7 @@ function renderBatchPdfList() {
   const sumEl = document.getElementById('batch-pdf-summary');
   if (sumEl) sumEl.innerHTML = `조건에 맞는 전표 <b>${rows.length}</b>건 <span style="color:#8a8886">/ 전체 ${_batchRows.length}건</span>`;
   const selTop = document.getElementById('batch-sel-top');
-  if (selTop) { const k = Math.min(rows.length, BATCH_PDF_MAX); selTop.textContent = rows.length > BATCH_PDF_MAX ? `앞 ${k}건 선택` : `모두 선택 (${k}건)`; selTop.style.display = rows.length ? '' : 'none'; }
+  if (selTop) { const k = Math.min(rows.length, BATCH_PDF_MAX); selTop.textContent = rows.length > BATCH_PDF_MAX ? `앞 ${k}건 선택` : `모두 선택 (${k}건)`; selTop.title = '조건에 맞는 전표를 순서대로 ' + k + '건 — 여러 페이지에 걸쳐 선택됩니다'; selTop.style.display = rows.length ? '' : 'none'; }
   if (!rows.length) {
     body.innerHTML = _batchRows.length
       ? '<div style="padding:28px;text-align:center;color:#8a8886;font-size:.85rem">조건에 해당하는 전표가 없습니다. 담당자 · 상태 · 유형 · 검색어 · 기간을 조정해 주세요.</div>'
@@ -7326,11 +7332,11 @@ function renderBatchPdfList() {
   body.innerHTML = `<div style="overflow:auto;border:1px solid #edebe9;border-radius:6px;max-height:50vh">
     <table class="list-table" id="batch-pdf-table" style="min-width:0;width:100%;table-layout:fixed">
       <thead><tr>
-        <th style="width:34px;text-align:center"><input type="checkbox" id="batch-chk-all" onchange="batchSelectAll(this.checked)" title="보이는 순서대로 앞 ${BATCH_PDF_MAX}건까지 선택합니다"></th>
+        <th style="width:34px;text-align:center"><input type="checkbox" id="batch-chk-all" onchange="batchSelectPage(this.checked)" title="이 페이지의 전표를 선택/해제합니다 (최대 ${BATCH_PDF_MAX}건까지)"></th>
         <th style="width:196px">Title</th><th style="width:54px;text-align:center">유형</th><th>신청자</th><th style="width:11%">BP명</th><th style="width:19%">Purpose Title</th><th style="width:104px;text-align:right">DR(KRW)</th><th style="width:74px;text-align:center">Status</th><th style="width:112px">신청일</th><th style="width:92px">B1 Doc No.</th><th style="width:70px;text-align:center">Posting</th>
       </tr></thead>
-      <tbody>${rows.map(v => { const b1 = (v.B1DocNo||'').trim(); return `<tr onclick="batchOpenDetail('${v._spId}')" style="cursor:pointer" title="클릭하면 상세 내용을 봅니다 · 선택은 왼쪽 체크박스">
-        <td style="text-align:center" onclick="event.stopPropagation();batchToggle('${v._spId}')"><input type="checkbox" class="batch-chk" value="${v._spId}" onclick="event.stopPropagation();batchToggle('${v._spId}')"></td>
+      <tbody>${pageRows.map(v => { const b1 = (v.B1DocNo||'').trim(); return `<tr onclick="batchOpenDetail('${v._spId}')" style="cursor:pointer" title="클릭하면 상세 내용을 봅니다 · 선택은 왼쪽 체크박스">
+        <td style="text-align:center" onclick="event.stopPropagation();batchToggle('${v._spId}')"><input type="checkbox" class="batch-chk" value="${v._spId}" ${_batchSel.has(String(v._spId)) ? 'checked' : ''} onclick="event.stopPropagation();batchToggle('${v._spId}')"></td>
         <td style="font-size:.68rem;color:#0078d4;white-space:nowrap;letter-spacing:-.1px;overflow:hidden;text-overflow:ellipsis">${escHtml(v.Title||'-')}</td>
         <td style="text-align:center"><span class="type-badge t-${escHtml(v.VoucherType||'')}" style="font-size:.62rem;padding:1px 5px">${escHtml(TYPE_LABEL[v.VoucherType]||v.VoucherType||'-')}</span></td>
         <td style="font-size:.73rem;color:#605e5c;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(v.RequesterEmail||'')}">${escHtml(v.RequesterEmail||'-')}</td>
@@ -7341,7 +7347,11 @@ function renderBatchPdfList() {
         <td style="font-size:.72rem;color:#605e5c;white-space:nowrap">${fmtDate(v.SubmittedDate)}</td>
         <td style="font-size:.72rem;color:#323130;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(b1) || '<span style="color:#a19f9d">-</span>'}</td>
         <td style="text-align:center;font-size:.72rem;white-space:nowrap">${b1 ? '<span style="color:#107c10;font-weight:600">✅ 완료</span>' : '<span style="color:#a19f9d">미완료</span>'}</td>
-      </tr>`; }).join('')}</tbody></table></div>`;
+      </tr>`; }).join('')}</tbody></table></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;font-size:.74rem;color:#605e5c">
+      <span>${rows.length}건 중 ${_batchPage * BATCH_PAGE + 1}–${Math.min(rows.length, (_batchPage + 1) * BATCH_PAGE)}건 · 선택은 페이지를 넘겨도 유지됩니다</span>
+      <div style="display:flex;gap:4px">${apsPagerHtml(_batchPage, pages, function(p){ return 'batchPgGo(' + p + ')'; })}</div>
+    </div>`;
   batchUpdateCount();
 }
 // 팝업 안에서 행을 누르면 관리자 탭과 같은 상세 모달을 연다. 팝업은 그대로 두고 상세를 그 위에 띄운다.
@@ -7351,23 +7361,34 @@ function batchOpenDetail(id) {
 }
 function closeBatchPdfModal() { document.getElementById('batch-pdf-modal').style.display = 'none'; }
 function batchToggle(id, ev) {
+  id = String(id);   // 선택 집합은 문자열 id 로만 — 숫자로 들어와도 같은 키가 되게
   if (ev && ev.target && ev.target.tagName === 'INPUT') return;
   const chk = document.querySelector(`.batch-chk[value="${id}"]`); if (!chk) return;
   if (_batchSel.has(id)) { _batchSel.delete(id); chk.checked = false; }
   else { if (_batchSel.size >= BATCH_PDF_MAX) { chk.checked = false; return; } _batchSel.add(id); chk.checked = true; }
   batchUpdateCount();
 }
+// 「앞 30건 선택」: 조건 결과 순서대로(페이지와 무관) 앞 30건. 「선택 해제」: 전부 해제.
 function batchSelectAll(on) {
   _batchSel = new Set();
-  // 「모두 선택」은 보이는 순서대로 앞 30건까지만 — 나머지는 체크가 남지 않는다
-  document.querySelectorAll('.batch-chk').forEach(c => { const take = on && _batchSel.size < BATCH_PDF_MAX; c.checked = take; if (take) _batchSel.add(c.value); });
+  if (on) batchDateFiltered().slice(0, BATCH_PDF_MAX).forEach(v => _batchSel.add(String(v._spId)));
+  document.querySelectorAll('.batch-chk').forEach(c => { c.checked = _batchSel.has(c.value); });
+  batchUpdateCount();
+}
+// 머리글 체크: 이 페이지만 선택/해제 (상한 30 안에서)
+function batchSelectPage(on) {
+  document.querySelectorAll('.batch-chk').forEach(c => {
+    if (on) { if (!_batchSel.has(c.value) && _batchSel.size < BATCH_PDF_MAX) _batchSel.add(c.value); }
+    else _batchSel.delete(c.value);
+    c.checked = _batchSel.has(c.value);
+  });
   batchUpdateCount();
 }
 function batchUpdateCount() {
   const n = _batchSel.size; const el = document.getElementById('batch-pdf-count'); if (el) { el.textContent = `${n} / ${BATCH_PDF_MAX} 선택`; el.style.color = n >= BATCH_PDF_MAX ? '#a6631e' : '#323130'; }
   const lim = document.getElementById('batch-pdf-limit'); if (lim) lim.style.display = n >= BATCH_PDF_MAX ? '' : 'none';
   const btn = document.getElementById('batch-pdf-run'); if (btn) btn.disabled = !n;
-  const all = document.getElementById('batch-chk-all'); if (all) { const total = document.querySelectorAll('.batch-chk').length; all.checked = total > 0 && n === total; }
+  const all = document.getElementById('batch-chk-all'); if (all) { const chks = [...document.querySelectorAll('.batch-chk')]; all.checked = chks.length > 0 && chks.every(c => _batchSel.has(c.value)); }
 }
 
 // 공식 양식 PDF 바이트를 만든다 — exportVoucherPdf 와 같은 경로, 화면 요소 의존 없음
