@@ -7417,13 +7417,14 @@ async function runBatchPdf() {
   const prog = document.getElementById('batch-prog-modal'); prog.style.display = 'flex';
   const list = document.getElementById('batch-prog-list');
   const rowHtml = (v, st, msg) => { const c = { wait:'#9ca3af', run:'#2b62b5', ok:'#166a43', fail:'#8f2822', skip:'#9ca3af' }[st]; const bg = { wait:'transparent', run:'#f3f7fd', ok:'transparent', fail:'#fdf4f4', skip:'transparent' }[st]; const ic = { wait:'○', run:'◔', ok:'✓', fail:'✕', skip:'–' }[st];
-    return `<div id="bp-${v._spId}" style="display:flex;gap:10px;align-items:center;padding:7px 8px;border-bottom:1px solid #f1f3f6;font-size:.76rem;background:${bg}"><span style="width:16px;text-align:center;color:${c};font-weight:700">${ic}</span><span style="flex:1;color:#1f2937;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(v.Title||'')}</span><span style="color:${c};white-space:nowrap;max-width:46%;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums">${escHtml(msg||'')}</span></div>`; };
+    return `<div id="bp-${v._spId}" style="display:flex;gap:10px;align-items:center;padding:7px 8px;border-bottom:1px solid #f1f3f6;font-size:.76rem;background:${bg}"><span style="width:16px;text-align:center;color:${c};font-weight:700">${ic}</span><span style="flex:1;color:#1f2937;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(v.Title||'')}</span><span style="color:${c};white-space:nowrap;min-width:150px;max-width:46%;text-align:right;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums">${escHtml(msg||'')}</span></div>`; };
   list.innerHTML = targets.map(v => rowHtml(v, 'wait', '대기')).join('');
   const setRow = (v, st, msg) => { const el = document.getElementById('bp-'+v._spId); if (el) el.outerHTML = rowHtml(v, st, msg); };
   const bar = document.getElementById('batch-prog-bar'), txt = document.getElementById('batch-prog-text'), cancelBtn = document.getElementById('batch-prog-cancel'), closeBtn = document.getElementById('batch-prog-close');
   const pctEl = document.getElementById('batch-prog-pct'), spin = document.getElementById('batch-prog-spin'), titleEl = document.getElementById('batch-prog-title'), sumEl = document.getElementById('batch-prog-sum');
   const setPct = (p) => { bar.style.width = p + '%'; if (pctEl) pctEl.textContent = p + '%'; };
-  cancelBtn.style.display = ''; cancelBtn.disabled = false; closeBtn.style.display = 'none'; if (spin) { spin.style.display = ''; spin.style.animation = 'bpspin .9s linear infinite'; }
+  cancelBtn.style.display = ''; cancelBtn.disabled = false; closeBtn.style.display = 'none'; if (spin) { spin.style.display = ''; }
+  const doneIc = document.getElementById('batch-prog-done'); if (doneIc) doneIc.style.display = 'none';
   if (titleEl) titleEl.textContent = '공식 PDF 를 만들고 있습니다'; if (sumEl) sumEl.textContent = `${targets.length}건 선택`;
   const files = []; let ok = 0, fail = 0;
   for (let i = 0; i < targets.length; i++) {
@@ -7434,7 +7435,7 @@ async function runBatchPdf() {
     try {
       const bytes = await buildOfficialPdfBytes(v, (s) => setRow(v, 'run', s));
       files.push({ name: 'ACC-Voucher_'+(v.Title||v._spId)+'_공식양식.pdf', bytes });
-      ok++; setRow(v, 'ok', `완료 · ${Math.round(bytes.length/1024)} KB`);
+      ok++; setRow(v, 'ok', `완료 · ${(bytes.length/1024).toLocaleString('ko-KR',{maximumFractionDigits:0}).padStart(5,' ')} KB`);
     } catch (e) { fail++; setRow(v, 'fail', '실패 · '+(e && e.message || '').slice(0, 60)); console.warn('[일괄 PDF] 실패:', v.Title, e); }
     await new Promise(r => setTimeout(r, 0));
   }
@@ -7456,7 +7457,9 @@ async function runBatchPdf() {
     }
   } else txt.textContent = _batchCancel ? '취소되었습니다.' : `만든 파일이 없습니다 (${fail}건 실패).`;
   cancelBtn.style.display = 'none'; closeBtn.style.display = '';
-  if (spin) { spin.style.animation = 'none'; spin.style.borderTopColor = fail ? '#8f2822' : '#166a43'; spin.style.borderColor = fail ? '#f3d0d0' : '#cfe8d8'; spin.style.borderTopColor = fail ? '#8f2822' : '#166a43'; }
+  if (spin) spin.style.display = 'none';
+  if (doneIc) { const okAll = !fail && !_batchCancel; doneIc.style.display = 'flex'; doneIc.textContent = okAll ? '✓' : (fail ? '!' : '–');
+    doneIc.style.background = okAll ? '#e4f3ec' : (fail ? '#fbeddc' : '#eef0f3'); doneIc.style.color = okAll ? '#166a43' : (fail ? '#a6631e' : '#5b6472'); }
   if (titleEl) titleEl.textContent = _batchCancel ? '중단되었습니다' : (fail ? '완료 — 일부 실패' : '완료');
   if (sumEl) sumEl.textContent = `성공 ${ok} · 실패 ${fail}` + (_batchCancel ? ` · 취소 ${targets.length - ok - fail}` : '');
   try { logAction('ACC Voucher', '공식 PDF 일괄 내보내기', { 선택: targets.length, 성공: ok, 실패: fail, 취소: _batchCancel }); } catch(e) {}
@@ -8380,7 +8383,7 @@ function ptApply(){
 </script>
 <!-- GW 스타일 알림 모달 -->
 <!-- 공식 PDF 일괄 내보내기 — 선택 팝업 -->
-<div id="batch-pdf-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1200;align-items:center;justify-content:center">
+<div id="batch-pdf-modal" onclick="if(event.target===this)closeBatchPdfModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1200;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:12px;width:min(1320px,96vw);max-height:92vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.25)">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 22px;border-bottom:1px solid #edebe9">
       <div><div style="font-size:1rem;font-weight:700;color:#0f2744">공식 PDF 일괄 내보내기</div><div style="font-size:.76rem;color:#605e5c;margin-top:2px">선택한 전표의 공식 전표 양식(첨부 병합 포함)을 한 번에 만들어 ZIP 으로 내려받습니다.</div></div>
@@ -8400,8 +8403,7 @@ function ptApply(){
       <input type="date" id="batch-date-from" onchange="renderBatchPdfList()" style="border:1px solid #d2d0ce;border-radius:4px;padding:4px 8px;font-size:.74rem;font-family:inherit">
       <span>~</span>
       <input type="date" id="batch-date-to" onchange="renderBatchPdfList()" style="border:1px solid #d2d0ce;border-radius:4px;padding:4px 8px;font-size:.74rem;font-family:inherit">
-      <button onclick="batchSetDefaultDates();renderBatchPdfList()" title="오늘 기준 최근 3개월" style="padding:4px 10px;background:#fff;border:1px solid #d2d0ce;border-radius:4px;font-size:.72rem;cursor:pointer">기본값: 3개월</button>
-      <button onclick="document.getElementById('batch-date-from').value='';document.getElementById('batch-date-to').value='';renderBatchPdfList()" style="padding:4px 10px;background:#fff;border:1px solid #d2d0ce;border-radius:4px;font-size:.72rem;cursor:pointer">전체 기간</button>
+      <span style="font-size:.72rem;color:#8a8886">기본값 최근 3개월 · <a href="#" onclick="document.getElementById('batch-date-from').value='';document.getElementById('batch-date-to').value='';renderBatchPdfList();return false" style="color:#0078d4">전체 기간</a></span>
       <span id="batch-pdf-summary" style="margin-left:auto"></span>
       <span><a href="#" id="batch-sel-top" onclick="batchSelectAll(true);return false" style="color:#0078d4;margin-right:10px">앞 30건 선택</a><a href="#" onclick="batchSelectAll(false);return false" style="color:#0078d4">선택 해제</a></span>
     </div>
@@ -8417,10 +8419,11 @@ function ptApply(){
   </div>
 </div>
 <!-- 공식 PDF 일괄 내보내기 — 진행 팝업 -->
-<div id="batch-prog-modal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.42);z-index:1210;align-items:center;justify-content:center">
+<div id="batch-prog-modal" onclick="if(event.target===this&&document.getElementById('batch-prog-close').style.display!=='none')closeBatchProg()" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.42);z-index:1210;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:14px;width:min(640px,94vw);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.28);overflow:hidden">
     <div style="padding:20px 24px 14px;display:flex;gap:14px;align-items:flex-start">
       <div id="batch-prog-spin" style="width:38px;height:38px;border-radius:50%;border:3px solid #e5e7eb;border-top-color:#0f2744;animation:bpspin .9s linear infinite;flex-shrink:0;margin-top:2px"></div>
+      <div id="batch-prog-done" style="display:none;width:38px;height:38px;border-radius:50%;align-items:center;justify-content:center;font-size:20px;font-weight:700;flex-shrink:0;margin-top:2px"></div>
       <div style="flex:1;min-width:0">
         <div id="batch-prog-title" style="font-size:.98rem;font-weight:700;color:#0f2744">공식 PDF 를 만들고 있습니다</div>
         <div id="batch-prog-text" style="font-size:.78rem;color:#6b7280;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">준비 중 …</div>
