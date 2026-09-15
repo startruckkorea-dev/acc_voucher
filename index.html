@@ -2802,6 +2802,40 @@ function escHtml(s){
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+
+/* ── 대리 처리 표기 (AAC 연동) ────────────────────────────────────────
+   AAC(결재 대리 지정)가 대리인이 처리한 결재행의 ApproverRole 뒤에
+   '· 대리(이름 <메일>)' 를 덧붙인다. 그 꼬리를 그대로 화면에 뿌리면
+   '1차결재자 · 대리(Jimmy Lee <jimmy.lee@hyosung.com>)' 처럼 날값이 노출된다.
+   본래 역할만 남기고, 대리였다는 사실은 알약으로 따로 보여준다.
+   IT-Ticket(1877행 부근)·Goodwill-Approval·aps 와 같은 표기·같은 색이다.
+   대리가 아니면 aacRolePill 이 빈 문자열을 돌려주므로 호출부에 조건이 필요 없다. */
+function _aacRoleParse(role){
+  const m = String(role == null ? '' : role).match(/^([\s\S]*?)\s*\u00B7\s*대리\(([\s\S]+)\)\s*$/);
+  if(!m) return null;
+  const im = m[2].match(/^([\s\S]*?)\s*<([^>]+)>\s*$/);
+  return { base: m[1].trim(), name: (im ? im[1] : m[2]).trim(), email: im ? im[2].trim() : '' };
+}
+function aacRoleBase(role){
+  const p = _aacRoleParse(role);
+  return p ? p.base : String(role == null ? '' : role);
+}
+function aacRolePill(role, status){
+  const p = _aacRoleParse(role);
+  if(!p) return '';
+  const s = String(status == null ? '' : status).trim();
+  const verb = (s === '승인' || s === '승인완료') ? 'Approved on behalf of'
+             : s === '반려' ? 'Rejected on behalf of'
+             : s.indexOf('철회') === 0 ? 'Withdrawn on behalf of' : 'On behalf of';
+  return ' <span title="' + escHtml(verb + ' ' + p.name + (p.email ? ' (' + p.email + ')' : ''))
+    + '" style="background:#fff4ce;border:1px solid #f2d68c;color:#8a5a00;font-size:10px;'
+    + 'font-weight:600;letter-spacing:.1px;border-radius:10px;padding:1px 9px;margin-left:6px;'
+    + 'white-space:nowrap;vertical-align:1px">'
+    + '<span style="font-weight:400;opacity:.8">' + verb + ' </span>'
+    + '<b style="font-weight:700">' + escHtml(p.name) + '</b>'
+    + (p.email ? '<span style="font-weight:400;opacity:.75"> &middot; ' + escHtml(p.email) + '</span>' : '')
+    + '</span>';
+}
 // SharePoint 다중 텍스트 필드 정리 — 여러 줄 텍스트는 <div class="ExternalClass...">본문</div> 형태로 저장된다.
 // 그대로 escHtml에 넘기면 래퍼 태그가 화면에 글자로 찍히므로, 태그를 걷어낸 뒤 엔티티를 되돌린다.
 // 반환값은 평문이므로 innerHTML에 넣을 때는 반드시 escHtml()을 다시 거쳐야 한다. (순서: spText → escHtml)
@@ -6606,11 +6640,14 @@ async function loadApprovalHistory(spId){
       af._id = af._id || af.id || af.ID || '';
       const cls = stClsMap[af.Status] || 'status-대기잠김';
       const stText = stLabelMap[af.Status] || af.Status || '대기(잠김)';
-      let roleLabel = roleLabelMap[af.ApproverRole] || af.ApproverRole || '';
-      if(af.ApproverRole==='ACC') roleLabel = accLabelByType[v.VoucherType] || '담당자';
+      // AAC 대리 처리면 ApproverRole 뒤에 '· 대리(…)' 가 붙는다. 역할 매핑은 꼬리를
+      // 뗀 값으로 하고, 대리 사실은 아래에서 알약으로 따로 붙인다.
+      const _accRole = aacRoleBase(af.ApproverRole);
+      let roleLabel = roleLabelMap[_accRole] || _accRole || '';
+      if(_accRole==='ACC') roleLabel = accLabelByType[v.VoucherType] || '담당자';
       // Accounting 담당자 변경 버튼 — 관리자만, 아직 결재 전(대기/대기(잠김))일 때만.
       // 이미 승인·반려한 행을 바꾸면 그 사람이 처리한 것처럼 기록이 뒤바뀐다.
-      const _accChangeable = af.ApproverRole === 'ACC'
+      const _accChangeable = _accRole === 'ACC'
         && ['대기','대기(잠김)','Pending'].includes(af.Status)
         && ADMIN_EMAILS.map(e=>e.toLowerCase()).includes((user?.email||user?.username||'').trim().toLowerCase())
         && !['승인완료','반려','철회'].includes((v.Status||'').trim());
@@ -6619,7 +6656,7 @@ async function loadApprovalHistory(spId){
         : '';
       return `<div class="appr-item">
         <div>
-          <b>${af.ApprovalOrder}차 결재자(${roleLabel})</b>${_accBtn}
+          <b>${af.ApprovalOrder}차 결재자(${roleLabel})</b>${aacRolePill(af.ApproverRole, af.Status)}${_accBtn}
           <br><span style="font-size:.72rem;color:#605e5c">${af.ApproverName||''} · ${af.ApproverEmail||''}</span>
           ${af.ApprovalDate?`<br><span style="font-size:.72rem;color:#a19f9d">${fmtDate(af.ApprovalDate)}</span>`:''}
           ${af.Comment?`<br><span style="font-size:.72rem;background:#fff;border:1px solid #edebe9;border-radius:4px;padding:2px 6px;display:inline-block;margin-top:2px">💬 ${escHtml(spText(af.Comment))}</span>`:''}
