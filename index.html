@@ -4571,7 +4571,10 @@ async function saveVoucher(status) {
         // 임시저장에는 결재선 「선택」만 담는다. 결재행(Approvals)은 만들지 않는다.
         // 직접 고른 사람과 추가 결재자를 이어서 작성할 때 되살리기 위한 것이다.
         // 자동 지정 결재자는 담지 않는다 — 상신 시점의 설정 파일을 따라야 하기 때문.
-        ApprovalDraftJSON: _isDraft ? JSON.stringify({
+        // ⚠ 상신(Requests)에는 이 열을 아예 보내지 않는다. 운영 Requests 목록에는 ApprovalDraftJSON 열이 없어
+        //   빈 문자열이라도 보내면 Graph 가 「Field is not recognized」 로 전표 생성 자체를 거부한다.
+        //   (UAT 는 Requests 쓰기를 샌드박스가 가로채 드러나지 않았다 — 운영/이식본 차이 비교 테스트로 발견)
+        ...(_isDraft ? { ApprovalDraftJSON: JSON.stringify({
           // 화면에 그려진 결재선 전체(자동 지정 + 직접 선택)를 그대로 담는다.
           // 이어서 작성할 때 임시저장 당시 결재선을 그대로 되살리기 위한 것.
           line: approvers.map(a => ({ role:a.role, name:a.name||'', email:a.email||'', order:a.order })),
@@ -4583,7 +4586,7 @@ async function saveVoucher(status) {
           extra: (extraApprovers||[]).map(x => ({
             after:x.after, dept:x.dept||'', team:x.team||'', name:x.name||'', email:x.email||''
           })),
-        }) : '',
+        }) } : {}),
         TotalDR_KRW: drKrw,
         TotalCR_KRW: crKrw,
         SubmittedDate: status==='대기'?new Date().toISOString():null,
@@ -5825,7 +5828,8 @@ function accRenderQuickBar() {
   if (!_accMyRoles.length) { bar.style.display = 'none'; return; }
 
   const me   = (user?.email || user?.username || '').trim().toLowerCase();
-  const rows = adminListRaw || [];
+  // 담당자별 건수는 결재 대상(상신된 전표)만 센다 — 임시저장은 결재선이 없다.
+  const rows = (adminListRaw || []).filter(v => !v._srcDraft);
 
   // 칩은 다섯 역할 모두 그린다. 담당자가 누구인지 서로 알 수 있어야 하기 때문.
   // 다만 열어 볼 수 있는 건 본인 것뿐이고, IT 는 전부 열 수 있다.
@@ -5946,6 +5950,9 @@ async function loadAdminList() {
       });
     });
     adminListRaw.forEach(v => {
+      // 임시저장은 결재행이 없다. 번호로 찾으면 같은 번호 운영 전표의 결재선이 붙어
+      // 담당자별 빠른 보기 건수·「지금 차례」 판정에 섞인다.
+      if (v._srcDraft) { v._line = []; v._curEmail = ''; return; }
       const line = (_aprByReq[String(v._spId)] || []).sort((a,b)=>a.order-b.order);
       v._line = line;
       const cur = line.find(a => a.status === '대기');
@@ -7049,11 +7056,11 @@ async function openVoucherSP(spId, fromTab, isDraft){
   // 관리자 목록은 필드를 골라서 받으므로 캐시에 LinesJSON 이 없고, 아래에서 캐시를 버리고
   // 다시 조회한다. 그때 Draft 를 LIST_REQUESTS 에서 찾으면 번호가 같은 다른 전표가 열린다.
   // (Draft 번호는 DRAFT-5 처럼 작아 운영 전표와 겹치기 쉽다)
-  if (isDraft === undefined) {
-    const _hit = (adminListCache || []).concat(voucherListCache || [])
-                   .find(v => String(v._spId) === String(spId) && v._srcDraft);
-    isDraft = !!_hit;
-  }
+  // 임시저장은 목록에서 「명시적으로」 true 를 넘길 때만 연다(내 전표 목록·관리자 목록의 Draft 행).
+  // 예전에는 인자가 없으면 캐시에서 같은 번호의 Draft 를 찾아 Draft 로 판정했는데,
+  // 결재함(openVoucherSP(id,'approval'))·?openId 딥링크·일괄 PDF 는 인자를 넘기지 않으므로
+  // 결재자가 연 운영 전표 5 가 본인 Draft 5 로 바뀌어 열릴 수 있었다.
+  isDraft = isDraft === true;
   const _detailList = isDraft ? LIST_DRAFTS : null;   // null 이면 아래 기존 로직(LIST_REQUESTS)
   // 캐시에서도 「같은 목록에서 온 항목」 만 고른다. 번호만 보면 Draft 5 와 전표 5 가 섞인다.
   const _sameSrc = x => x && x._spId===spId && (!!x._srcDraft === !!isDraft);
@@ -7544,8 +7551,9 @@ async function loadApprovalHistory(spId){
   // 목록 캐시들은 _currentVoucherDetail 이 아직 없을 때의 fallback 이다.
   // (예전엔 아무것도 못 찾으면 조용히 return 해버려서 "결재 이력을 불러오는 중..."에 영원히 멈춰 있었음)
   const v = (window._currentVoucherDetail?._spId===spId ? window._currentVoucherDetail : null)
-    || voucherListCache.find(x=>x._spId===spId)
-    || adminListCache.find(x=>x._spId===spId)
+    // 목록 캐시에는 번호가 같은 임시저장이 섞여 있을 수 있어 운영 전표만 고른다
+    || voucherListCache.find(x=>x._spId===spId && !x._srcDraft)
+    || adminListCache.find(x=>x._spId===spId && !x._srcDraft)
     || (approvalQueueCache.find(x=>x._voucher?._spId===spId)?._voucher);
   if(!v){
     const el = document.getElementById('voucher-appr-history');
