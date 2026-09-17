@@ -560,6 +560,20 @@ table.pt-tbl tfoot td{background:#eef1f5;font-weight:700;border-top:2px solid #1
 }
 
 
+
+/* 임시저장에서 이어받은 첨부 — 파일 줄 카드 + 제외 알약 */
+#resumed-att .ra-head{font-size:.74rem;color:#0f766e;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+#resumed-att .ra-cnt{background:#ccfbf1;color:#0f766e;border-radius:10px;padding:1px 8px;font-size:.66rem;font-weight:700}
+#resumed-att .ra-row{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #c6ede6;border-radius:8px;padding:7px 8px 7px 10px;margin-bottom:6px}
+#resumed-att .ra-ic{flex-shrink:0;width:26px;height:26px;border-radius:6px;background:#e6f7f4;display:flex;align-items:center;justify-content:center}
+#resumed-att .ra-ic svg{width:14px;height:14px;stroke:#0f766e}
+#resumed-att .ra-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem;color:#1f2937}
+#resumed-att .ra-drop{flex-shrink:0;display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 13px 0 10px;border-radius:14px;
+  border:1px solid #f3c1c6;background:#fdf1f2;color:#a4262c;font-size:.74rem;font-weight:700;font-family:inherit;cursor:pointer;transition:background .12s,border-color .12s,color .12s}
+#resumed-att .ra-drop svg{width:11px;height:11px;stroke:currentColor}
+#resumed-att .ra-drop:hover{background:#a4262c;border-color:#a4262c;color:#fff}
+#resumed-att .ra-drop:focus-visible{outline:2px solid #a4262c;outline-offset:2px}
+#resumed-att .ra-foot{font-size:.68rem;color:#64748b;margin-top:2px}
 </style>
 <script>
 // ?openId= 단독 상세보기 모드 판별을 최대한 앞당긴다.
@@ -6637,17 +6651,20 @@ function renderResumedAtt() {
   const items = _resumingAttRef ? _resumingAttRef.split(';').map(s=>s.trim()).filter(Boolean) : [];
   if (!items.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
   box.style.display = 'block';
+  // 파일마다 한 줄 카드 + 오른쪽 「제외」 알약. 예전에는 글자만 있는 작은 링크라 눈에 띄지 않았다.
   box.innerHTML =
-    '<div style="font-size:.72rem;color:#0f766e;font-weight:700;margin-bottom:6px">임시저장에서 이어받은 첨부 ' + items.length + '건</div>'
+    '<div class="ra-head">임시저장에서 이어받은 첨부 <span class="ra-cnt">' + items.length + '건</span></div>'
     + items.map((it, i) => {
         const nm = (it.split('||ENC||')[0] || '').trim();
-        return '<div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:.76rem;color:#334155">'
-          + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(nm) + '</span>'
-          + '<button onclick="dropResumedAtt(' + i + ')" title="이 첨부는 상신본에 넣지 않습니다"'
-          + ' style="background:none;border:none;color:#a4262c;cursor:pointer;font-size:.74rem;font-family:inherit">제외</button>'
+        return '<div class="ra-row">'
+          + '<span class="ra-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+          + '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg></span>'
+          + '<span class="ra-name" title="' + escHtmlAttr(nm) + '">' + escHtml(nm) + '</span>'
+          + '<button type="button" class="ra-drop" onclick="dropResumedAtt(' + i + ')" title="이 첨부는 상신본에 넣지 않습니다">'
+          + '<svg viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>제외</button>'
           + '</div>';
       }).join('')
-    + '<div style="font-size:.68rem;color:#64748b;margin-top:4px">상신하면 이 파일들이 상신 폴더로 함께 옮겨집니다.</div>';
+    + '<div class="ra-foot">상신하면 이 파일들이 상신 폴더로 함께 옮겨집니다. 넣지 않을 파일은 「제외」를 눌러 주세요.</div>';
 }
 function dropResumedAtt(idx) {
   const items = _resumingAttRef.split(';').map(s=>s.trim()).filter(Boolean);
