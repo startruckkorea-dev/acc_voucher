@@ -8355,27 +8355,20 @@ async function buildPdfDocFromSegments(segments) {
 // 임시저장 전표를 PDF 로 뽑으면 상신본과 구분이 안 된다. 결재가 시작되지 않은 문서가
 // 정식 전표처럼 돌아다니지 않도록 모든 페이지(첨부 포함)에 표식을 남긴다.
 //   · 가운데: 큰 「DRAFT」 를 45° 기울여 옅게 (내용을 가리지 않을 만큼만)
-//   · 위: 붉은 띠 「DRAFT — NOT SUBMITTED · 결재 미시작 · 정식 전표 아님」 (한글은 캔버스로)
-//   · 아래: 작은 안내 「This document is a draft and has no approval. Do not use for posting or payment.」
-// pdf-lib 기본 폰트는 영문만 그리므로 영문은 폰트로, 한글 띠는 캔버스 PNG 로 넣는다.
+//   · 위: 얇은 붉은 띠에 「DRAFT — NOT SUBMITTED」 한 줄 (자간을 조금 벌린 작은 대문자)
+//   · 아래: 작은 안내 「This document is a DRAFT and has no approval. …」
+// 예전 띠는 22pt 높이에 「… · 임시저장 전표 · 결재 미시작 · 정식 전표 아님」 까지 넣어 무겁고 복잡했다(09-17 피드백).
+// 영문만 남겨 캔버스 이미지 대신 벡터 글자로 그린다 — 확대해도 선명하고 파일도 가볍다.
 async function stampDraftWatermark(mainDoc, dataUrlToUint8) {
   const { StandardFonts, rgb, degrees } = PDFLib;
   const font = await mainDoc.embedFont(StandardFonts.HelveticaBold);
   const small = await mainDoc.embedFont(StandardFonts.Helvetica);
-  // 한글 띠: 캔버스로 한 번만 그려 모든 페이지에 재사용
-  let bandImg = null;
-  try {
-    const S = 2, W = 595 * S, H = 22 * S;
-    const c = document.createElement('canvas'); c.width = W; c.height = H;
-    const x = c.getContext('2d'); x.scale(S, S);
-    x.fillStyle = '#b91c1c'; x.fillRect(0, 0, 595, 22);
-    x.fillStyle = '#fff'; x.font = '700 10.5px "Segoe UI","Apple SD Gothic Neo",sans-serif';
-    x.textAlign = 'center'; x.textBaseline = 'middle';
-    x.fillText('DRAFT  —  NOT SUBMITTED   ·   임시저장 전표 · 결재 미시작 · 정식 전표 아님', 297.5, 11);
-    bandImg = await mainDoc.embedPng(await dataUrlToUint8(c.toDataURL('image/png')));
-  } catch(e) { console.warn('[Draft] 워터마크 띠 생성 실패(영문만 표시):', e.message); }
-  const pages = mainDoc.getPages();
-  pages.forEach(pg => {
+  const RED = rgb(0.73, 0.11, 0.11);
+  const BAND_H = 13, HEADER_H = 22;          // 띠 높이(pt) · 공식 양식 머리띠(파란 줄) 높이
+  const LABEL = 'DRAFT \u2014 NOT SUBMITTED', LABEL_SIZE = 6.8, TRACK = 0.9;   // 자간(pt)
+  // pdf-lib 는 자간 옵션이 없어 글자마다 폭을 재서 한 자씩 그린다
+  const labelWidth = [...LABEL].reduce((w, ch) => w + font.widthOfTextAtSize(ch, LABEL_SIZE) + TRACK, -TRACK);
+  mainDoc.getPages().forEach(pg => {
     const { width, height } = pg.getSize();
     // 가운데 큰 글자 — 페이지 대각선 길이에 맞춰 크기를 정한다
     const text = 'DRAFT';
@@ -8386,17 +8379,19 @@ async function stampDraftWatermark(mainDoc, dataUrlToUint8) {
     const x0 = cx - (tw / 2) * Math.cos(rad) + (size * 0.35) * Math.sin(rad);
     const y0 = cy - (tw / 2) * Math.sin(rad) - (size * 0.35) * Math.cos(rad);
     pg.drawText(text, { x: x0, y: y0, size, font, rotate: degrees(45), color: rgb(0.86, 0.15, 0.15), opacity: 0.13 });
-    // 위 띠 (한글 캔버스) — 헤더 아래에 붙인다. 캔버스가 없으면 영문 텍스트 띠
-    if (bandImg) {
-      pg.drawImage(bandImg, { x: 0, y: height - 22 - 22, width, height: 22 });
-    } else {
-      pg.drawRectangle({ x: 0, y: height - 44, width, height: 22, color: rgb(0.73, 0.11, 0.11) });
-      pg.drawText('DRAFT — NOT SUBMITTED', { x: width / 2 - small.widthOfTextAtSize('DRAFT — NOT SUBMITTED', 9) / 2, y: height - 37, size: 9, font: small, color: rgb(1, 1, 1) });
+    // 위 띠 — 머리띠 바로 아래, 얇게
+    const by = height - HEADER_H - BAND_H;
+    pg.drawRectangle({ x: 0, y: by, width, height: BAND_H, color: RED });
+    let lx = (width - labelWidth) / 2;
+    const ly = by + (BAND_H - LABEL_SIZE * 0.72) / 2;   // 대문자 높이(약 0.72em) 기준 세로 가운데
+    for (const ch of LABEL) {
+      pg.drawText(ch, { x: lx, y: ly, size: LABEL_SIZE, font, color: rgb(1, 1, 1) });
+      lx += font.widthOfTextAtSize(ch, LABEL_SIZE) + TRACK;
     }
     // 아래 작은 안내
     const foot = 'This document is a DRAFT and has no approval. Do not use it for posting, payment, or filing.';
     const fs = 7.5, fw = small.widthOfTextAtSize(foot, fs);
-    pg.drawText(foot, { x: (width - fw) / 2, y: 12, size: fs, font: small, color: rgb(0.73, 0.11, 0.11), opacity: 0.9 });
+    pg.drawText(foot, { x: (width - fw) / 2, y: 12, size: fs, font: small, color: RED, opacity: 0.9 });
   });
 }
 
