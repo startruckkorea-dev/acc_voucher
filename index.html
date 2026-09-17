@@ -4354,14 +4354,25 @@ const SP_STEPS = [
   { key:'file', name:'첨부파일 업로드' },
   { key:'link', name:'첨부파일 연결' },
   { key:'appr', name:'결재선 생성' },
+  { key:'clean', name:'이전 임시저장 정리' },
+];
+// 임시저장도 같은 진행 팝업을 쓴다. 예전에는 버튼 글자만 「저장 중...」 으로 바뀌어
+// 저장이 도는 동안 화면을 계속 만질 수 있었다(다른 입력을 바꾸거나 다시 누르기 쉬움).
+const SP_STEPS_DRAFT = [
+  { key:'req',  name:'임시저장 생성' },
+  { key:'id',   name:'임시저장 번호 확정' },
+  { key:'file', name:'첨부파일 업로드' },
+  { key:'link', name:'첨부파일 연결' },
+  { key:'clean', name:'이전 임시저장 정리' },
 ];
 let _spState = {};
 let _spActive = false;
+let _spMode = 'submit';
 
 function _spRender(){
   const el = document.getElementById('sp-steps');
   if(!el) return;
-  el.innerHTML = SP_STEPS.map(s=>{
+  el.innerHTML = (_spMode === 'draft' ? SP_STEPS_DRAFT : SP_STEPS).map(s=>{
     const st = _spState[s.key] || {};
     if(st.skip) return '';
     const cls = st.status==='ok'?'ok':st.status==='run'?'run':st.status==='err'?'err':'';
@@ -4370,11 +4381,12 @@ function _spRender(){
     return `<div class="sp-step ${cls}"><span class="ic">${ic}</span><span class="nm">${s.name}</span><span class="ct">${st.count||''}</span></div>`;
   }).join('');
 }
-function spStart(){
+function spStart(mode){
+  _spMode = mode === 'draft' ? 'draft' : 'submit';
   _spState = {}; _spActive = true;
   const _icon = document.getElementById('sp-icon');
   _icon.textContent = ''; _icon.style.display = 'none';   // 진행 중에는 아이콘 없이 제목만
-  document.getElementById('sp-heading').textContent = '전표 상신 중';
+  document.getElementById('sp-heading').textContent = _spMode === 'draft' ? '임시저장 중' : '전표 상신 중';
   document.getElementById('sp-vid').innerHTML = '&nbsp;';
   document.getElementById('sp-note').innerHTML =
     '<div class="sp-note info">처리가 끝날 때까지 창을 닫거나 새로고침하지 마세요.</div>';
@@ -4393,7 +4405,9 @@ function spDone(ok, note){
   _spActive = false;
   const _ic = document.getElementById('sp-icon');
   _ic.textContent = ok ? '✅' : '⚠️'; _ic.style.display = '';   // 결과는 아이콘으로 구분
-  document.getElementById('sp-heading').textContent = ok ? '상신이 완료되었습니다' : '상신을 완료하지 못했습니다';
+  document.getElementById('sp-heading').textContent = _spMode === 'draft'
+    ? (ok ? '임시저장되었습니다' : '임시저장을 완료하지 못했습니다')
+    : (ok ? '상신이 완료되었습니다' : '상신을 완료하지 못했습니다');
   document.getElementById('sp-note').innerHTML = note ? `<div class="sp-note ${ok?'info':'warn'}">${note}</div>` : '';
   document.getElementById('sp-close').style.display = 'block';
 }
@@ -4553,6 +4567,8 @@ async function saveVoucher(status) {
     ? document.querySelector('button.btn-draft')
     : document.querySelector(`button[onclick*="saveVoucher('${status}')"]`);
 
+  // 진행 팝업 — 상신과 임시저장 모두 띄운다(결재선 단계는 상신에서만).
+  const _spOn = status === '대기' || _isDraft;
   try {
     if(btn){btn.disabled=true; btn.textContent='저장 중...';}
     if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
@@ -4608,16 +4624,16 @@ async function saveVoucher(status) {
         TotalSteps: status==='대기'?approvers.length:0
       }
     };
-    if(status==='대기') spStart();
-    if(status==='대기') spStep('req','run');
+    if(_spOn){ spStart(_isDraft ? 'draft' : 'submit'); if(!_resumingDraftId) spSkip('clean'); }
+    if(_spOn) spStep('req','run');
     // Draft 는 전용 리스트에, 상신은 운영 Requests 에 만든다.
     const _targetList = _isDraft ? LIST_DRAFTS : LIST_REQUESTS;
     const reqRes = await api(`/sites/${siteId}/lists/${_targetList}/items`, 'POST', reqBody);
     const requestId = reqRes.id;
-    if(status==='대기') spStep('req','ok');
+    if(_spOn) spStep('req','ok');
 
     // Title을 GW 방식(ACC-Voucher-YYYY-MM-DD_ID-{itemId})으로 재설정
-    if(status==='대기') spStep('id','run');
+    if(_spOn) spStep('id','run');
     // Draft 는 상신본과 번호 체계가 다르므로 제목에서 구분한다.
     //   Draft : ACC-Voucher-2026-08-27_DRAFT-5
     //   상신  : ACC-Voucher-2026-08-27_ID-129
@@ -4629,7 +4645,7 @@ async function saveVoucher(status) {
       ? 'ACC-Voucher-Draft-'+dateStr+'_ID-'+requestId
       : voucherId;
     await api(`/sites/${siteId}/lists/${_targetList}/items/${requestId}/fields`, 'PATCH', {Title: voucherId});
-    if(status==='대기'){ spStep('id','ok'); spVid('Voucher ID: '+voucherId); }
+    if(_spOn){ spStep('id','ok'); spVid((_isDraft ? '임시저장 번호: ' : 'Voucher ID: ')+voucherId); }
 
     // Accounting 결재라인 지정(회계 담당자 단계 제외) 기록 — RD 제외와 동일하게 감사 근거로 남긴다.
     // ⚠ 대상 목록은 반드시 _targetList 다. requestId 는 임시저장이면 Drafts 목록의 번호라서,
@@ -4696,10 +4712,10 @@ async function saveVoucher(status) {
     // 새 임시저장에 첨부 링크가 빠지고(이전 건은 지워짐) 파일만 이전 폴더에 남았다.
     const _hasCarry = !!_resumingAttRef;
     let _carryFailed = false;   // 하나라도 못 옮겼으면 이전 Draft 폴더를 지우지 않는다(링크가 그 폴더를 가리킨다)
-    if(!accFiles.length && !_hasCarry && status==='대기'){ spSkip('file'); spSkip('link'); }
+    if(!accFiles.length && !_hasCarry && _spOn){ spSkip('file'); spSkip('link'); }
     if(accFiles.length || _hasCarry){
       const _failedUploads = [];
-      if(status==='대기') spStep('file','run', '0 / '+accFiles.length);
+      if(_spOn) spStep('file','run', '0 / '+accFiles.length);
       try{
         const drivesData=await api(`/sites/${siteId}/drives`);
         const drive=drivesData.value.find(d=>d.name==='AttachedFiles')||drivesData.value[0];
@@ -4714,7 +4730,7 @@ async function saveVoucher(status) {
             _attWarn = `임시저장 첨부 ${_co.failed.length}건은 ${_isDraft ? '새 임시저장 폴더' : '상신 폴더'}로 옮기지 못했습니다: ${_co.failed.join(', ')}\n`
                      + `파일은 임시저장 폴더에 남아 있어 상세보기에서는 열립니다.`;
           }
-          if(status==='대기') spStep('file','run', links.length+' / '+(links.length+accFiles.length));
+          if(_spOn) spStep('file','run', links.length+' / '+(links.length+accFiles.length));
         }
         for(const file of accFiles){
           try{
@@ -4731,21 +4747,21 @@ async function saveVoucher(status) {
               const u=await res.json();
               const safeKey=btoa(unescape(encodeURIComponent(drive.id+'###'+u.id)));
               links.push(file.name+'||ENC||'+safeKey);
-              if(status==='대기') spStep('file','run', links.length+' / '+(accFiles.length+(_hasCarry?_resumingAttRef.split(';').filter(Boolean).length:0)));
+              if(_spOn) spStep('file','run', links.length+' / '+(accFiles.length+(_hasCarry?_resumingAttRef.split(';').filter(Boolean).length:0)));
             } else {
               _failedUploads.push(file.name);
               console.error('[첨부] 업로드 실패:', file.name, res.status);
             }
           }catch(fe){ _failedUploads.push(file.name); console.error('[첨부] 업로드 오류:', file.name, fe && fe.message); }
         }
-        if(status==='대기') spStep('file', _failedUploads.length?'err':'ok', links.length+' / '+(accFiles.length+(_hasCarry?_resumingAttRef.split(';').filter(Boolean).length:0)));
+        if(_spOn) spStep('file', _failedUploads.length?'err':'ok', links.length+' / '+(accFiles.length+(_hasCarry?_resumingAttRef.split(';').filter(Boolean).length:0)));
         if(links.length){
-          if(status==='대기') spStep('link','run');
+          if(_spOn) spStep('link','run');
           try{
             await api(`/sites/${siteId}/lists/${_targetList}/items/${requestId}/fields`,'PATCH',{AttachmentRef:links.join(';')});
-            if(status==='대기') spStep('link','ok');
+            if(_spOn) spStep('link','ok');
           }catch(pe){
-            if(status==='대기') spStep('link','err');
+            if(_spOn) spStep('link','err');
             // 파일은 올라갔는데 전표 연결만 실패한 경우 — 데이터는 남아 있으므로 복구 가능하다.
             console.error('[첨부] 전표 연결 실패:', pe && pe.message);
             _attWarn = `파일 ${links.length}건은 업로드됐지만 전표에 연결되지 않았습니다.\n`
@@ -4836,38 +4852,34 @@ async function saveVoucher(status) {
       }
     }
 
-    if(status==='대기'){
-      spDone(true, _attWarn
-        ? '⚠️ '+_attWarn.replace(/\n/g,'<br>')
-        : '결재선이 정상적으로 생성되었습니다.');
-    } else if (_isDraft) {
-      showAccAlert('임시저장되었습니다.',
-        voucherId + '\n\n'
-        + '결재는 올라가지 않았습니다.\n'
-        + '[내 전표 목록] → 오른쪽 위 「Draft」 를 누르면 다시 열 수 있습니다.\n\n'
-        + 'Accounting 담당자에게 위 번호를 알려 주시면\n'
-        + '상신 전에 내용을 미리 확인받을 수 있습니다.\n'
-        + '(이어서 작성해 다시 저장하면 번호가 새로 바뀝니다.)'
-        // 첨부 업로드·연결·이어받기 실패는 상신과 같이 알린다. 예전에는 임시저장에서만 조용히 넘어갔다.
-        + (_attWarn ? '\n\n⚠️ ' + _attWarn : ''), '📝');
-    } else {
-      showAccAlert('저장되었습니다.', 'Voucher ID: '+voucherId, '✅');
-    }
     // 이어서 작성한 임시저장 원본을 정리한다 (같은 내용이 두 건 남지 않도록).
-    // 지우지 못하면 같은 내용이 두 곳에 남는데, 조용히 넘어가면 사용자는 알 수 없다.
-    // 상신은 이미 끝났으므로 되돌리지 않고, 남은 임시저장을 직접 지우도록 알린다.
+    // 저장·상신은 이미 끝났으므로 실패해도 되돌리지 않고, 남은 임시저장을 직접 지우도록 완료 안내에 함께 적는다.
+    let _cleanWarn = '';
     if (_resumingDraftId && String(_resumingDraftId) !== String(requestId)) {
+      if(_spOn) spStep('clean','run');
       try {
         await api(`/sites/${siteId}/lists/${LIST_DRAFTS}/items/${_resumingDraftId}`, 'DELETE');
         // 첨부를 모두 새 폴더로 옮겼으면 이전 Draft 폴더도 지운다(남기면 라이브러리에 고아 파일이 쌓인다).
         if (!_carryFailed && _resumingDraftTitle) await deleteDraftAttachments(_resumingDraftTitle);
+        if(_spOn) spStep('clean','ok');
       } catch(de) {
         console.warn('[Draft] 원본 정리 실패:', de.message);
-        showAccAlert('임시저장이 남아 있습니다',
-          '상신은 정상 처리되었습니다.\n\n'
-          + '이어서 작성한 임시저장 건을 지우지 못했습니다.\n'
-          + '[내 전표 목록] → Draft 에서 직접 삭제해 주세요.', '⚠️');
+        if(_spOn) spStep('clean','err');
+        _cleanWarn = '이어서 작성한 이전 임시저장 건을 지우지 못했습니다. [내 전표 목록] → Draft 에서 직접 삭제해 주세요.';
       }
+    }
+    // 안내에 들어가는 첨부 경고에는 사용자가 붙인 파일 이름이 섞이므로 이스케이프해서 넣는다.
+    const _warnHtml = [_attWarn, _cleanWarn].filter(Boolean).map(w => '⚠️ ' + escHtml(w).replace(/\n/g,'<br>')).join('<br><br>');
+    if(status==='대기'){
+      spDone(true, _warnHtml || '결재선이 정상적으로 생성되었습니다.');
+    } else if (_isDraft) {
+      spDone(true,
+        '결재는 올라가지 않았습니다. [내 전표 목록] → 오른쪽 위 「Draft」 에서 다시 열 수 있습니다.<br>'
+        + 'Accounting 담당자에게 위 번호를 알려 주시면 상신 전에 내용을 미리 확인받을 수 있습니다.<br>'
+        + '<span style="color:#8a8886">이어서 작성해 다시 저장하면 번호가 새로 바뀝니다.</span>'
+        + (_warnHtml ? '<br><br>' + _warnHtml : ''));
+    } else {
+      showAccAlert('저장되었습니다.', 'Voucher ID: '+voucherId, '✅');
     }
     _resumingDraftId = null; _resumingDraftTitle = '';
     _resumingAttRef = '';
@@ -4876,9 +4888,10 @@ async function saveVoucher(status) {
     console.error('saveVoucher error:', e);
     // 진행 모달이 떠 있으면 그 안에서 마무리한다(전표가 이미 만들어졌을 수 있어 재상신 여부를 알려야 함)
     if(_spActive) spDone(false,
-      '처리 중 오류가 발생했습니다: '+((e&&e.message)||'')+'<br>'
-      + '전표가 이미 만들어졌을 수 있으니 <b>[내 전표 목록]을 먼저 확인</b>하시고, '
-      + '목록에 없으면 다시 상신해 주세요.');
+      '처리 중 오류가 발생했습니다: '+escHtml((e&&e.message)||'')+'<br>'
+      + (_isDraft
+        ? '임시저장이 이미 만들어졌을 수 있으니 <b>[내 전표 목록] → Draft 를 먼저 확인</b>하시고, 목록에 없으면 다시 저장해 주세요.'
+        : '전표가 이미 만들어졌을 수 있으니 <b>[내 전표 목록]을 먼저 확인</b>하시고, 목록에 없으면 다시 상신해 주세요.'));
     else showAccAlert('오류가 발생했습니다.', e.message, '⚠️');
   } finally {
     if(btn){btn.disabled=false; _isDraft ? (btn.innerHTML = '<span class="bd-dot"></span>Draft Submit') : (btn.textContent = 'Submit');}
