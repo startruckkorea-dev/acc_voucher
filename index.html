@@ -6647,6 +6647,29 @@ async function carryOverDraftAtt(driveId, destFolder) {
   if (!items.length) return { links: [], failed: [] };
   const links = [], failed = [];
   const t = await token();
+  // 복사 대상 폴더를 먼저 만든다. 새 전표 폴더는 이 시점에 아직 없고(새 파일 업로드는 이 뒤),
+  // copy 는 없는 부모 폴더를 만들어 주지 않는다. 경로 대신 폴더 id 로 지정해
+  // 기본 문서 라이브러리가 아닌 AttachedFiles 라이브러리 안으로 정확히 들어가게 한다.
+  let destId = null;
+  if (!IS_UAT) {
+    try {
+      const got = await fetch(GRAPH + '/drives/' + driveId + '/root:/' + ATT_ROOT + '/' + encodeURIComponent(destFolder),
+        { headers: { Authorization: 'Bearer ' + t } });
+      if (got.ok) destId = (await got.json()).id;
+      else {
+        const mk = await fetch(GRAPH + '/drives/' + driveId + '/root:/' + ATT_ROOT + ':/children', {
+          method: 'POST', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: destFolder, folder: {}, '@microsoft.graph.conflictBehavior': 'fail' }),
+        });
+        if (mk.ok) destId = (await mk.json()).id;
+        else if (mk.status === 409) {
+          const again = await fetch(GRAPH + '/drives/' + driveId + '/root:/' + ATT_ROOT + '/' + encodeURIComponent(destFolder),
+            { headers: { Authorization: 'Bearer ' + t } });
+          if (again.ok) destId = (await again.json()).id;
+        }
+      }
+    } catch (e) { console.warn('[Draft첨부] 상신 폴더 준비 실패:', e.message); }
+  }
   for (const it of items) {
     const [rawName, safeKey] = it.split('||ENC||');
     const name = (rawName || '').trim();
@@ -6659,7 +6682,7 @@ async function carryOverDraftAtt(driveId, destFolder) {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          parentReference: { driveId, path: '/drive/root:/' + ATT_ROOT + '/' + destFolder },
+          parentReference: destId ? { driveId, id: destId } : { driveId, path: '/drives/' + driveId + '/root:/' + ATT_ROOT + '/' + destFolder },
           name, '@microsoft.graph.conflictBehavior': 'rename',
         }),
       });
@@ -6920,6 +6943,13 @@ function confirmDeleteDraft(spId) {
   if (!confirm('이 임시저장 전표를 삭제하시겠습니까?\n삭제 후에는 되돌릴 수 없습니다.')) return;
   deleteDraft(spId);
 }
+// 임시저장 첨부 폴더 이름. 저장(saveVoucher)과 삭제가 반드시 같은 규칙을 써야 한다.
+//   제목 ACC-Voucher-2026-09-17_DRAFT-5  →  폴더 ACC-Voucher-Draft-2026-09-17_ID-5
+// 예전 삭제는 제목을 그대로 폴더 이름으로 써서 항상 404(조용히 무시) — 파일이 지워지지 않고 쌓였다.
+function draftAttFolderOf(title) {
+  const m = String(title || '').match(/^ACC-Voucher-(\d{4}-\d{2}-\d{2})_DRAFT-(\d+)$/);
+  return m ? 'ACC-Voucher-Draft-' + m[1] + '_ID-' + m[2] : '';
+}
 // 임시저장 첨부 폴더를 지운다. 실패해도 임시저장 삭제 자체는 진행한다 —
 // 파일이 남는 것보다 목록에 지워지지 않은 항목이 남는 쪽이 사용자에게 더 혼란스럽다.
 // 지우지 못한 경우는 콘솔에 남겨 IT 가 확인할 수 있게 한다.
@@ -6929,7 +6959,9 @@ async function deleteDraftAttachments(voucherId) {
     const drives = await api('/sites/' + siteId + '/drives');
     const drive = (drives.value || []).find(d => d.name === 'AttachedFiles') || (drives.value || [])[0];
     if (!drive) return;
-    const path = ATT_ROOT_DRAFT + '/' + encodeURIComponent(voucherId);
+    const folder = draftAttFolderOf(voucherId);
+    if (!folder) return;
+    const path = ATT_ROOT_DRAFT + '/' + encodeURIComponent(folder);
     await api('/drives/' + drive.id + '/root:/' + path, 'DELETE');
     console.warn('[Draft] 첨부 폴더 삭제:', path);
   } catch (e) {
