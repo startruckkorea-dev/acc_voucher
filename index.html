@@ -4678,7 +4678,10 @@ async function saveVoucher(status) {
     //    예전에는 이 실패를 콘솔에만 남겨 사용자가 알 방법이 없었다. 이제는 상신 완료 안내에 함께 알린다.
     let _attWarn = '';
     // 이어서 작성한 Draft 의 첨부도 함께 처리해야 하므로 조건에 포함한다.
-    const _hasCarry = !_isDraft && !!_resumingAttRef;
+    // 임시저장으로 다시 저장할 때도 옮긴다. 예전에는 상신일 때만 옮겨, Draft → Draft 로 한 번 더 저장하면
+    // 새 임시저장에 첨부 링크가 빠지고(이전 건은 지워짐) 파일만 이전 폴더에 남았다.
+    const _hasCarry = !!_resumingAttRef;
+    let _carryFailed = false;   // 하나라도 못 옮겼으면 이전 Draft 폴더를 지우지 않는다(링크가 그 폴더를 가리킨다)
     if(!accFiles.length && !_hasCarry && status==='대기'){ spSkip('file'); spSkip('link'); }
     if(accFiles.length || _hasCarry){
       const _failedUploads = [];
@@ -4690,10 +4693,11 @@ async function saveVoucher(status) {
         const links=[];
         // 이어서 작성한 Draft 의 첨부를 상신 폴더로 옮겨 담는다.
         if(_hasCarry){
-          const _co = await carryOverDraftAtt(drive.id, _attFolder);
+          const _co = await carryOverDraftAtt(drive.id, _attFolder, _isDraft ? ATT_ROOT_DRAFT : ATT_ROOT);
           links.push(..._co.links);
           if(_co.failed.length){
-            _attWarn = `임시저장 첨부 ${_co.failed.length}건은 상신 폴더로 옮기지 못했습니다: ${_co.failed.join(', ')}\n`
+            _carryFailed = true;
+            _attWarn = `임시저장 첨부 ${_co.failed.length}건은 ${_isDraft ? '새 임시저장 폴더' : '상신 폴더'}로 옮기지 못했습니다: ${_co.failed.join(', ')}\n`
                      + `파일은 임시저장 폴더에 남아 있어 상세보기에서는 열립니다.`;
           }
           if(status==='대기') spStep('file','run', links.length+' / '+(links.length+accFiles.length));
@@ -4739,8 +4743,11 @@ async function saveVoucher(status) {
                    + `다음 파일은 업로드되지 않았습니다: ${_failedUploads.join(', ')}\n다시 첨부해 주세요.`;
         }
       }catch(fe){
+        _carryFailed = true;
         console.error('[첨부] 처리 실패:', fe && fe.message);
-        _attWarn = '첨부파일이 저장되지 않았습니다. 전표는 정상 상신되었으니 IT팀에 문의해 주세요.';
+        _attWarn = _isDraft
+          ? '첨부파일이 저장되지 않았습니다. 임시저장은 되었으니 이어서 작성할 때 파일을 다시 첨부해 주세요.'
+          : '첨부파일이 저장되지 않았습니다. 전표는 정상 상신되었으니 IT팀에 문의해 주세요.';
       }
     }
 
@@ -4825,7 +4832,10 @@ async function saveVoucher(status) {
         + '결재는 올라가지 않았습니다.\n'
         + '[내 전표 목록] → 오른쪽 위 「Draft」 를 누르면 다시 열 수 있습니다.\n\n'
         + 'Accounting 담당자에게 위 번호를 알려 주시면\n'
-        + '상신 전에 내용을 미리 확인받을 수 있습니다.', '📝');
+        + '상신 전에 내용을 미리 확인받을 수 있습니다.\n'
+        + '(이어서 작성해 다시 저장하면 번호가 새로 바뀝니다.)'
+        // 첨부 업로드·연결·이어받기 실패는 상신과 같이 알린다. 예전에는 임시저장에서만 조용히 넘어갔다.
+        + (_attWarn ? '\n\n⚠️ ' + _attWarn : ''), '📝');
     } else {
       showAccAlert('저장되었습니다.', 'Voucher ID: '+voucherId, '✅');
     }
@@ -4835,6 +4845,8 @@ async function saveVoucher(status) {
     if (_resumingDraftId && String(_resumingDraftId) !== String(requestId)) {
       try {
         await api(`/sites/${siteId}/lists/${LIST_DRAFTS}/items/${_resumingDraftId}`, 'DELETE');
+        // 첨부를 모두 새 폴더로 옮겼으면 이전 Draft 폴더도 지운다(남기면 라이브러리에 고아 파일이 쌓인다).
+        if (!_carryFailed && _resumingDraftTitle) await deleteDraftAttachments(_resumingDraftTitle);
       } catch(de) {
         console.warn('[Draft] 원본 정리 실패:', de.message);
         showAccAlert('임시저장이 남아 있습니다',
@@ -4843,7 +4855,7 @@ async function saveVoucher(status) {
           + '[내 전표 목록] → Draft 에서 직접 삭제해 주세요.', '⚠️');
       }
     }
-    _resumingDraftId = null;
+    _resumingDraftId = null; _resumingDraftTitle = '';
     _resumingAttRef = '';
     resetForm(); await loadMyList(); switchTab('list');
   } catch(e) {
@@ -5283,6 +5295,8 @@ async function loadExistingVoucher() {
   const _pt = document.getElementById('v-purpose-title');
   if(_pt){ _pt.value = String(f.PurposeTitle||'').replace(/<[^>]*>/g,'').replace(/[\r\n\t]+/g,' ').trim(); onPurposeTitleInput(); }
     // 라인 복원
+    // 다른 전표 내용으로 폼을 바꾸므로 이어서 작성 중이던 임시저장과의 연결을 끊는다(임시저장은 그대로 남는다).
+    _resumingDraftId=null; _resumingDraftTitle=''; _resumingAttRef=''; renderResumedAtt();
     try { lines = JSON.parse(f.LinesJSON||'[]'); } catch(e){ lines=[]; }
     renderLines();
     updateTotals();
@@ -5303,6 +5317,9 @@ function resetForm(){
   document.getElementById('voucher-id-badge').textContent='';
   accFiles=[]; renderAccFiles();
   _resumingAttRef=''; renderResumedAtt();   // 이어받은 첨부도 함께 비운다
+  // 이어서 작성 연결도 끊는다. 남기면 [Reset] 뒤 전혀 다른 전표를 상신해도 불러왔던 임시저장이 지워진다.
+  // (resumeDraft 는 resetForm() 을 먼저 부른 뒤 다시 연결하므로 영향 없음)
+  _resumingDraftId=null; _resumingDraftTitle='';
   extraBPs=[]; _lineClipboard=null;
   // 추가 결재자도 반드시 초기화한다. 남겨두면 다음 전표에 이전 결재라인이 그대로 따라붙는다.
   extraApprovers=[]; _exSeq=0;
@@ -5906,7 +5923,7 @@ async function loadAdminList() {
       return out;
     })();
 
-    // UAT: 운영 전표와 임시저장(Drafts)을 함께 읽는다. 임시저장 조회가 실패해도 운영 목록은 보이게 한다.
+    // 운영 전표와 임시저장(Drafts)을 함께 읽는다. 임시저장 조회가 실패해도 운영 목록은 보이게 한다.
     const _req = `?expand=fields(select=${REQ_FIELDS})&$top=999`;
     const [data, draftData] = await Promise.all([
       apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_REQUESTS}/items` + _req),
@@ -6002,7 +6019,7 @@ function applyAdminFilters(keepPage) {
   const ft = (document.getElementById('admin-type')||{value:''}).value;
   const fk = ((document.getElementById('admin-search')||{value:''}).value||'').toLowerCase();
   adminListCache = adminListRaw.filter(v=>{
-    // UAT: Draft 보기가 켜져 있으면 임시저장만, 꺼져 있으면 임시저장을 감춘다.
+    // Draft 보기가 켜져 있으면 임시저장만, 꺼져 있으면 임시저장을 감춘다.
     const _isDraftRow = (v.Status||'').trim() === DRAFT_STATUS;
     if(_draftView.admin ? !_isDraftRow : _isDraftRow) return false;
     // 담당자 빠른 보기 — 고른 담당자와 관련된 전표만
@@ -6642,7 +6659,7 @@ function dropResumedAtt(idx) {
 // Draft 폴더의 파일을 상신 폴더로 복사하고 새 링크를 돌려준다.
 // 복사에 실패한 항목은 링크를 그대로 살려 둔다 — 파일 자체는 Draft 폴더에 남아 있어
 // 상세보기에서 열리기는 한다. 아예 잃는 것보다 낫다.
-async function carryOverDraftAtt(driveId, destFolder) {
+async function carryOverDraftAtt(driveId, destFolder, destRoot = ATT_ROOT) {
   const items = _resumingAttRef ? _resumingAttRef.split(';').map(s=>s.trim()).filter(Boolean) : [];
   if (!items.length) return { links: [], failed: [] };
   const links = [], failed = [];
@@ -6653,17 +6670,17 @@ async function carryOverDraftAtt(driveId, destFolder) {
   let destId = null;
   if (!IS_UAT) {
     try {
-      const got = await fetch(GRAPH + '/drives/' + driveId + '/root:/' + ATT_ROOT + '/' + encodeURIComponent(destFolder),
+      const got = await fetch(GRAPH + '/drives/' + driveId + '/root:/' + destRoot + '/' + encodeURIComponent(destFolder),
         { headers: { Authorization: 'Bearer ' + t } });
       if (got.ok) destId = (await got.json()).id;
       else {
-        const mk = await fetch(GRAPH + '/drives/' + driveId + '/root:/' + ATT_ROOT + ':/children', {
+        const mk = await fetch(GRAPH + '/drives/' + driveId + '/root:/' + destRoot + ':/children', {
           method: 'POST', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: destFolder, folder: {}, '@microsoft.graph.conflictBehavior': 'fail' }),
         });
         if (mk.ok) destId = (await mk.json()).id;
         else if (mk.status === 409) {
-          const again = await fetch(GRAPH + '/drives/' + driveId + '/root:/' + ATT_ROOT + '/' + encodeURIComponent(destFolder),
+          const again = await fetch(GRAPH + '/drives/' + driveId + '/root:/' + destRoot + '/' + encodeURIComponent(destFolder),
             { headers: { Authorization: 'Bearer ' + t } });
           if (again.ok) destId = (await again.json()).id;
         }
@@ -6682,7 +6699,7 @@ async function carryOverDraftAtt(driveId, destFolder) {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          parentReference: destId ? { driveId, id: destId } : { driveId, path: '/drives/' + driveId + '/root:/' + ATT_ROOT + '/' + destFolder },
+          parentReference: destId ? { driveId, id: destId } : { driveId, path: '/drives/' + driveId + '/root:/' + destRoot + '/' + destFolder },
           name, '@microsoft.graph.conflictBehavior': 'rename',
         }),
       });
@@ -6713,9 +6730,10 @@ async function carryOverDraftAtt(driveId, destFolder) {
 }
 
 // ── 임시저장(Draft) 이어서 작성 · 삭제 ──────────────────────────────────
-// Draft 는 Requests 에만 있고 결재선이 없으므로, 폼에 되돌려 담고 원본은 지운다.
-// 원본을 남기면 이어서 작성할 때마다 같은 전표가 목록에 쌓인다.
+// Draft 는 Drafts 목록에만 있고 결재선이 없다. 폼에 되돌려 담고, 원본은 다시 저장하거나 상신한 뒤에 정리한다
+// (불러오기만 하고 저장하지 않으면 원본은 그대로 남는다). 원본을 남기면 같은 전표가 목록에 쌓인다.
 let _resumingDraftId = null;
+let _resumingDraftTitle = '';   // 이전 Draft 첨부 폴더 정리용 (ACC-Voucher-YYYY-MM-DD_DRAFT-N)
 
 async function resumeDraft(spId) {
   try {
@@ -6886,6 +6904,7 @@ async function resumeDraft(spId) {
       if (typeof renderApproval === 'function') renderApproval();   // 최소한 화면은 그린다
     }
     _resumingDraftId = spId;
+    _resumingDraftTitle = f.Title || '';
     // Draft 에 붙여둔 첨부는 이미 올라가 있다. 다시 붙이라고 하면 사용자가 파일을 찾아야 하므로
     // 링크를 그대로 이어받아 상신 시 상신 폴더로 옮겨 담는다.
     _resumingAttRef = spText(f.AttachmentRef || '').trim();
@@ -8283,7 +8302,7 @@ async function buildPdfDocFromSegments(segments) {
   return { mainDoc, dataUrlToUint8, makeHeaderBytes };
 }
 
-// ── Draft 워터마크 (UAT 전용) ──
+// ── Draft 워터마크 ──
 // 임시저장 전표를 PDF 로 뽑으면 상신본과 구분이 안 된다. 결재가 시작되지 않은 문서가
 // 정식 전표처럼 돌아다니지 않도록 모든 페이지(첨부 포함)에 표식을 남긴다.
 //   · 가운데: 큰 「DRAFT」 를 45° 기울여 옅게 (내용을 가리지 않을 만큼만)
