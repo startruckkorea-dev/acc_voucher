@@ -5866,14 +5866,25 @@ async function accReloadAdmin() {
 // 틀린 숫자를 잠깐이라도 보여 주지 않도록, 준비되기 전에는 「…」 로 두고 누르지 못하게 한다.
 let _accLineReady = false;
 
+// 임시저장의 결재 라인(ApprovalDraftJSON.line)을 관리자 목록의 _line 형식으로 바꾼다.
+// 결재가 시작되지 않았으므로 status 는 비워 둔다 → 「지금 차례」 판정에 걸리지 않는다.
+function _draftLineOf(v) {
+  const _pj = raw => { try { return JSON.parse(raw); } catch(e){ return null; } };
+  const ad = _pj(v.ApprovalDraftJSON || '') || _pj(spText(v.ApprovalDraftJSON || '')) || {};
+  return (Array.isArray(ad.line) ? ad.line : [])
+    .filter(x => x && x.email)
+    .map(x => ({ order: x.order || 0, role: x.role || '', name: x.name || '', email: String(x.email).trim().toLowerCase(), status: '' }))
+    .sort((a, b) => a.order - b.order);
+}
 function accRenderQuickBar() {
   const bar = document.getElementById('acc-quick-bar');
   if (!bar) return;
   if (!_accMyRoles.length) { bar.style.display = 'none'; return; }
 
   const me   = (user?.email || user?.username || '').trim().toLowerCase();
-  // 담당자별 건수는 결재 대상(상신된 전표)만 센다 — 임시저장은 결재선이 없다.
-  const rows = (adminListRaw || []).filter(v => !v._srcDraft);
+  // 담당자별 건수는 지금 보고 있는 목록 기준으로 센다 — Draft 보기면 임시저장, 아니면 상신된 전표.
+  // 임시저장은 저장 당시 결재 라인에 그 담당자가 있거나 본인이 작성한 건이 해당된다(「지금 차례」 배지는 없음).
+  const rows = (adminListRaw || []).filter(v => !!v._srcDraft === !!(_draftView && _draftView.admin));
 
   // 칩은 다섯 역할 모두 그린다. 담당자가 누구인지 서로 알 수 있어야 하기 때문.
   // 다만 열어 볼 수 있는 건 본인 것뿐이고, IT 는 전부 열 수 있다.
@@ -5952,9 +5963,12 @@ async function loadAdminList() {
 
     // 운영 전표와 임시저장(Drafts)을 함께 읽는다. 임시저장 조회가 실패해도 운영 목록은 보이게 한다.
     const _req = `?expand=fields(select=${REQ_FIELDS})&$top=999`;
+    // 임시저장은 결재 라인(ApprovalDraftJSON)도 함께 읽는다 — 담당자별 빠른 보기에서 「이 담당자가 결재 라인에 있는
+    // 임시저장」 을 고르는 데 쓴다. 운영 Requests 에는 이 열이 없으므로 Drafts 조회에만 붙인다.
+    const _reqDraft = `?expand=fields(select=${REQ_FIELDS},ApprovalDraftJSON)&$top=999`;
     const [data, draftData] = await Promise.all([
       apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_REQUESTS}/items` + _req),
-      apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_DRAFTS}/items` + _req)
+      apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_DRAFTS}/items` + _reqDraft)
         .catch(e => { console.warn('[Draft] 임시저장 조회 실패:', e.message); return {value:[]}; }),
     ]);
     adminListRaw = [
@@ -5964,7 +5978,8 @@ async function loadAdminList() {
 
     // 전표만으로 표를 먼저 그린다. 결재선이 아직 없으면 「담당자별 빠른 보기」 만
     // 비어 있고 목록·필터·검색은 모두 정상으로 동작한다.
-    adminListRaw.forEach(v => { v._line = []; v._curEmail = ''; });
+    // 임시저장은 결재행이 없으므로 저장 당시 구성한 결재 라인으로 바로 채운다(「지금 차례」 는 없음).
+    adminListRaw.forEach(v => { v._line = v._srcDraft ? _draftLineOf(v) : []; v._curEmail = ''; });
     _accLineReady = false;              // 아직 결재행이 없다 — 칩은 「…」 로 나온다
     _accMyRoles = accDetectMyRoles();
     applyAdminFilters();
@@ -5996,7 +6011,7 @@ async function loadAdminList() {
     adminListRaw.forEach(v => {
       // 임시저장은 결재행이 없다. 번호로 찾으면 같은 번호 운영 전표의 결재선이 붙어
       // 담당자별 빠른 보기 건수·「지금 차례」 판정에 섞인다.
-      if (v._srcDraft) { v._line = []; v._curEmail = ''; return; }
+      if (v._srcDraft) { v._line = _draftLineOf(v); v._curEmail = ''; return; }
       const line = (_aprByReq[String(v._spId)] || []).sort((a,b)=>a.order-b.order);
       v._line = line;
       const cur = line.find(a => a.status === '대기');
@@ -6460,7 +6475,15 @@ function apsPagerHtml(cur, pages, mk) {
 function renderAdminList(){
   const body = document.getElementById('admin-body');
   if(!adminListCache.length){
-    body.innerHTML = '<tr><td colspan="13" style="text-align:center;padding:40px;color:#a19f9d">작성된 바우처가 없습니다.</td></tr>';
+    // 빈 목록 문구는 지금 보기·조건에 맞게. 담당자·상태·유형·검색이 걸려 있으면 「조건에 맞는」 으로 알린다.
+    const _filtered = !!_accQuickView
+      || !!(document.getElementById('admin-status')||{}).value
+      || !!(document.getElementById('admin-type')||{}).value
+      || !!(((document.getElementById('admin-search')||{}).value||'').trim());
+    const _emptyMsg = _draftView.admin
+      ? (_filtered ? '조건에 맞는 임시저장 전표가 없습니다.' : '임시저장 전표가 없습니다.')
+      : (_filtered ? '조건에 맞는 전표가 없습니다.' : '작성된 바우처가 없습니다.');
+    body.innerHTML = '<tr><td colspan="13" style="text-align:center;padding:40px;color:#a19f9d">' + _emptyMsg + '</td></tr>';
     document.getElementById('admin-pagination').innerHTML = '';
     return;
   }
