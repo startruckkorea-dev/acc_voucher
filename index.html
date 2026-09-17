@@ -7654,13 +7654,42 @@ async function loadApprovalHistory(spId){
         + '<div style="font-size:.62rem;color:#a19f9d;margin-top:5px">(Requested by the requester; the RD approval step was excluded for this voucher)</div>'
         + '</div>'
       : '';
+    // ACC 역할은 Voucher Type에 따라 AP/AR/GL 담당자로 표시
+    const accLabelByType = {AP:'AP 담당자',AP_IMS:'GL 담당자',AP_CR:'AP 담당자',AR:'AR 담당자',GL:'GL 담당자',FA:'GL 담당자',ADV:'AP 담당자',SET:'AP 담당자'};
     if(!list.length){
-      document.getElementById('voucher-appr-history').innerHTML = '<div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력이 없습니다.</div>';
+      // 임시저장은 결재행이 없다. 대신 저장할 때 구성한 결재 라인(ApprovalDraftJSON.line)을 「상신 전」 으로 보여 준다.
+      // 사전 검토하는 Accounting 담당자가 결재 라인까지 함께 확인할 수 있게 하기 위함(결재 이력이 아님을 명시).
+      const _isDraftV = !!v._srcDraft || (v.Status||'').trim() === DRAFT_STATUS;
+      let _dl = [];
+      if(_isDraftV){
+        // 일반 텍스트 열이면 원문 그대로 JSON 이다. 서식 있는 텍스트로 감싸져 온 경우에만 래퍼를 걷어내 다시 읽는다
+        // (먼저 걷어내면 값 안의 < > 까지 태그로 오인해 지워진다).
+        const _pj = raw => { try { return JSON.parse(raw); } catch(e){ return null; } };
+        const _ad = _pj(v.ApprovalDraftJSON || '') || _pj(spText(v.ApprovalDraftJSON || '')) || {};
+        _dl = (Array.isArray(_ad.line) ? _ad.line : []).filter(x => x && (x.name || x.email));
+      }
+      if(_dl.length){
+        const _rows = _dl.slice().sort((a,b)=>(a.order||0)-(b.order||0)).map((x,i)=>{
+          const _r = aacRoleBase(x.role || '');
+          let _lbl = roleLabelMap[_r] || _r || '';
+          if(_r==='ACC') _lbl = accLabelByType[v.VoucherType] || '담당자';
+          return `<div class="appr-item">
+            <div><b>${escHtml(String(x.order || (i+1)))}차 결재자(${escHtml(_lbl)})</b>
+            <br><span style="font-size:.72rem;color:#605e5c">${escHtml(x.name||'')} · ${escHtml(x.email||'')}</span></div>
+            <span class="status-대기잠김">상신 전</span>
+          </div>`;
+        }).join('');
+        document.getElementById('voucher-appr-history').innerHTML =
+          '<div style="padding:7px 12px;font-size:.7rem;color:#8a6116;background:#fdf6e3;border-bottom:1px solid #f0d9a0">'
+          + '임시저장 당시 구성한 결재 라인입니다. 아직 상신 전이라 결재 이력은 없으며, '
+          + '상신할 때 그날의 설정·환율 기준 금액에 따라 단계가 달라질 수 있습니다.</div>'
+          + _rows;
+      } else {
+        document.getElementById('voucher-appr-history').innerHTML = '<div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력이 없습니다.</div>';
+      }
       _setApprExtra(_rdExemptBox);
       return;
     }
-    // ACC 역할은 Voucher Type에 따라 AP/AR/GL 담당자로 표시
-    const accLabelByType = {AP:'AP 담당자',AP_IMS:'GL 담당자',AP_CR:'AP 담당자',AR:'AR 담당자',GL:'GL 담당자',FA:'GL 담당자',ADV:'AP 담당자',SET:'AP 담당자'};
     const html = list.map(af=>{
       // PATCH 대상이 되는 Approvals 항목 ID. 조회 시점에 함께 담아둔다.
       af._id = af._id || af.id || af.ID || '';
