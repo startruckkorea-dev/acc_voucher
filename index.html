@@ -6686,16 +6686,18 @@ function dropResumedAtt(idx) {
   renderResumedAtt();
 }
 
-// Draft 폴더의 파일을 상신 폴더로 복사하고 새 링크를 돌려준다.
-// 복사에 실패한 항목은 링크를 그대로 살려 둔다 — 파일 자체는 Draft 폴더에 남아 있어
-// 상세보기에서 열리기는 한다. 아예 잃는 것보다 낫다.
+// Draft 폴더의 파일을 새 폴더(상신 전표 폴더 또는 새 임시저장 폴더)로 「이동」 하고 링크를 돌려준다.
+// 예전에는 copy 를 썼다. copy 는 비동기(202)라 파일마다 0.4초 간격으로 완료를 물어야 했고(최대 8초),
+// 이미 올라가 있는 파일의 복사본을 매번 새로 만들어 첨부가 있는 이어서 저장·상신이 느렸다.
+// 이동(PATCH parentReference)은 즉시 끝나는 요청이고 항목 id 가 바뀌지 않아 링크(driveId###itemId)를 그대로 쓴다.
+// 이동에 실패한 항목도 링크는 원래 파일을 그대로 가리키므로 열리기는 한다 — 이전 폴더를 지우지 않도록 failed 로 알린다.
 async function carryOverDraftAtt(driveId, destFolder, destRoot = ATT_ROOT) {
   const items = _resumingAttRef ? _resumingAttRef.split(';').map(s=>s.trim()).filter(Boolean) : [];
   if (!items.length) return { links: [], failed: [] };
   const links = [], failed = [];
   const t = await token();
-  // 복사 대상 폴더를 먼저 만든다. 새 전표 폴더는 이 시점에 아직 없고(새 파일 업로드는 이 뒤),
-  // copy 는 없는 부모 폴더를 만들어 주지 않는다. 경로 대신 폴더 id 로 지정해
+  // 대상 폴더를 먼저 만든다. 새 폴더는 이 시점에 아직 없고(새 파일 업로드는 이 뒤),
+  // 이동은 없는 부모 폴더를 만들어 주지 않는다. 경로 대신 폴더 id 로 지정해
   // 기본 문서 라이브러리가 아닌 AttachedFiles 라이브러리 안으로 정확히 들어가게 한다.
   let destId = null;
   if (!IS_UAT) {
@@ -6715,7 +6717,7 @@ async function carryOverDraftAtt(driveId, destFolder, destRoot = ATT_ROOT) {
           if (again.ok) destId = (await again.json()).id;
         }
       }
-    } catch (e) { console.warn('[Draft첨부] 상신 폴더 준비 실패:', e.message); }
+    } catch (e) { console.warn('[Draft첨부] 대상 폴더 준비 실패:', e.message); }
   }
   for (const it of items) {
     const [rawName, safeKey] = it.split('||ENC||');
@@ -6724,35 +6726,23 @@ async function carryOverDraftAtt(driveId, destFolder, destRoot = ATT_ROOT) {
       if (IS_UAT) { links.push(it); continue; }   // UAT 는 실제 파일이 없다
       const decoded = decodeURIComponent(escape(atob(safeKey)));
       const itemId = decoded.split('###')[1];
-      // 상신 폴더로 복사. 같은 이름이 있으면 뒤에 번호가 붙는다(rename).
-      const res = await fetch(GRAPH + '/drives/' + driveId + '/items/' + itemId + '/copy', {
-        method: 'POST',
+      if (!destId) throw new Error('대상 폴더를 준비하지 못했습니다');
+      // 같은 이름이 이미 있으면 뒤에 번호를 붙여 옮긴다(rename). 이름이 바뀌면 링크의 표시 이름도 맞춘다.
+      const res = await fetch(GRAPH + '/drives/' + driveId + '/items/' + itemId + '?@microsoft.graph.conflictBehavior=rename', {
+        method: 'PATCH',
         headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          parentReference: destId ? { driveId, id: destId } : { driveId, path: '/drives/' + driveId + '/root:/' + destRoot + '/' + destFolder },
-          name, '@microsoft.graph.conflictBehavior': 'rename',
-        }),
+        body: JSON.stringify({ parentReference: { driveId, id: destId } }),
       });
-      // copy 는 비동기(202)라 완료를 기다린 뒤 새 항목 id 를 얻어야 한다.
-      if (res.status === 202) {
-        const mon = res.headers.get('Location');
-        let newId = null;
-        for (let i = 0; i < 20 && mon; i++) {
-          await new Promise(r => setTimeout(r, 400));
-          const st = await fetch(mon).then(r => r.json()).catch(() => null);
-          if (st && st.status === 'completed') { newId = st.resourceId; break; }
-          if (st && st.status === 'failed') break;
-        }
-        if (newId) {
-          links.push(name + '||ENC||' + btoa(unescape(encodeURIComponent(driveId + '###' + newId))));
-          continue;
-        }
+      if (res.ok) {
+        const moved = await res.json().catch(() => ({}));
+        const shown = (moved && moved.name) || name;
+        links.push(shown === name ? it : shown + '||ENC||' + safeKey);
+        continue;
       }
-      // 복사가 끝나지 않았거나 실패 — 원본 링크를 그대로 쓴다
-      console.warn('[Draft첨부] 복사 확인 실패, 원본 링크 유지:', name);
+      console.warn('[Draft첨부] 이동 실패(' + res.status + '), 원본 링크 유지:', name);
       links.push(it); failed.push(name);
     } catch(e) {
-      console.warn('[Draft첨부] 복사 실패, 원본 링크 유지:', name, e.message);
+      console.warn('[Draft첨부] 이동 실패, 원본 링크 유지:', name, e.message);
       links.push(it); failed.push(name);
     }
   }
