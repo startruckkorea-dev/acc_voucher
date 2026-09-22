@@ -8120,7 +8120,7 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
   // 추가 결재자는 여러 명이 같은 ApproverRole('Extra Approver')을 갖는다.
   // role을 키로 쓰면 서로 덮어써지므로, 결재 이력의 ApprovalOrder를 기준으로 개별 처리한다.
   const _extraAprs = (apprList||[])
-    .filter(a => a.ApproverRole === EXTRA_ROLE || a.ApproverRole === 'EXTRA')
+    .filter(a => { const _r = aacRoleBase(a.ApproverRole); return _r === EXTRA_ROLE || _r === 'EXTRA'; })
     .sort((a,b) => (a.ApprovalOrder||0) - (b.ApprovalOrder||0))
     .map(a => ({...a}));
   const roleCols = (() => {
@@ -8130,7 +8130,7 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
     // 정렬로 위치를 바꾸지 않고, 추가 결재자만 알맞은 자리에 끼워 넣는다.
     const out = [];
     BASE_ROLE_COLS.forEach(rc => {
-      const a = (apprList||[]).find(x => x.ApproverRole === rc[0]);
+      const a = (apprList||[]).find(x => aacRoleBase(x.ApproverRole) === rc[0]);
       const myOrder = a ? (a.ApprovalOrder||0) : null;
       if(myOrder !== null){
         _extraAprs.forEach(ex => {
@@ -8159,7 +8159,9 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
   // 원래 불필요한 단계(NOT REQUIRED)와 구분되도록 별도 표기를 쓴다.
   const SKIPPED_BADGE='<span style="display:inline-block;background:#fdf6e3;color:#8a6116;border:1px solid #f0d9a0;font-size:8.5px;font-weight:800;padding:2px 7px;border-radius:3px;letter-spacing:.2px;white-space:nowrap">SKIPPED</span>';
   const ACC_SKIP_ROLES = ['ACC','AMGR','CFO'];
-  const apprByRole={}; (apprList||[]).forEach(a=>{apprByRole[a.ApproverRole]=a;});
+  /* 역할은 꼬리를 뗀 본래 값으로 맞춘다. 대리 처리된 행은 aacPatchWith 가 ApproverRole 을
+     'CFO · 대리(이름 <메일>)' 로 바꾸므로, 날값으로 비교하면 그 단계가 비어 NOT REQUIRED 로 찍혔다(09-23). */
+  const apprByRole={}; (apprList||[]).forEach(a=>{apprByRole[aacRoleBase(a.ApproverRole)]=a;});
   const fmtApprDateTime=s=>{if(!s)return '';const d=new Date(new Date(s).getTime()+9*3600*1000);const p=n=>String(n).padStart(2,'0');return `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;};
   // "이준순 스타트럭코리아 IT(Junsoon Lee)" 형태에서 한글 이름만 추출
   const koreanName = (s)=>{ const m=String(s||'').match(/^[가-힣]+/); return m ? m[0] : (s||'-'); };
@@ -8225,6 +8227,8 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
         val='<div style="display:inline-block;border:1.1px solid '+stampColor+';border-radius:4px;padding:'+_pad+';line-height:1.3;max-width:100%;box-sizing:border-box">'+
               '<div style="font-size:'+_sz(8)+'px;font-weight:700;color:'+stampColor+';white-space:nowrap">'+stampLabel+'</div>'+
               '<div style="font-size:'+_sz(7.5)+'px;color:#333;line-height:1.2">'+esc(a.ApproverName||'')+'</div>'+
+              // 대리 처리면 누구를 대신했는지 한 줄 더 — 도장의 이름은 실제 처리한 대리인이다.
+              (function(){ const _d=_aacRoleParse(a.ApproverRole); return _d?'<div style="font-size:'+_sz(6.5)+'px;color:#8a6116;line-height:1.2">on behalf of '+esc(_d.name)+'</div>':''; })()+
               '<div style="font-size:'+_sz(7)+'px;color:#666;white-space:nowrap">'+fmtApprDateTime(a.ApprovalDate)+'</div>'+
             '</div>';
       } else if(!a){
