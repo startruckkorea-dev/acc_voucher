@@ -579,12 +579,58 @@ table.pt-tbl tfoot td{background:#eef1f5;font-weight:700;border-top:2px solid #1
 // ?openId= 단독 상세보기 모드 판별을 최대한 앞당긴다.
 // DOMContentLoaded까지 기다리면 작성 폼이 1~4초간 그대로 보였다가 사라지는 깜빡임이 생기므로,
 // <head> 파싱 시점에 <html>에 클래스를 붙여 #app이 처음부터 렌더링되지 않게 한다.
-if (new URLSearchParams(location.search).get('openId')) {
+// 로그인이 필요하면 MSAL 이 origin+pathname 으로 돌아와 ?openId= 가 사라진다(BP · FA 와 같은 보완, 09-22).
+// 탭 저장소에 10분 보관해 두고, 돌아왔을 때도 같은 모드로 연다.
+var __accOpenId = new URLSearchParams(location.search).get('openId');
+try {
+  if (__accOpenId) sessionStorage.setItem('accv_openid', JSON.stringify({ id: __accOpenId, at: Date.now() }));
+  else {
+    var __s = JSON.parse(sessionStorage.getItem('accv_openid') || 'null');
+    if (__s && __s.id && Date.now() - (__s.at || 0) < 10 * 60 * 1000) __accOpenId = __s.id;
+    else sessionStorage.removeItem('accv_openid');
+  }
+} catch (e) {}
+if (__accOpenId) {
   document.documentElement.classList.add('standalone-detail');
 }
 </script>
+<style>
+/* APS 에서 들어오는 결재 딥링크(?tab=approval&id=) — 작성 화면이 잠깐 보였다가 상세가 뜨지 않게
+   로더만 보이다가 상세 팝업을 드러낸다(SCC · BP · FA 와 같은 방식, 09-22). 팝업을 닫으면 결재함이 남는다. */
+html.deeplink-open #app, html.deeplink-open footer { visibility: hidden !important; }
+html.deeplink-open #loading, html.deeplink-open #dyn-loading { display: none !important; }
+html.deeplink-open #voucher-detail-modal { display: none !important; }
+#deeplink-loader { display: none; }
+html.deeplink-open.deeplink-busy #deeplink-loader {
+  display: flex; position: fixed; inset: 0; z-index: 400; background: #f3f2f1;
+  flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  font-family: 'Segoe UI', sans-serif; color: #605e5c;
+}
+#deeplink-loader .dl-spin { width: 34px; height: 34px; border: 3px solid #e1dfdd; border-top-color: #0078d4; border-radius: 50%; animation: dl-rotate .8s linear infinite; }
+#deeplink-loader .dl-text { font-size: .82rem; font-weight: 600; }
+#deeplink-loader .dl-sub { font-size: .72rem; color: #a19f9d; margin-top: -8px; }
+@keyframes dl-rotate { to { transform: rotate(360deg); } }
+</style>
+<script>
+(function () {
+  try {
+    var q = new URLSearchParams(location.search);
+    var has = !!q.get('id') && !q.get('openId');
+    if (!has && !q.get('openId')) {
+      var d = JSON.parse(sessionStorage.getItem('accv_deeplink') || 'null');
+      has = !!(d && d.id && Date.now() - (d.at || 0) < 10 * 60 * 1000);
+    }
+    if (has) document.documentElement.classList.add('deeplink-open');
+  } catch (e) {}
+})();
+</script>
 </head>
 <body>
+<div id="deeplink-loader">
+  <div class="dl-spin"></div>
+  <div class="dl-text">상세 내용을 불러오는 중입니다</div>
+  <div class="dl-sub">잠시만 기다려 주세요</div>
+</div>
 <div id="standalone-loader">
   <div class="sl-spin"></div>
   <div class="sl-text">상세 내용을 불러오는 중입니다</div>
@@ -2305,6 +2351,10 @@ async function boot(account) {
   }
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='block';
+  if (document.documentElement.classList.contains('deeplink-open')) {
+    document.documentElement.classList.add('deeplink-busy');
+    setTimeout(deepLinkFinish, 30000);   // 끝을 알리지 못해도 로더에 갇히지 않게
+  }
   // ?openId= 단독 모드: 인증이 끝나는 즉시 로더를 띄운다.
   // 마스터 데이터 로딩(직원/CCTR/BP 등)이 끝나야 상세를 부를 수 있는데, 그때 로더를 켜면
   // 그 사이 몇 초 동안 아무것도 없는 회색 화면만 보인다.
@@ -2389,7 +2439,14 @@ async function boot(account) {
   }, 60000);
 
   // URL로 특정 전표 상세를 바로 열기 (다른 시스템에서 연동 링크로 진입할 때)
-  const _openId = new URLSearchParams(location.search).get('openId');
+  let _openId = new URLSearchParams(location.search).get('openId');
+  try {
+    if (!_openId) {
+      const _s = JSON.parse(sessionStorage.getItem('accv_openid') || 'null');
+      if (_s && _s.id && Date.now() - (_s.at || 0) < DEEPLINK_TTL_MS) _openId = _s.id;
+    }
+    sessionStorage.removeItem('accv_openid');
+  } catch (e) {}
   if (_openId) {
     // 단독 상세보기 모드: 전표 작성 폼·헤더·탭은 필요 없으므로 배경색만 남기고 전부 숨김
     _standaloneDetail = true;
@@ -2402,6 +2459,9 @@ async function boot(account) {
     armStandaloneLoaderTimeout();
     _configPromise.finally(()=>openVoucherSP(String(_openId), 'admin'));
     history.replaceState(null, '', location.pathname);
+  } else {
+    // APS 에서 결재하러 들어온 경우 — 관리자 명단(system_config)이 채워진 뒤 연다.
+    _configPromise.finally(()=>consumeDeepLink());
   }
 }
 
@@ -7698,6 +7758,7 @@ async function loadApprovalHistory(spId){
   };
   try{
     const list = await fetchApprovalListDirect(v);
+    window._dlApprovers = list.map((a) => a.ApproverEmail);   // 딥링크 권한 판정용
     window._currentApprovalList = list; // No.14: PDF 출력용 캐시 (참고용 - exportVoucherPdf는 이제 이 캐시에 의존하지 않고 직접 재조회함)
     // RD 승인 제외는 전표 내용이 아니라 '결재선이 왜 한 단계 짧은지'에 대한 설명이므로
     // Purpose 아래가 아니라 결재 이력 바로 아래에 둔다.
@@ -9044,6 +9105,77 @@ async function exportVoucherDetailPdf() {
   }
 }
 
+
+// ── APS 에서 특정 전표로 바로 들어오기(딥링크) ──
+// APS 상세의 「→ ACC Voucher 바로가기」 는 첫 화면(바우처 작성)만 열어, 전표를 다시 찾아야 했다(09-22).
+// ?tab=approval&id=<전표 ID> 를 받으면 로그인 뒤 결재함을 열고 그 전표 상세를 띄운다(SCC · BP · FA 와 같다).
+// 기존 ?openId= (SSC 등 연동 · 단독 상세 보기)와는 별개다. 로그인 왕복에서 쿼리가 사라지므로
+// 탭 저장소에 10분 보관하고 주소창에서는 지운다. 한 번 쓰면 지운다.
+const DEEPLINK_KEY = 'accv_deeplink';
+const DEEPLINK_TTL_MS = 10 * 60 * 1000;
+(function captureDeepLink() {
+  try {
+    const q = new URLSearchParams(window.location.search);
+    const tab = q.get('tab'), id = q.get('id');
+    if (tab || id) {
+      sessionStorage.setItem(DEEPLINK_KEY, JSON.stringify({ tab: tab || '', id: id || '', at: Date.now() }));
+      q.delete('tab'); q.delete('id');
+      const rest = q.toString();
+      history.replaceState(null, '', window.location.pathname + (rest ? '?' + rest : '') + window.location.hash);
+    }
+  } catch (e) {}
+})();
+function deepLinkFinish() {
+  document.documentElement.classList.remove('deeplink-open', 'deeplink-busy');
+}
+async function consumeDeepLink() {
+  try { await _consumeDeepLink(); } finally { deepLinkFinish(); }
+}
+/* 권한 — 신청자 · 그 전표의 결재자(대리 위임 포함) · 관리자만. 상세 열기가 불러온 전표와 결재행을 그대로 쓴다
+   (ACC 는 결재행이 세대별 목록에 나뉘어 있어, 따로 조회하면 세대 판정을 중복하게 된다). */
+function deepLinkAllowedFor(id) {
+  const v = window._currentVoucherDetail;
+  if (!v || String(v._spId) !== String(id)) return 'notfound';
+  const mine = [user && user.email, user && user.username].map((x) => String(x || '').toLowerCase()).filter(Boolean);
+  if (mine.includes(String(v.RequesterEmail || '').toLowerCase())) return true;
+  if (ADMIN_EMAILS.map((e) => String(e || '').toLowerCase()).some((e) => e && mine.includes(e))) return true;
+  return (window._dlApprovers || []).some((e) => isMyAppr(e));
+}
+async function _consumeDeepLink() {
+  let d = null;
+  try { d = JSON.parse(sessionStorage.getItem(DEEPLINK_KEY) || 'null'); sessionStorage.removeItem(DEEPLINK_KEY); }
+  catch (e) { d = null; }
+  if (!d) return;
+  if (!d.at || Date.now() - d.at > DEEPLINK_TTL_MS) return;
+  const id = parseInt(d.id, 10);
+  // APS 는 시스템 공통으로 tab=approval 을 보낸다 — ACC 의 결재함 탭 이름은 appr.
+  const tabName = d.tab === 'approval' ? 'appr' : d.tab;
+  const tab = ['new', 'list', 'appr', 'admin'].includes(tabName) ? tabName : (id > 0 ? 'appr' : '');
+  if (tab) switchTab(tab);
+  if (!(id > 0)) return;
+  try { await loadMyDelegations(); } catch (e) {}          // 대리 위임까지 판정하려면 먼저 읽어야 한다
+  window._currentVoucherDetail = null; window._dlApprovers = [];
+  try { await openVoucherSP(String(id), 'approval'); } catch (e) { console.warn('[딥링크] 상세 열기 실패:', e.message); }
+  const allow = deepLinkAllowedFor(id);
+  if (allow !== true) {
+    if (typeof closeDetailModal === 'function') closeDetailModal();
+    deepLinkFinish();
+    alert(allow === 'notfound'
+      ? '해당 전표를 찾을 수 없습니다. 삭제되었거나 번호가 잘못되었습니다.\n결재함에서 내 결재 건을 확인해 주세요.'
+      : '이 전표를 볼 수 있는 권한이 없습니다.\n결재함에서 내 결재 건을 확인해 주세요.');
+    return;
+  }
+  // 내 결재 차례가 아니면(승인 단추 없음) 상세 맨 위에 한 줄 안내
+  const mc = document.getElementById('voucher-detail-content');
+  const modal = document.getElementById('voucher-detail-modal');
+  if (mc && modal && !modal.querySelector('.btn-approve')) {
+    const note = document.createElement('div');
+    note.setAttribute('data-deeplink-note', '');
+    note.style.cssText = 'margin:0 0 12px;padding:10px 12px;border:1px solid #fde68a;background:#fffbeb;border-radius:6px;font-size:13px;color:#92400e';
+    note.textContent = '이 전표는 지금 내 결재 차례가 아닙니다. 이미 처리했거나 다른 결재 단계에서 진행 중입니다. 아래 결재 이력을 확인해 주세요.';
+    mc.insertBefore(note, mc.firstChild);
+  }
+}
 
 // ── Init ──
 window.addEventListener('load',async()=>{
