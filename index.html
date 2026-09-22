@@ -3029,6 +3029,15 @@ function getBpCategoryMismatches(type) {
   }
   return { expected, mismatched };
 }
+/* 회계 라인의 계정 중 BP(Vendor/Customer) 코드인 것. BP 마스터(bpData)와,
+   포인트 정산 설정 파일을 읽었다면 그 딜러 목록(Vendor Code)까지 본다 —
+   Draft 로 이어서 작성할 때는 설정 파일을 다시 읽지 않으므로 BP 마스터만으로도 판정돼야 한다. */
+function lineBpCodes(){
+  const bp = new Set((bpData||[]).map(b=>String(b.code||'').trim()).filter(Boolean));
+  const dl = new Set(((typeof PT_MASTER!=='undefined' && PT_MASTER && PT_MASTER.dealers) || []).map(d=>String(d.code||'').trim()).filter(Boolean));
+  return (lines||[]).map(l=>String(l.gl||'').trim()).filter(g=>g && (bp.has(g) || dl.has(g)));
+}
+
 function evaluateBpCategoryWarning() {
   const type = document.getElementById('v-type').value;
   const wrapper = document.getElementById('bp-section-wrapper');
@@ -4503,10 +4512,20 @@ async function saveVoucher(status) {
   }
 
   // GL·FA 외 유형은 BP 코드가 필수 — 임시저장에서는 경고만 하고, 상신에서 막는다.
+  // 거래처가 헤더(2. BP 정보)가 아니라 회계 라인의 계정으로 들어가는 전표도 있다 —
+  // Mercedes ServiceCard Point Reimbursement 는 「CR 딜러별 Vendor Code / DR 210702」 구조라
+  // 헤더 BP 가 원래 비어 있다(f122ff6 설계). 이 검사는 Draft 이식(a2307cf, 09-17)과 함께 들어왔는데
+  // 그 구조를 몰라 09-18 이후 Reimbursement 상신을 전부 막았다(09-21 신고).
+  // 라인에 BP 계정(Vendor/Customer 코드)이 하나라도 있으면 거래처가 지정된 것으로 본다.
   if(status==='대기' && type!=='GL' && type!=='FA'){
     const _bp = document.getElementById('v-bp-code')?.value||'';
-    if(!_bp && !(extraBPs && extraBPs.length)){
-      showAccAlert('BP 코드가 비어 있습니다', type+' 유형은 "2. BP 정보"에서 Vendor/Customer No.를 선택해야 상신할 수 있습니다.', '⚠️');
+    // Draft 로 이어서 올리면 포인트 설정 파일을 읽지 않은 상태다. BP 마스터에 딜러 코드가 빠져 있으면
+    // 판정이 안 되므로, 그때만 설정 파일을 한 번 읽어 딜러 목록으로 다시 본다(읽기 실패는 무시).
+    if(!_bp && !(extraBPs && extraBPs.length) && !lineBpCodes().length && !PT_MASTER && typeof ptLoadMaster==='function'){
+      try { await ptLoadMaster(); } catch(e) { console.warn('[BP 검사] 포인트 설정 파일 확인 실패:', e.message); }
+    }
+    if(!_bp && !(extraBPs && extraBPs.length) && !lineBpCodes().length){
+      showAccAlert('BP 코드가 비어 있습니다', type+' 유형은 "2. BP 정보"에서 Vendor/Customer No.를 선택하거나, 회계 라인에 거래처(Vendor/Customer) 계정을 넣어야 상신할 수 있습니다.', '⚠️');
       return;
     }
   }
