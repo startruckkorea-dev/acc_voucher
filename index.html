@@ -1863,17 +1863,7 @@ async function loadSystemConfig() {
 // 예전에는 boot() 안의 then 에만 있어, 파일을 못 읽으면 _configLoaded 가 영영 false 로 남았다.
 // 그러면 「관리자」 단추가 1.5초마다 권한 확인만 되풀이하며 아무 반응이 없었고(09-29 UAT), 헤더 연락처는 「-」 였다.
 function _applySystemConfig(cfg) {
-  const ap = cfgVal(cfg,'ACC-Voucher_CONTACT_AP');
-  const ar = cfgVal(cfg,'ACC-Voucher_CONTACT_AR');
-  const gl = cfgVal(cfg,'ACC-Voucher_CONTACT_GL');
-  // 역할 이름은 헤더 마크업의 배지가 담당한다. 여기서는 이메일만 채운다.
-  // 예전처럼 textContent 로 문장을 통째로 넣으면 프레임 구조가 지워진다.
-  setHdrContact('acc-contact-ap', ap.email);
-  setHdrContact('acc-contact-ar', ar.email);
-  setHdrContact('acc-contact-gl', gl.email);
-  CONTACT_EMAILS.ap = ap.email||''; CONTACT_EMAILS.ar = ar.email||''; CONTACT_EMAILS.gl = gl.email||'';
-  CONTACT_NAMES.ap  = ap.name||'';  CONTACT_NAMES.ar  = ar.name||'';  CONTACT_NAMES.gl  = gl.name||'';
-  onTypeChange(); // Voucher Type이 이미 선택돼 있었다면(기존 전표 불러오기 등) 배지를 바로 갱신
+  // 권한 명단부터 채운다. 아래 화면 갱신(onTypeChange 등)이 예외를 내더라도 권한 판정만은 온전히 남도록.
   // 관리자 권한: ACC-Voucher_ADMIN_1~N 모두 읽기
   const adminList = cfgEmails(cfg, ['ACC-Voucher_ADMIN_1']); // ADMIN_N 패턴 자동 확장
   if(adminList.length) ADMIN_EMAILS.splice(0, ADMIN_EMAILS.length, ...adminList);
@@ -1889,6 +1879,17 @@ function _applySystemConfig(cfg) {
     _pn++;
   }
   if(pkfList.length) PKF_EMAILS.splice(0, PKF_EMAILS.length, ...pkfList);
+  const ap = cfgVal(cfg,'ACC-Voucher_CONTACT_AP');
+  const ar = cfgVal(cfg,'ACC-Voucher_CONTACT_AR');
+  const gl = cfgVal(cfg,'ACC-Voucher_CONTACT_GL');
+  // 역할 이름은 헤더 마크업의 배지가 담당한다. 여기서는 이메일만 채운다.
+  // 예전처럼 textContent 로 문장을 통째로 넣으면 프레임 구조가 지워진다.
+  setHdrContact('acc-contact-ap', ap.email);
+  setHdrContact('acc-contact-ar', ar.email);
+  setHdrContact('acc-contact-gl', gl.email);
+  CONTACT_EMAILS.ap = ap.email||''; CONTACT_EMAILS.ar = ar.email||''; CONTACT_EMAILS.gl = gl.email||'';
+  CONTACT_NAMES.ap  = ap.name||'';  CONTACT_NAMES.ar  = ar.name||'';  CONTACT_NAMES.gl  = gl.name||'';
+  onTypeChange(); // Voucher Type이 이미 선택돼 있었다면(기존 전표 불러오기 등) 배지를 바로 갱신
   // IT 담당자(ACC-Voucher_IT)만 결재이력 세대 상태/관리 영역 전체를 볼 수 있도록 처리
   const rawUserEmail = (user?.email||user?.username||'').toLowerCase();
   const isItStaff = IT_EMAILS.map(e=>e.toLowerCase()).includes(rawUserEmail);
@@ -6746,10 +6747,10 @@ function apsPagerHtml(cur, pages, mk) {
 /* 관리자 목록 「결재 대기」 열(09-29) — 지금 결재할 차례를 차수 · 이름으로.
    결재행은 loadAdminList 가 전표별로 묶어 둔 v._line(순서 · 역할 · 이름 · 메일 · 상태)을 그대로 쓴다 — 추가 조회 없음.
    대기 → '대기' 행(「2차 · 홍길동」) · 반려 → 반려한 단계(「3차 반려 · 홍길동」) · 승인완료 · 철회 · 임시저장 → '-' ·
-   결재행이 아직 안 왔으면 '…'(담당자 칩과 같은 표시). '대기' 행이 없는 대기 전표(진행 멈춤)는 '-' 로 두고 상태 옆 ⚠ 가 알린다. */
+   결재행이 아직 안 왔으면 읽는 중 표시(점 세 개 · 담당자 칩과 같음). '대기' 행이 없는 대기 전표(진행 멈춤)는 '-' 로 두고 상태 옆 ⚠ 가 알린다. */
 // 결재행을 기다리는 동안 보여 주는 표시. 「…」 글자는 값이 없는 것처럼 보였다(09-29).
 // 점 세 개가 차례로 밝아져 「읽는 중」 임이 드러나고, 결재행이 도착하면 같은 자리에 값이 들어온다.
-const ACC_LOADING_DOTS = '<span class="acc-loading-dots" role="status" aria-label="결재 정보를 읽는 중"><i></i><i></i><i></i></span>';
+const ACC_LOADING_DOTS = '<span class="acc-loading-dots" role="img" aria-label="결재 정보를 읽는 중" title="결재 정보를 읽는 중…"><i></i><i></i><i></i></span>';
 function accPendingStep(v) {
   const st = (v.Status || '').trim();
   if (st === DRAFT_STATUS) return { text: '-', color: '#a19f9d', title: '상신 전 임시저장' };
