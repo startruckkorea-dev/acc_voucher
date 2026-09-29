@@ -4404,6 +4404,9 @@ function applyPcSubpcAvailability(pcEnabled, subpcEnabled, cctrEnabled, fullyLoc
 // list 를 넘기면 본문 아래에 왼쪽 정렬 목록 박스로 따로 보여준다.
 // 항목이 여러 줄일 때 가운데 정렬이면 읽기 어렵기 때문이다. (인자 생략 시 기존 동작 그대로)
 function showAccAlert(title, sub='', icon='✅', list='', wide=false) {
+  // 선택 동작 단추(「다시 시도」 등)는 그것을 쓰는 안내가 showAccAlert 뒤에 직접 켠다. 다른 안내에 남지 않게 먼저 끈다.
+  const act = document.getElementById('acc-alert-action');
+  if (act) { act.style.display = 'none'; act.onclick = null; act.textContent = ''; }
   // 안내가 긴 경우(임시저장 불러오기 등)만 폭을 넓힌다. 기본은 380px 그대로.
   const box = document.querySelector('#acc-alert-modal > div');
   if (box) box.style.maxWidth = wide ? '640px' : '380px';
@@ -6260,6 +6263,7 @@ async function loadAdminList() {
         name  : f2.ApproverName || '',
         email : (f2.ApproverEmail || '').toLowerCase(),
         status: ((f2.Status && f2.Status.Value) ? f2.Status.Value : f2.Status || '').trim(),
+        mod   : i2.lastModifiedDateTime || '',   // 「진행이 멈춘 전표」 판정의 유예(최근 움직임)에 쓴다
       });
     });
     adminListRaw.forEach(v => {
@@ -6284,9 +6288,16 @@ async function loadAdminList() {
     // 위에서 이미 읽은 결재행으로 판단한다. 같은 목록을 한 번 더 부르지 않는다.
     if(!_itForStuck) { _stuckReqIds = new Set(); }
     else {
+      // 방금 상신 · 방금 결재된 전표는 제외한다. 상신은 전표 → 결재행 순으로, 승인은 「현재 행 승인 → 다음 행 대기」 순으로
+      // 여러 번 나누어 쓰므로, 그 사이(몇 초)에 목록을 읽으면 「대기인데 대기 행이 없는」 모양이 잠깐 난다(09-29 UAT 에서 ⚠ 깜빡임).
+      // 진짜 멈춘 전표는 몇 분이 지나도 그대로이므로, 최근 10분 안에 움직임(생성 · 결재행 수정)이 있으면 표식을 미룬다.
+      const STUCK_GRACE_MS = 10 * 60 * 1000, _now = Date.now();
+      const _recent = v => (Date.parse(v._created || '') || 0) > _now - STUCK_GRACE_MS
+                        || (v._line || []).some(a => (Date.parse(a.mod || '') || 0) > _now - STUCK_GRACE_MS);
       _stuckReqIds = new Set(
         adminListRaw.filter(v => (v.Status||'').trim()==='대기'
-                              && !(v._line||[]).some(a => a.status === '대기'))
+                              && !(v._line||[]).some(a => a.status === '대기')
+                              && !_recent(v))
                     .map(v => String(v._spId))
       );
       if(_stuckReqIds.size) console.warn('[관리자] 진행이 멈춘 전표:', [..._stuckReqIds].join(', '));
