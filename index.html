@@ -574,6 +574,12 @@ table.pt-tbl tfoot td{background:#eef1f5;font-weight:700;border-top:2px solid #1
 #resumed-att .ra-drop:hover{background:#a4262c;border-color:#a4262c;color:#fff}
 #resumed-att .ra-drop:focus-visible{outline:2px solid #a4262c;outline-offset:2px}
 #resumed-att .ra-foot{font-size:.68rem;color:#64748b;margin-top:2px}
+/* UAT 읽기 전용(09-29): 쓰기 단추 잠금 — 상신 · 임시저장 · 결재 · 철회 · 결재 의견 · 결재자 변경 · 세대 관리 · B1 저장 · 임시저장 삭제 */
+[data-uat-ro] .btn-draft, [data-uat-ro] button[onclick^="saveVoucher"], [data-uat-ro] #b1-save-btn, [data-uat-ro] #btn-vol-manage,
+[data-uat-ro] button[onclick^="showApprConfirm"], [data-uat-ro] button[onclick^="confirmWithdraw"], [data-uat-ro] button[onclick^="submitAdminComment"],
+[data-uat-ro] button[onclick^="saveAccApproverChange"], [data-uat-ro] button[onclick^="confirmDeleteDraft"], [data-uat-ro] button[onclick^="confirmApprAction"]
+  { opacity:.4 !important; pointer-events:none !important; filter:grayscale(1) }
+[data-uat-ro] #modal-b1docno { background:#f3f2f1 !important; color:#a19f9d !important; pointer-events:none }
 </style>
 <script>
 // ?openId= 단독 상세보기 모드 판별을 최대한 앞당긴다.
@@ -1105,22 +1111,24 @@ html.deeplink-open.deeplink-busy #deeplink-loader {
       <thead>
         <tr style="font-size:.7rem">
           <th style="width:34px;text-align:center">번호</th>
-          <th style="width:104px">신청자</th>
-          <th style="width:178px">Title</th>
-          <th style="width:42px;text-align:center">유형</th>
-          <th style="width:104px">BP명</th>
-          <th style="width:119px">Purpose Title</th>
-          <th style="width:119px">Purpose</th>
-          <th style="width:92px;text-align:right">DR(KRW)</th>
-          <th style="width:92px;text-align:right">CR(KRW)</th>
-          <th style="width:60px;text-align:center">Status</th>
-          <th style="width:98px">신청일</th>
-          <th style="width:82px">B1 Doc No.</th>
-          <th style="width:54px;text-align:center">Posting</th>
+          <th style="width:86px">신청자</th>
+          <th style="width:150px">Title</th>
+          <th style="width:40px;text-align:center">유형</th>
+          <th style="width:92px">BP명</th>
+          <th style="width:104px">Purpose Title</th>
+          <th style="width:104px">Purpose</th>
+          <th style="width:84px;text-align:right">DR(KRW)</th>
+          <th style="width:84px;text-align:right">CR(KRW)</th>
+          <th style="width:56px;text-align:center">Status</th>
+          <!-- 결재 대기(09-29): 지금 결재할 차례 — 차수 · 이름. 결재행은 목록을 읽을 때 이미 받아 둔다(v._line). -->
+          <th style="width:112px" title="지금 결재할 차례인 단계와 결재자 (차수 · 이름). 반려 건은 반려한 단계.">결재 대기</th>
+          <th style="width:92px">신청일</th>
+          <th style="width:78px">B1 Doc No.</th>
+          <th style="width:50px;text-align:center">Posting</th>
         </tr>
       </thead>
       <tbody id="admin-body">
-        <tr><td colspan="12" style="text-align:center;padding:40px;color:#a19f9d">전체 전표 목록이 여기에 표시됩니다.</td></tr>
+        <tr><td colspan="14" style="text-align:center;padding:40px;color:#a19f9d">전체 전표 목록이 여기에 표시됩니다.</td></tr>
       </tbody>
     </table>
   </div>
@@ -1515,6 +1523,17 @@ let _volConfigTag = '';   // acc_voucher_volumes.json 의 eTag. 파일이 바뀌
 // 리스트를 분리하기 전까지 UAT 에서는 설정 쓰기만 막는다.
 // 조회·상신·결재는 그대로 동작한다 (테스트 목적이므로 업무 흐름은 유지).
 const IS_UAT = false;   // 운영(acc_voucher). UAT 저장소에서만 true — 샌드박스 코드는 이 값이 false 면 전부 건너뛴다
+/* UAT 읽기 전용(09-29 요청) — UAT 는 운영 목록을 그대로 읽어 보여 주되, 상신 · 임시저장 · 결재 · 철회 · B1 Doc No. · 결재 의견 ·
+   세대 관리 등 쓰기는 전부 막는다. 예전 샌드박스(가짜 성공 응답)는 시험자가 「실제로 상신됐다」 고 오해하게 했다.
+   막는 곳은 둘 — ① 화면: 쓰기 단추를 잠그고 누르면 안내, ② api(): GET 이 아닌 요청은 서버로 보내기 전에 오류. 운영은 IS_UAT 가 false 라 무관. */
+const UAT_READ_ONLY = IS_UAT;
+const UAT_RO_MSG = 'UAT 환경은 읽기 전용입니다 — 조회만 할 수 있습니다.';
+function uatReadOnlyGuard(what) {
+  if (!UAT_READ_ONLY) return false;
+  showAccAlert('UAT 읽기 전용', (what ? what + '은(는) ' : '') + 'UAT 에서는 할 수 없습니다. 조회만 가능하며, 실제 작업은 운영 시스템(acc-voucher.startruckkorea.com)에서 해 주세요.', '🔒');
+  return true;
+}
+if (UAT_READ_ONLY) document.documentElement.setAttribute('data-uat-ro', '1');   // 쓰기 단추 잠금(CSS)
 async function _getConfigDocDrive() {
   if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
   const drivesRes = await api('/sites/' + siteId + '/drives');
@@ -2182,6 +2201,8 @@ function uatHandle(path, method, body) {
 }
 
 async function api(path,method='GET',body=null,_retry=0, _spent=0) {
+  // UAT 읽기 전용: 쓰기 요청은 서버로도, 샌드박스로도 보내지 않는다.
+  if (UAT_READ_ONLY && method !== 'GET') { console.warn(`[UAT] 읽기 전용 — ${method} ${String(path).slice(0,90)}`); throw new Error(UAT_RO_MSG); }
   // UAT: 두 목록은 서버로 나가지 않고 브라우저 샌드박스에서 처리한다 (읽기도 포함).
   if (IS_UAT) {
     const r = uatHandle(path, method, body);
@@ -4485,6 +4506,7 @@ function onPurposeTitleInput(){
 }
 
 async function saveVoucher(status) {
+  if (uatReadOnlyGuard(status === DRAFT_STATUS ? '임시저장' : '상신')) return;
   const _isDraft = (status === DRAFT_STATUS);
   await loadVolumeConfig();
   applyCurrentVolume(); // 신규 전표는 항상 "현재 활성 볼륨"에 저장 — 직전에 다른 볼륨 전표를 조회/처리했더라도 여기서 다시 현재 볼륨으로 고정
@@ -5622,6 +5644,7 @@ function renderApprovalQueue() {
 
 let _pendingAppr = null;
 function showApprConfirm(apprId, action, reqId, aprCode) {
+  if (uatReadOnlyGuard('결재(' + action + ')')) return;
   _pendingAppr = {apprId, action, reqId, aprCode};
   const isReject = action === '반려';
   document.getElementById('appr-confirm-title').textContent = isReject ? '❌ 반려 확인' : '✅ 승인 확인';
@@ -5637,6 +5660,7 @@ function closeApprConfirm() {
   document.getElementById('appr-confirm-modal').style.display = 'none';
 }
 async function confirmApprAction() {
+  if (uatReadOnlyGuard('결재')) return;
   if(!_pendingAppr) return;
   const {apprId, action, reqId, aprCode} = _pendingAppr;
   const comment = document.getElementById('appr-confirm-comment').value.trim();
@@ -5759,6 +5783,7 @@ function renderVolListSelect() {
 }
 
 function openVolumeModal() {
+  if (uatReadOnlyGuard('세대 관리')) return;
   const rawUserEmail = (user?.email||user?.username||'').toLowerCase();
   if(!IT_EMAILS.map(e=>e.toLowerCase()).includes(rawUserEmail)){
     showAccAlert('접근 권한이 없습니다', 'Approvals 세대 관리는 IT 담당자만 사용할 수 있습니다.', '🔒');
@@ -6020,7 +6045,7 @@ function accRenderQuickBar() {
 async function loadAdminList() {
   _adminPgState.page = 0;
   const body = document.getElementById('admin-body');
-  body.innerHTML = '<tr><td colspan="13" style="text-align:center;padding:40px;color:#a19f9d">불러오는 중...</td></tr>';
+  body.innerHTML = '<tr><td colspan="14" style="text-align:center;padding:40px;color:#a19f9d">불러오는 중...</td></tr>';
   if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
   await loadVolumeConfig(); applyCurrentVolume();
   refreshVolStatusBar();
@@ -6134,7 +6159,7 @@ async function loadAdminList() {
   } catch(e) {
     console.error('loadAdminList error:', e);
     adminListRaw = [];
-    body.innerHTML = '<tr><td colspan="13" style="text-align:center;padding:40px;color:#a19f9d">전표 목록을 불러올 수 없습니다.</td></tr>';
+    body.innerHTML = '<tr><td colspan="14" style="text-align:center;padding:40px;color:#a19f9d">전표 목록을 불러올 수 없습니다.</td></tr>';
     return;
   }
   // try 안에서 이미 두 번 그렸다(전표 도착 시 · 결재행 도착 시).
@@ -6253,7 +6278,7 @@ async function exportAdminExcel(){
     // Excel만 받아본 사람은 왜 단계가 적은지 확인할 방법이 없었다.
     const headers = ['번호','결재이력세대','신청자','신청자명','원가부서(CCTR)','Title','유형',
                      'BP코드','BP명','사업자등록번호','BP구분','Invoice Date','Purpose Title','Purpose','Description',
-                     'DR(KRW)','CR(KRW)','상태','신청일','B1 Doc No.','Posting',
+                     'DR(KRW)','CR(KRW)','상태','결재 대기','신청일','B1 Doc No.','Posting',
                      'RD 승인 제외 사유','Accounting 결재라인','첨부파일 수','첨부파일명'];
     for(let s=1;s<=maxStep;s++){
       headers.push(s+'차 역할', s+'차 결재자', s+'차 이메일', s+'차 상태', s+'차 처리일', s+'차 Comment');
@@ -6284,6 +6309,10 @@ async function exportAdminExcel(){
         f.TotalDR_KRW||0,
         f.TotalCR_KRW||0,
         f.Status||'',
+        // 결재 대기(09-29) — 화면 열과 같은 기준. 여기서는 결재행(_apprList)이 전표에 붙어 있어 그대로 판단한다.
+        (() => { const st = (f.Status||'').trim();
+                 const cur = st === '대기' || st === '대기(잠김)' ? aprs.find(a => (a.Status||'').trim() === '대기') : st === '반려' ? aprs.find(a => (a.Status||'').trim() === '반려') : null;
+                 return cur ? (cur.ApprovalOrder||'') + '차' + (st === '반려' ? ' 반려' : '') + ' · ' + (cur.ApproverName || cur.ApproverEmail || '') : ''; })(),
         fmtX(f.SubmittedDate),
         (f.B1DocNo||'').trim(),
         // Posting은 저장값이 아니라 B1 Doc No. 유무로 판정 — 목록/상세 화면과 동일 기준
@@ -6323,7 +6352,7 @@ async function exportAdminExcel(){
     }
 
     // 열 너비는 헤더 수와 반드시 같아야 한다. 이전에는 기본 13열에 11개만 지정되어 뒤쪽이 밀렸다.
-    const colW = [6,10,28,14,20,24,12,14,24,18,12,14,28,30,30,16,16,10,18,16,10,26,24,10,40];
+    const colW = [6,10,28,14,20,24,12,14,24,18,12,14,28,30,30,16,16,10,18,18,16,10,26,24,10,40];
     for(let s=0;s<maxStep;s++) colW.push(16,16,28,12,18,30);
     ws['!cols'] = colW.map(w=>({wch:w}));
 
@@ -6341,6 +6370,7 @@ async function exportAdminExcel(){
 }
 
 async function saveB1Doc(spId, b1DocNo, postingDone) {
+  if (uatReadOnlyGuard('B1 Doc No. / Posting 저장')) return;
   if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
   try {
     const updatedBy = user?.email||user?.username||'';
@@ -6418,6 +6448,7 @@ function closeAccApproverChange(){
   _accChgCtx = null;
 }
 async function saveAccApproverChange(){
+  if (uatReadOnlyGuard('결재자 변경')) return;
   if(!_accChgCtx) return;
   const sel = document.getElementById('acc-chg-person');
   const email = sel.value;
@@ -6562,6 +6593,28 @@ function apsPagerHtml(cur, pages, mk) {
   return h;
 }
 
+/* 관리자 목록 「결재 대기」 열(09-29) — 지금 결재할 차례를 차수 · 이름으로.
+   결재행은 loadAdminList 가 전표별로 묶어 둔 v._line(순서 · 역할 · 이름 · 메일 · 상태)을 그대로 쓴다 — 추가 조회 없음.
+   대기 → '대기' 행(「2차 · 홍길동」) · 반려 → 반려한 단계(「3차 반려 · 홍길동」) · 승인완료 · 철회 · 임시저장 → '-' ·
+   결재행이 아직 안 왔으면 '…'(담당자 칩과 같은 표시). '대기' 행이 없는 대기 전표(진행 멈춤)는 '-' 로 두고 상태 옆 ⚠ 가 알린다. */
+function accPendingStep(v) {
+  const st = (v.Status || '').trim();
+  if (st === DRAFT_STATUS) return { text: '-', color: '#a19f9d', title: '상신 전 임시저장' };
+  if (!_accLineReady) return { text: '…', color: '#a19f9d', title: '결재 정보를 읽는 중' };
+  const line = v._line || [];
+  const who = a => a.name || a.email || '-';
+  const tip = a => a.order + '차 ' + (a.role || '') + (a.email ? ' · ' + a.email : '');
+  if (st === '대기' || st === '대기(잠김)') {
+    const cur = line.find(a => a.status === '대기');
+    if (!cur) return { text: '-', color: '#a19f9d', title: '결재 대기 단계가 없습니다' };
+    return { text: cur.order + '차 · ' + who(cur), color: '#323130', title: tip(cur) };
+  }
+  if (st === '반려') {
+    const rj = line.find(a => a.status === '반려');
+    return rj ? { text: rj.order + '차 반려 · ' + who(rj), color: '#a4262c', title: tip(rj) } : { text: '-', color: '#a19f9d', title: '' };
+  }
+  return { text: '-', color: '#a19f9d', title: st };
+}
 function renderAdminList(){
   const body = document.getElementById('admin-body');
   if(!adminListCache.length){
@@ -6573,7 +6626,7 @@ function renderAdminList(){
     const _emptyMsg = _draftView.admin
       ? (_filtered ? '조건에 맞는 임시저장 전표가 없습니다.' : '임시저장 전표가 없습니다.')
       : (_filtered ? '조건에 맞는 전표가 없습니다.' : '작성된 바우처가 없습니다.');
-    body.innerHTML = '<tr><td colspan="13" style="text-align:center;padding:40px;color:#a19f9d">' + _emptyMsg + '</td></tr>';
+    body.innerHTML = '<tr><td colspan="14" style="text-align:center;padding:40px;color:#a19f9d">' + _emptyMsg + '</td></tr>';
     document.getElementById('admin-pagination').innerHTML = '';
     return;
   }
@@ -6606,22 +6659,24 @@ function renderAdminList(){
     // 수동 선택이 가능하던 시절에 만들어진 과거 데이터 중 "B1 없음 + PostingDone=완료" 조합이 남아 있어,
     // 저장값을 그대로 쓰면 목록과 상세가 서로 다르게 보인다. 판정 기준을 한 곳으로 통일.
     const postingDone = b1DocNo.trim() ? '완료' : '';
+    const pend = accPendingStep(v);
     return `<tr onclick="openVoucherSP('${v._spId}','admin',${!!v._srcDraft})">
-    <td style="color:#a19f9d;font-size:.73rem;text-align:center">${reverseNo}</td>
-    <td style="font-size:.73rem;color:#605e5c;max-width:118px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.RequesterEmail||'-'}</td>
-    <td style="font-size:.68rem;color:#0078d4;white-space:nowrap;letter-spacing:-.1px">${v.Title||'-'}</td>
-    <td style="text-align:center"><span class="type-badge t-${v.VoucherType}" style="font-size:.62rem;padding:1px 5px">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span></td>
-    <td style="max-width:98px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.73rem;color:#605e5c">${escHtml(v.BPName)||'-'}</td>
-    <td style="max-width:132px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.73rem">${escHtml(spText(v.PurposeTitle))||'-'}</td>
-    <td style="max-width:132px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.73rem;color:#605e5c">${escHtml(spText(v.Purpose))||'-'}</td>
-    <td style="text-align:right;font-weight:700;color:#0078d4;font-size:.73rem">${fmtK(v.TotalDR_KRW)}</td>
-    <td style="text-align:right;font-weight:700;color:#c0392b;font-size:.73rem">${fmtK(v.TotalCR_KRW)}</td>
-    <td style="text-align:center"><span class="${stMap[v.Status]||'badge-대기'}" style="font-size:.63rem;padding:1px 6px">${stLabel[v.Status]||v.Status}</span>${stuckMark(v)}</td>
-    <td style="font-size:.72rem;color:#605e5c;white-space:nowrap">${fmtDate(v.SubmittedDate)}</td>
-    <td style="font-size:.72rem;color:#323130;max-width:86px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+    <td style="color:#a19f9d;font-size:.7rem;text-align:center">${reverseNo}</td>
+    <td style="font-size:.68rem;color:#605e5c;max-width:86px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtmlAttr(v.RequesterEmail||'')}">${v.RequesterEmail||'-'}</td>
+    <td style="font-size:.64rem;color:#0078d4;white-space:nowrap;letter-spacing:-.2px">${v.Title||'-'}</td>
+    <td style="text-align:center"><span class="type-badge t-${v.VoucherType}" style="font-size:.58rem;padding:1px 4px">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span></td>
+    <td style="max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.68rem;color:#605e5c" title="${escHtmlAttr(v.BPName||'')}">${escHtml(v.BPName)||'-'}</td>
+    <td style="max-width:104px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.68rem" title="${escHtmlAttr(spText(v.PurposeTitle)||'')}">${escHtml(spText(v.PurposeTitle))||'-'}</td>
+    <td style="max-width:104px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.68rem;color:#605e5c" title="${escHtmlAttr(spText(v.Purpose)||'')}">${escHtml(spText(v.Purpose))||'-'}</td>
+    <td style="text-align:right;font-weight:700;color:#0078d4;font-size:.69rem">${fmtK(v.TotalDR_KRW)}</td>
+    <td style="text-align:right;font-weight:700;color:#c0392b;font-size:.69rem">${fmtK(v.TotalCR_KRW)}</td>
+    <td style="text-align:center"><span class="${stMap[v.Status]||'badge-대기'}" style="font-size:.62rem;padding:1px 6px">${stLabel[v.Status]||v.Status}</span>${stuckMark(v)}</td>
+    <td style="font-size:.68rem;color:${pend.color};max-width:112px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtmlAttr(pend.title||'')}" data-pending>${escHtml(pend.text)}</td>
+    <td style="font-size:.68rem;color:#605e5c;white-space:nowrap">${fmtDate(v.SubmittedDate)}</td>
+    <td style="font-size:.7rem;color:#323130;max-width:78px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
       ${b1DocNo || '<span style="color:#a19f9d">-</span>'}
     </td>
-    <td style="text-align:center;font-size:.72rem">
+    <td style="text-align:center;font-size:.7rem">
       ${postingDone==='완료' ? '<span style="color:#107c10;font-weight:600">✅ 완료</span>' : '<span style="color:#a19f9d">미완료</span>'}
     </td>
   </tr>`;
@@ -6731,6 +6786,7 @@ function draftSoftIssues() {
   return issues;
 }
 function askDraftSubmit() {
+  if (uatReadOnlyGuard('임시저장')) return;
   const type = (document.getElementById('v-type')?.value || '').trim();
   const ptit = (document.getElementById('v-purpose-title')?.value || '').trim();
   // 목록에서 구분해야 하므로 이 둘은 임시저장에도 필요하다. 팝업을 열기 전에 먼저 확인한다.
@@ -7088,6 +7144,7 @@ async function resumeDraft(spId) {
 }
 
 function confirmDeleteDraft(spId) {
+  if (uatReadOnlyGuard('임시저장 삭제')) return;
   if (!confirm('이 임시저장 전표를 삭제하시겠습니까?\n삭제 후에는 되돌릴 수 없습니다.')) return;
   deleteDraft(spId);
 }
@@ -7153,6 +7210,7 @@ async function deleteDraft(spId) {
 
 // ── Withdraw (철회) — GW와 동일 패턴: APR 전체 먼저 잠금 → REQ 철회 처리 (race condition 방지) ──
 function confirmWithdraw(spId) {
+  if (uatReadOnlyGuard('철회')) return;
   if(!confirm('정말 이 전표를 철회하시겠습니까?\n철회 후에는 되돌릴 수 없습니다.')) return;
   withdrawRequest(spId);
 }
@@ -7951,6 +8009,7 @@ async function pkfBlockedFor(spId) {
 }
 
 async function saveB1DocFromModal() {
+  if (uatReadOnlyGuard('B1 Doc No. / Posting 저장')) return;
   console.log('[B1] 저장 시작 — 이 줄이 안 보이면 옛 화면(캐시)입니다. Ctrl+Shift+R 필요');
   const btn = document.getElementById('b1-save-btn');
   try {
@@ -8039,6 +8098,7 @@ async function loadAdminComments(reqSpId) {
 }
 
 async function submitAdminComment(reqSpId) {
+  if (uatReadOnlyGuard('결재 의견')) return;
   if (window._currentVoucherDetail && window._currentVoucherDetail._srcDraft) {
     showAccAlert('임시저장 전표입니다', '관리자 코멘트는 상신된 전표에만 남길 수 있습니다.', '⚠️');
     return;
