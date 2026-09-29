@@ -76,6 +76,21 @@ html.standalone-detail.detail-ready #standalone-loader { display: none !importan
 .hdr-contact-mail a{color:#2b5c9e;text-decoration:none}
 .hdr-contact-mail a:hover{text-decoration:underline}
 /* 계정 정보 — 이름은 진하게, 이메일은 옅게 두 줄로 */
+/* 결재행이 도착하기 전의 「결재 대기」 칸 · 담당자 칩 건수 — 점 세 개가 차례로 밝아지는 「읽는 중」 표시 */
+.acc-loading-dots{display:inline-flex;align-items:center;gap:3px;height:12px;vertical-align:middle;padding:0 2px}
+.acc-loading-dots i{width:4px;height:4px;border-radius:50%;background:#7a8794;opacity:.3;animation:accDot 1.15s ease-in-out infinite}
+.acc-loading-dots i:nth-child(2){animation-delay:.18s}
+.acc-loading-dots i:nth-child(3){animation-delay:.36s}
+@keyframes accDot{0%,70%,100%{opacity:.25;transform:translateY(0)}35%{opacity:1;transform:translateY(-2px)}}
+@media (prefers-reduced-motion:reduce){.acc-loading-dots i{animation:none;opacity:.55}}
+/* 설정 파일을 못 읽었을 때만 나타나는 상태줄 — 관리자 권한 · 연락처가 왜 비었는지와 「다시 시도」 */
+.hdr-cfg-status{display:none;align-items:center;gap:8px;margin-top:8px;padding:5px 10px;border-radius:6px;
+  font-size:.68rem;line-height:1.4;max-width:560px}
+.hdr-cfg-status.failed{background:#fff8e6;border:1px solid #f0d58c;color:#7a4b00}
+.hdr-cfg-status.loading{background:#f3f2f1;border:1px solid #e1dfdd;color:#605e5c}
+.hdr-cfg-status button{flex:none;background:#0078d4;color:#fff;border:none;border-radius:4px;padding:3px 10px;
+  font-size:.68rem;font-weight:600;cursor:pointer;font-family:inherit}
+.hdr-cfg-status button:hover{background:#106ebe}
 .hdr-user{display:flex;flex-direction:column;align-items:flex-end;line-height:1.35}
 .hdr-user-name{font-size:.8rem;font-weight:600;color:#323130}
 .hdr-user-mail{font-size:.7rem;color:#8a8886}
@@ -680,6 +695,7 @@ html.deeplink-open.deeplink-busy #deeplink-loader {
             <span class="hdr-contact-mail" id="acc-contact-gl">-</span>
           </div>
       </div>
+      <div class="hdr-cfg-status" id="cfg-status" style="display:none"></div>
     </div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
       <div style="display:flex;align-items:center;gap:10px">
@@ -1376,6 +1392,19 @@ const COA_PC_FILE_NAME   = 'acc_voucher_COA_PC.xlsx'; // GL(COA)/Profit Center/S
 const TEAM_FILE_NAME     = 'acc_voucher_GL_CCTR_COPA.xlsx'; // 구 통합 마스터 — GL/PC/Sub_PC 로딩은 COA_PC_FILE_NAME으로 대체됨, CCTR은 미사용
 
 let msal_g = null, user = null, siteId = null, nasId = null;
+// STK-DB 사이트 id 를 한 번만 조회한다. 부팅 때 로더 7~8개(설정 · 직원 · CCTR · BP · 회계 마스터 · 배지 …)가
+// 같은 조회를 동시에 보내면 SharePoint 스로틀(429)에 걸리기 쉽고, 그 한 번에 설정 파일 읽기가 실패하면
+// 관리자 권한 · 연락처가 통째로 빠진다(09-29 UAT 「관리자 단추 무반응」). 진행 중인 조회는 함께 기다린다.
+let _siteIdPromise = null;
+function ensureSiteId() {
+  if (siteId) return Promise.resolve(siteId);
+  if (!_siteIdPromise) {
+    _siteIdPromise = api('/sites/' + SITE_PATH_DB)
+      .then(st => { siteId = st.id; return siteId; })
+      .catch(e => { _siteIdPromise = null; throw e; });   // 실패는 캐시하지 않는다 — 다음 호출이 다시 시도
+  }
+  return _siteIdPromise;
+}
 
 /* ── 결재 대리(AAC) — 내가 대리인으로 받은 위임 ─────────────────────────
    Goodwill-Approval(14b61db) · IT-Ticket(0ba6baf) 과 같은 구현이다.
@@ -1534,10 +1563,19 @@ function uatReadOnlyGuard(what) {
   return true;
 }
 if (UAT_READ_ONLY) document.documentElement.setAttribute('data-uat-ro', '1');   // 쓰기 단추 잠금(CSS)
-async function _getConfigDocDrive() {
-  if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
-  const drivesRes = await api('/sites/' + siteId + '/drives');
-  return (drivesRes.value||[]).find(d=>['Documents','문서','Shared Documents'].includes(d.name)) || (drivesRes.value||[])[0];
+// 문서 라이브러리(drive)도 같은 이유로 한 번만 조회한다. 세대 설정 · 설정 파일이 함께 쓴다.
+let _docDrivePromise = null;
+function _getConfigDocDrive() {
+  if (!_docDrivePromise) {
+    _docDrivePromise = (async () => {
+      await ensureSiteId();
+      const drivesRes = await api('/sites/' + siteId + '/drives');
+      const d = (drivesRes.value||[]).find(d=>['Documents','문서','Shared Documents'].includes(d.name)) || (drivesRes.value||[])[0];
+      if (!d) throw new Error('문서 라이브러리를 찾지 못했습니다');
+      return d;
+    })().catch(e => { _docDrivePromise = null; throw e; });
+  }
+  return _docDrivePromise;
 }
 async function loadVolumeConfig() {
   // 한 번 읽고 캐시만 하면, 관리자가 세대를 전환해도 그 전에 로그인한 브라우저는
@@ -1762,7 +1800,7 @@ let _pkfAllowedAccIds = undefined;   // undefined=미조회 / null=조회실패 
 async function loadPkfAllowedAccIds() {
   if (_pkfAllowedAccIds !== undefined) return _pkfAllowedAccIds;
   try {
-    if(!siteId){ const s = await api('/sites/'+SITE_PATH_DB); siteId = s.id; }
+    await ensureSiteId();
     const res = await apiAll('/sites/' + siteId + '/lists/' + SSC_REQ_LIST_ID + '/items?$expand=fields&$top=500');
     const ids = new Set();
     (res.value || []).forEach(it => {
@@ -1789,18 +1827,19 @@ async function loadPkfAllowedAccIds() {
 }
 
 // ── System Config (system_config_final.xlsx) ──
+// 관리자(ACC-Voucher_ADMIN_N) · IT(ACC-Voucher_IT) · PKF(SHARED-SC_2nd_N) 명단과 BU Admin 연락처는 전부 이 파일에서 온다.
+// 코드에는 명단이 없다. 운영과 UAT 가 같은 파일을 읽으므로 두 환경의 권한은 항상 같다.
 let _sysConfig = null;
+let _cfgLoadError = '';        // 마지막 실패 사유 — 관리자 단추 안내 · 헤더 상태줄에 보여 준다
 async function loadSystemConfig() {
   if (_sysConfig) return _sysConfig;
   try {
-    if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
-    const drivesRes = await api('/sites/'+siteId+'/drives');
-    let docDrive = (drivesRes.value||[]).find(d=>['Documents','문서','Shared Documents'].includes(d.name));
-    if(!docDrive && drivesRes.value?.length) docDrive = drivesRes.value[0];
+    const docDrive = await _getConfigDocDrive();
     const t = await token();
-    const res = await fetch(GRAPH+'/drives/'+docDrive.id+'/root:/system_config_final.xlsx:/content',
+    if (!t) throw new Error('로그인 토큰을 받지 못했습니다');
+    const res = await fetchRetry(GRAPH+'/drives/'+docDrive.id+'/root:/system_config_final.xlsx:/content',
       {headers:{Authorization:'Bearer '+t}});
-    if(!res.ok) throw new Error('system_config_final.xlsx not found');
+    if(!res.ok) throw new Error('system_config_final.xlsx 읽기 실패 (HTTP ' + res.status + ')');
     const buf = await res.arrayBuffer();
     const wb = XLSX.read(buf,{type:'array'});
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1});
@@ -1811,12 +1850,128 @@ async function loadSystemConfig() {
       cfg[key]={name:(row[1]||'').toString().trim(), email:(row[2]||'').toString().trim()};
     });
     _sysConfig = cfg;
+    _cfgLoadError = '';
     console.log('[Config] Loaded:', Object.keys(cfg).length, 'entries');
     return cfg;
   } catch(e) {
-    console.warn('[Config] 로드 실패, 기본값 사용:', e.message);
+    _cfgLoadError = (e && e.message) || String(e);
+    console.warn('[Config] 로드 실패, 기본값 사용:', _cfgLoadError);
     return null;
   }
+}
+// 설정 파일 값을 화면에 적용한다 — 부팅과 「다시 시도」 가 같이 쓴다.
+// 예전에는 boot() 안의 then 에만 있어, 파일을 못 읽으면 _configLoaded 가 영영 false 로 남았다.
+// 그러면 「관리자」 단추가 1.5초마다 권한 확인만 되풀이하며 아무 반응이 없었고(09-29 UAT), 헤더 연락처는 「-」 였다.
+function _applySystemConfig(cfg) {
+  const ap = cfgVal(cfg,'ACC-Voucher_CONTACT_AP');
+  const ar = cfgVal(cfg,'ACC-Voucher_CONTACT_AR');
+  const gl = cfgVal(cfg,'ACC-Voucher_CONTACT_GL');
+  // 역할 이름은 헤더 마크업의 배지가 담당한다. 여기서는 이메일만 채운다.
+  // 예전처럼 textContent 로 문장을 통째로 넣으면 프레임 구조가 지워진다.
+  setHdrContact('acc-contact-ap', ap.email);
+  setHdrContact('acc-contact-ar', ar.email);
+  setHdrContact('acc-contact-gl', gl.email);
+  CONTACT_EMAILS.ap = ap.email||''; CONTACT_EMAILS.ar = ar.email||''; CONTACT_EMAILS.gl = gl.email||'';
+  CONTACT_NAMES.ap  = ap.name||'';  CONTACT_NAMES.ar  = ar.name||'';  CONTACT_NAMES.gl  = gl.name||'';
+  onTypeChange(); // Voucher Type이 이미 선택돼 있었다면(기존 전표 불러오기 등) 배지를 바로 갱신
+  // 관리자 권한: ACC-Voucher_ADMIN_1~N 모두 읽기
+  const adminList = cfgEmails(cfg, ['ACC-Voucher_ADMIN_1']); // ADMIN_N 패턴 자동 확장
+  if(adminList.length) ADMIN_EMAILS.splice(0, ADMIN_EMAILS.length, ...adminList);
+  // IT 담당자(ACC-Voucher_IT) — Approvals 세대 관리(SharePoint 인프라 전환) 같은 민감한 기능은 이 사람들에게만 노출
+  const itList = cfgEmails(cfg, ['ACC-Voucher_IT']);
+  if(itList.length) IT_EMAILS.splice(0, IT_EMAILS.length, ...itList);
+  // PKF 담당자(SHARED-SC_2nd_N) — SSC와 동일한 키를 그대로 사용해 명단을 한 곳에서만 관리
+  const pkfList = [];
+  let _pn = 1;
+  while (cfg && cfg['SHARED-SC_2nd_' + _pn]) {
+    const em = (cfg['SHARED-SC_2nd_' + _pn].email || '').trim().toLowerCase();
+    if (em) pkfList.push(em);
+    _pn++;
+  }
+  if(pkfList.length) PKF_EMAILS.splice(0, PKF_EMAILS.length, ...pkfList);
+  // IT 담당자(ACC-Voucher_IT)만 결재이력 세대 상태/관리 영역 전체를 볼 수 있도록 처리
+  const rawUserEmail = (user?.email||user?.username||'').toLowerCase();
+  const isItStaff = IT_EMAILS.map(e=>e.toLowerCase()).includes(rawUserEmail);
+  const volTools = document.getElementById('it-vol-tools');
+  if(volTools) volTools.style.display = isItStaff ? 'flex' : 'none';
+  _configLoaded = true;
+  // Accounting 결재라인 판정은 _sysConfig가 채워진 뒤에야 가능하다.
+  // 로드 전에 실행하면 항상 "대상 아님"으로 판정된다.
+  syncAccLineUI();
+  renderApproval(); // config 로드 후 재렌더
+}
+// 읽고 적용까지. 성공 여부를 돌려준다. 실패해도 _configLoaded 는 true — 「확인이 끝났다」 는 뜻이며,
+// 관리자 단추는 _cfgLoadFailed 를 보고 「접근 권한 없음」 이 아니라 「설정 파일을 못 읽었다」 고 안내한다.
+async function loadAndApplySystemConfig() {
+  let ok = false;
+  try {
+    const cfg = await loadSystemConfig();
+    if (cfg) { _cfgLoadFailed = false; _applySystemConfig(cfg); ok = true; }
+    else _cfgLoadFailed = true;
+  } catch (e) {
+    console.warn('[Config] 적용 실패:', e && e.message);
+  } finally {
+    _configLoaded = true;
+    if (!ok) syncAccLineUI();
+    renderCfgStatus();
+  }
+  return ok;
+}
+let _cfgRetrying = false;
+async function retrySystemConfig() {
+  if (_cfgRetrying) return;
+  _cfgRetrying = true;
+  _sysConfig = null; _cfgLoadFailed = false; _configLoaded = false;
+  renderCfgStatus('loading');
+  try {
+    const ok = await loadAndApplySystemConfig();
+    if (ok) showAccAlert('설정 파일을 다시 불러왔습니다', '관리자 권한과 BU Admin 연락처를 갱신했습니다.\n「관리자」 탭을 다시 눌러 주세요.', '✅');
+    else showCfgFailAlert();
+  } finally { _cfgRetrying = false; }
+}
+// 헤더 상태줄: 파일을 못 읽었을 때만 보인다(정상일 때는 자리도 차지하지 않는다).
+// UAT 띠에 #uat-cfg 가 있으면 권한 판정 결과(설정 로드 · 내 권한)를 함께 적어 시험자가 그대로 알려줄 수 있게 한다.
+function renderCfgStatus(state) {
+  const el = document.getElementById('cfg-status');
+  if (el) {
+    el.textContent = '';
+    if (state === 'loading') {
+      el.style.display = 'flex';   // 연락처 격자 아래 한 줄로(inline 이면 격자 옆에 붙는다)
+      el.className = 'hdr-cfg-status loading';
+      el.append('설정 파일을 다시 읽는 중…');
+    } else if (_cfgLoadFailed) {
+      el.style.display = 'flex';   // 연락처 격자 아래 한 줄로(inline 이면 격자 옆에 붙는다)
+      el.className = 'hdr-cfg-status failed';
+      const msg = document.createElement('span');
+      msg.textContent = '설정 파일(system_config_final.xlsx)을 읽지 못했습니다 — 관리자 권한 · 연락처 미확인';
+      msg.title = _cfgLoadError || '';
+      const btn = document.createElement('button');
+      btn.type = 'button'; btn.textContent = '다시 시도'; btn.onclick = retrySystemConfig;
+      el.append(msg, btn);
+    } else {
+      el.style.display = 'none';
+    }
+  }
+  const u = document.getElementById('uat-cfg');
+  if (u) {
+    const me = (user && (user.email || user.username) || '').toLowerCase();
+    const roles = [];
+    if (ADMIN_EMAILS.map(e=>String(e||'').toLowerCase()).includes(me)) roles.push('관리자');
+    if (IT_EMAILS.map(e=>String(e||'').toLowerCase()).includes(me)) roles.push('IT');
+    if (typeof isPkfUser === 'function' && isPkfUser()) roles.push('PKF');
+    u.textContent = state === 'loading' ? '권한 확인 중…'
+      : _cfgLoadFailed ? '권한 확인 실패 — 설정 파일을 읽지 못함(' + (_cfgLoadError || '사유 없음') + ')'
+      : !_configLoaded ? '권한 확인 중…'
+      : '권한 확인 완료 — 설정 파일 로드됨 · 관리자 ' + ADMIN_EMAILS.length + '명 · IT ' + IT_EMAILS.length + '명 · 내 권한: ' + (roles.length ? roles.join(' · ') : '일반 사용자');
+  }
+}
+function showCfgFailAlert() {
+  showAccAlert('설정 파일을 불러오지 못했습니다',
+    '관리자 권한과 BU Admin 연락처는 STK-DB 문서 라이브러리의 system_config_final.xlsx 로 판정합니다.\n이 파일을 읽지 못해 권한을 확인할 수 없습니다.',
+    '⚠️',
+    '사유: ' + (_cfgLoadError || '알 수 없음') + '\n\n「다시 시도」 를 누르거나 페이지를 새로고침(F5)해 주세요.\n계속 실패하면 IT 담당자에게 이 안내를 그대로 전달해 주세요.');
+  const a = document.getElementById('acc-alert-action');
+  if (a) { a.style.display = 'inline-block'; a.textContent = '다시 시도'; a.onclick = () => { closeAccAlert(); retrySystemConfig(); }; }
 }
 function cfgVal(cfg, key, def={name:'',email:''}) {
   if(!cfg||!cfg[key]) return def;
@@ -2042,6 +2197,22 @@ async function token() {
 // 서버가 Retry-After 로 60초를 요구해도 그대로 기다리지 않고 남은 예산만큼만 기다린다.
 const API_RETRY_MAX = 5;
 const API_RETRY_BUDGET = 8000;   // ms
+// 파일 내용(:/content) 처럼 api() 를 거치지 않는 읽기에도 같은 재시도 규칙을 준다.
+// 429 · 503 · 504 만 다시 받고, 나머지 응답은 그대로 돌려준다(호출부가 res.ok 로 판단).
+async function fetchRetry(url, opts) {
+  let spent = 0;
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url, opts);
+    if (res.ok || ![429,503,504].includes(res.status) || attempt >= API_RETRY_MAX) return res;
+    const ra = parseInt(res.headers.get('Retry-After')||'0',10);
+    let wait = ra>0 ? ra*1000 : Math.pow(2,attempt)*400;
+    if (spent + wait > API_RETRY_BUDGET) wait = API_RETRY_BUDGET - spent;
+    if (wait <= 0) return res;
+    console.warn(`[fetch] ${res.status} 재시도 ${attempt+1}/${API_RETRY_MAX} (${wait}ms 후): …${String(url).slice(-70)}`);
+    spent += wait;
+    await new Promise(r=>setTimeout(r,wait));
+  }
+}
 
 // UAT 에서 운영 데이터가 오염되지 않도록, 전표(Requests)·결재선(Approvals) 목록에 대한
 // 쓰기 요청을 실제로 보내지 않는다. 조회(GET)는 그대로 통과시켜 화면은 정상 동작한다.
@@ -2288,10 +2459,7 @@ let _logDriveId = null;
 async function _getLogDriveId() {
   if (_logDriveId) return _logDriveId;
   try {
-    const drivesRes = await api('/sites/' + siteId + '/drives');
-    let docDrive = (drivesRes.value || []).find(d => ['Documents','문서','Shared Documents'].includes(d.name));
-    if (!docDrive && drivesRes.value && drivesRes.value.length) docDrive = drivesRes.value[0];
-    _logDriveId = docDrive ? docDrive.id : null;
+    _logDriveId = (await _getConfigDocDrive()).id;   // 설정 파일과 같은 문서 라이브러리
   } catch(e) { console.warn('[Log] drive 조회 실패:', e.message); }
   return _logDriveId;
 }
@@ -2400,53 +2568,15 @@ async function boot(account) {
   // system_config 로드 → 헤더 문의 이메일 + 결재라인 재렌더
   // 프라미스를 보관해두는 이유: ADMIN_EMAILS가 여기서 비로소 채워지므로,
   // ?openId= 딥링크로 바로 상세를 여는 경우 이 로드가 끝난 뒤에 열어야 관리자 판별이 정상 동작한다.
-  const _configPromise = loadSystemConfig().then(cfg=>{
-    if(!cfg) { _cfgLoadFailed = true; return; }
-    const ap = cfgVal(cfg,'ACC-Voucher_CONTACT_AP');
-    const ar = cfgVal(cfg,'ACC-Voucher_CONTACT_AR');
-    const gl = cfgVal(cfg,'ACC-Voucher_CONTACT_GL');
-    const el = id=>document.getElementById(id);
-    // 역할 이름은 헤더 마크업의 배지가 담당한다. 여기서는 이메일만 채운다.
-    // 예전처럼 textContent 로 문장을 통째로 넣으면 프레임 구조가 지워진다.
-    setHdrContact('acc-contact-ap', ap.email);
-    setHdrContact('acc-contact-ar', ar.email);
-    setHdrContact('acc-contact-gl', gl.email);
-    CONTACT_EMAILS.ap = ap.email||''; CONTACT_EMAILS.ar = ar.email||''; CONTACT_EMAILS.gl = gl.email||'';
-    CONTACT_NAMES.ap  = ap.name||'';  CONTACT_NAMES.ar  = ar.name||'';  CONTACT_NAMES.gl  = gl.name||'';
-    onTypeChange(); // Voucher Type이 이미 선택돼 있었다면(기존 전표 불러오기 등) 배지를 바로 갱신
-    // 관리자 권한: ACC-Voucher_ADMIN_1~N 모두 읽기
-    const adminList = cfgEmails(cfg, ['ACC-Voucher_ADMIN_1']); // ADMIN_N 패턴 자동 확장
-    if(adminList.length) ADMIN_EMAILS.splice(0, ADMIN_EMAILS.length, ...adminList);
-    // IT 담당자(ACC-Voucher_IT) — Approvals 세대 관리(SharePoint 인프라 전환) 같은 민감한 기능은 이 사람들에게만 노출
-    const itList = cfgEmails(cfg, ['ACC-Voucher_IT']);
-    if(itList.length) IT_EMAILS.splice(0, IT_EMAILS.length, ...itList);
-    // PKF 담당자(SHARED-SC_2nd_N) — SSC와 동일한 키를 그대로 사용해 명단을 한 곳에서만 관리
-    const pkfList = [];
-    let _pn = 1;
-    while (cfg && cfg['SHARED-SC_2nd_' + _pn]) {
-      const em = (cfg['SHARED-SC_2nd_' + _pn].email || '').trim().toLowerCase();
-      if (em) pkfList.push(em);
-      _pn++;
-    }
-    if(pkfList.length) PKF_EMAILS.splice(0, PKF_EMAILS.length, ...pkfList);
-    // IT 담당자(ACC-Voucher_IT)만 결재이력 세대 상태/관리 영역 전체를 볼 수 있도록 처리
-    const rawUserEmail = (user?.email||user?.username||'').toLowerCase();
-    const isItStaff = IT_EMAILS.map(e=>e.toLowerCase()).includes(rawUserEmail);
-    const volTools = document.getElementById('it-vol-tools');
-    if(volTools) volTools.style.display = isItStaff ? 'flex' : 'none';
-    _configLoaded = true;
-    // Accounting 결재라인 판정은 _sysConfig가 채워진 뒤에야 가능하다.
-    // .then() 밖에서 호출하면 config 로드 전에 실행되어 항상 "대상 아님"으로 판정된다.
-    syncAccLineUI();
-    renderApproval(); // config 로드 후 재렌더
-  }).catch(()=>{ _configLoaded = true; syncAccLineUI(); });
+  // 읽기 · 적용 · 실패 안내는 loadAndApplySystemConfig() 한곳에서(「다시 시도」 도 같은 함수).
+  renderCfgStatus();   // UAT 띠의 권한 상태를 「확인 중」 으로
+  const _configPromise = loadAndApplySystemConfig();
 
   syncRdExemptUI();   // Voucher Type 미선택 상태에서도 RD 제외 영역이 비활성으로 보이도록 초기화
   syncAccLineUI();    // 로드 전 기본 상태(비활성)로 먼저 그려두고, config 로드 후 위에서 다시 판정한다
 
   // 결재 대기 배지 미리 로드 (GW 동일: 진입 시 1회 + 60초마다 갱신)
-  if(!siteId){ api('/sites/'+SITE_PATH_DB).then(s=>{ siteId=s.id; checkApprovalBadge(); }).catch(()=>{}); }
-  else checkApprovalBadge();
+  ensureSiteId().then(()=>checkApprovalBadge()).catch(()=>{});
   let _badgeBusy = false;
   setInterval(()=>{
     // 백그라운드 탭에서는 돌지 않고, 이전 폴링이 끝나지 않았으면 건너뛴다.
@@ -2489,9 +2619,7 @@ async function boot(account) {
 // ── 회계 마스터 로드 (STK-DB: acc_voucher_GL_CCTR_COPA + COA + 환율) ──
 async function loadEmployees(){
   try{
-    if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
-    const drivesData=await api('/sites/'+siteId+'/drives');
-    const docDrive=drivesData.value.find(d=>['문서','Documents','Shared Documents'].includes(d.name))||drivesData.value[0];
+    const docDrive = await _getConfigDocDrive();   // 설정 파일과 같은 문서 라이브러리 — 조회를 한 번으로
     const t=await token();
     const res=await fetch(GRAPH+'/drives/'+docDrive.id+'/root:/employee_search.xlsx:/content',{headers:{Authorization:'Bearer '+t}});
     if(!res.ok)throw new Error('직원 데이터 로드 실패: '+res.status);
@@ -2509,7 +2637,7 @@ async function loadEmployees(){
 async function loadAccMasters() {
   try {
     const t = await token();
-    if(!siteId) { const s=await api('/sites/'+SITE_PATH_DB); siteId=s.id; }
+    await ensureSiteId();
 
     async function fetchXlsx(name) {
       console.log('[fetchXlsx] 시도:', name);
@@ -2696,10 +2824,7 @@ function getSubPCs() {
 async function loadCCTRMaster(userName) {
   try {
     const t = await token();
-    if(!siteId) {
-      const dbSite = await api('/sites/'+SITE_PATH_DB);
-      siteId = dbSite.id;
-    }
+    await ensureSiteId();
     const searchRes = await api('/sites/'+siteId+"/drive/root/search(q='acc_cctr_list')");
     const found = (searchRes.value||[]).find(i=>(i.name||'').includes('acc_cctr_list'));
     if(!found) throw new Error('CCTR 파일 못 찾음');
@@ -2823,7 +2948,7 @@ async function loadBPMaster() {
     // STK-DB에서도 시도 (root/children + search)
     if(!fileItemId) {
       try {
-        if(!siteId) { const s=await api('/sites/'+SITE_PATH_DB); siteId=s.id; }
+        await ensureSiteId();
         const dbDrives = await api('/sites/'+siteId+'/drives');
         console.log('[BP] STK-DB 드라이브:', dbDrives.value.map(d=>d.name).join(', '));
         for(const drv of dbDrives.value) {
@@ -2899,10 +3024,19 @@ async function loadBPMaster() {
 }
 
 // ── Tabs ──
+let _adminWaitTicks = 0;   // 설정 파일을 기다린 횟수(1.5초 단위)
 function switchTab(tab) {
   if(tab === 'admin') {
     if(!_configLoaded) {
+      // 설정 파일을 아직 읽는 중 — 잠시 기다렸다가 다시 시도한다. 상한(약 20초)을 넘으면 사정을 알린다.
+      // 상한이 없으면 파일을 영영 못 읽는 상황에서 단추가 아무 반응도 없이 되풀이만 한다.
       const btn = document.getElementById('tab-admin-btn');
+      if (++_adminWaitTicks > 13) {
+        _adminWaitTicks = 0;
+        if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; btn.title=''; }
+        showAccAlert('설정 파일을 아직 불러오는 중입니다', '네트워크가 느리거나 SharePoint 응답이 늦습니다.\n잠시 뒤 「관리자」 를 다시 눌러 주세요.', '⏳');
+        return;
+      }
       if(btn){ btn.style.opacity='0.6'; btn.style.pointerEvents='none'; btn.title='권한 확인 중...'; }
       setTimeout(()=>{
         if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; btn.title=''; }
@@ -2910,6 +3044,9 @@ function switchTab(tab) {
       }, 1500);
       return;
     }
+    _adminWaitTicks = 0;
+    // 파일을 못 읽은 것과 권한이 없는 것은 다르다. 전자는 「접근 권한 없음」 이 아니라 원인과 「다시 시도」 를 보여 준다.
+    if(_cfgLoadFailed) { showCfgFailAlert(); return; }
     const emails = ADMIN_EMAILS.map(e=>e.toLowerCase());
     const isAdmin = user && emails.some(e=>
       e===(user.username||'').toLowerCase() || e===(user.email||'').toLowerCase()
@@ -4292,6 +4429,8 @@ function showAccAlert(title, sub='', icon='✅', list='', wide=false) {
 }
 function closeAccAlert() {
   document.getElementById('acc-alert-modal').style.display = 'none';
+  const a = document.getElementById('acc-alert-action');   // 선택 동작 단추는 매번 초기화 — 다른 안내에 남지 않게
+  if (a) { a.style.display = 'none'; a.onclick = null; a.textContent = ''; }
 }
 
 // ── 첨부파일 (BP 방식) ──
@@ -4646,7 +4785,7 @@ async function saveVoucher(status) {
   const _spOn = status === '대기' || _isDraft;
   try {
     if(btn){btn.disabled=true; btn.textContent='저장 중...';}
-    if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
+    await ensureSiteId();
 
     // 1. Requests 목록에 전표 저장
     const reqBody = {
@@ -5389,7 +5528,7 @@ async function loadExistingVoucher() {
   const titleInput = document.getElementById('load-voucher-id');
   const titleVal = (titleInput.value||'').trim();
   if(!titleVal) { alert('불러올 전표 Title(ACC-Voucher-YYYY-MM-DD_ID-N)을 입력하세요.'); return; }
-  if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
+  await ensureSiteId();
   await loadVolumeConfig(); applyCurrentVolume();
   try {
     const data = await apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_REQUESTS}/items?$expand=fields&$filter=fields/Title eq '${titleVal}'&$top=5`);
@@ -5510,7 +5649,7 @@ function _byNewest(a, b) {
 }
 
 async function loadMyList() {
-  if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
+  await ensureSiteId();
   await loadVolumeConfig(); applyCurrentVolume();
   const email = user?.username||'';
   // 운영 전표(Requests)와 임시저장(Drafts)을 함께 읽는다.
@@ -5571,7 +5710,7 @@ async function checkApprovalBadge(){
 async function loadApprovalQueue() {
   const tbody = document.getElementById('appr-body');
   tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:40px;color:#a19f9d">불러오는 중...</td></tr>';
-  if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
+  await ensureSiteId();
   await loadMyDelegations();   // 대리 위임 — 결재함 판정에 쓴다(AAC). siteId 확보 직후
   try {
     await loadVolumeConfig();
@@ -5763,7 +5902,7 @@ async function loadSiteListsForVolume() {
   const sel = document.getElementById('vol-new-list-select');
   if (_siteListsForVolume) { renderVolListSelect(); return; }
   try {
-    if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
+    await ensureSiteId();
     const res = await api(`/sites/${siteId}/lists?$select=id,displayName,name`);
     _siteListsForVolume = (res.value||[]).sort((a,b)=>(a.displayName||'').localeCompare(b.displayName||''));
     renderVolListSelect();
@@ -6021,7 +6160,7 @@ function accRenderQuickBar() {
             : 'background:#fff;border:1px solid #e2e8f0')
       + '">'
       + '<span style="font-size:.74rem;font-weight:600;' + (on ? 'color:#fff' : 'color:#334155') + '">' + escHtml(who) + '</span>'
-      + '<span style="font-size:.72rem;font-weight:700;' + (on ? 'color:rgba(255,255,255,.85)' : 'color:#94a3b8') + '">' + (_wait ? '…' : rel.length) + '</span>'
+      + '<span style="font-size:.72rem;font-weight:700;' + (on ? 'color:rgba(255,255,255,.85)' : 'color:#94a3b8') + '">' + (_wait ? ACC_LOADING_DOTS : rel.length) + '</span>'
       + (todo
           ? '<span style="display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;'
             + 'border-radius:9px;font-size:.61rem;font-weight:800;'
@@ -6046,7 +6185,7 @@ async function loadAdminList() {
   _adminPgState.page = 0;
   const body = document.getElementById('admin-body');
   body.innerHTML = '<tr><td colspan="14" style="text-align:center;padding:40px;color:#a19f9d">불러오는 중...</td></tr>';
-  if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
+  await ensureSiteId();
   await loadVolumeConfig(); applyCurrentVolume();
   refreshVolStatusBar();
   try {
@@ -6216,7 +6355,7 @@ async function exportAdminExcel(){
   const orig = btn ? btn.textContent : '';
   if(btn){ btn.disabled = true; btn.textContent = '⏳ 생성 중...'; }
   try {
-    if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
+    await ensureSiteId();
     await loadVolumeConfig();
     applyCurrentVolume();
     const reqData = await apiAll(`${GRAPH}/sites/${siteId}/lists/${LIST_REQUESTS}/items?$expand=fields&$top=999`);
@@ -6371,7 +6510,7 @@ async function exportAdminExcel(){
 
 async function saveB1Doc(spId, b1DocNo, postingDone) {
   if (uatReadOnlyGuard('B1 Doc No. / Posting 저장')) return;
-  if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
+  await ensureSiteId();
   try {
     const updatedBy = user?.email||user?.username||'';
     const now = new Date(new Date().getTime()+9*3600*1000);
@@ -6597,10 +6736,13 @@ function apsPagerHtml(cur, pages, mk) {
    결재행은 loadAdminList 가 전표별로 묶어 둔 v._line(순서 · 역할 · 이름 · 메일 · 상태)을 그대로 쓴다 — 추가 조회 없음.
    대기 → '대기' 행(「2차 · 홍길동」) · 반려 → 반려한 단계(「3차 반려 · 홍길동」) · 승인완료 · 철회 · 임시저장 → '-' ·
    결재행이 아직 안 왔으면 '…'(담당자 칩과 같은 표시). '대기' 행이 없는 대기 전표(진행 멈춤)는 '-' 로 두고 상태 옆 ⚠ 가 알린다. */
+// 결재행을 기다리는 동안 보여 주는 표시. 「…」 글자는 값이 없는 것처럼 보였다(09-29).
+// 점 세 개가 차례로 밝아져 「읽는 중」 임이 드러나고, 결재행이 도착하면 같은 자리에 값이 들어온다.
+const ACC_LOADING_DOTS = '<span class="acc-loading-dots" role="status" aria-label="결재 정보를 읽는 중"><i></i><i></i><i></i></span>';
 function accPendingStep(v) {
   const st = (v.Status || '').trim();
   if (st === DRAFT_STATUS) return { text: '-', color: '#a19f9d', title: '상신 전 임시저장' };
-  if (!_accLineReady) return { text: '…', color: '#a19f9d', title: '결재 정보를 읽는 중' };
+  if (!_accLineReady) return { text: '', loading: true, color: '#a19f9d', title: '결재 정보를 읽는 중…' };
   const line = v._line || [];
   const who = a => a.name || a.email || '-';
   const tip = a => a.order + '차 ' + (a.role || '') + (a.email ? ' · ' + a.email : '');
@@ -6671,7 +6813,7 @@ function renderAdminList(){
     <td style="text-align:right;font-weight:700;color:#0078d4;font-size:.69rem">${fmtK(v.TotalDR_KRW)}</td>
     <td style="text-align:right;font-weight:700;color:#c0392b;font-size:.69rem">${fmtK(v.TotalCR_KRW)}</td>
     <td style="text-align:center"><span class="${stMap[v.Status]||'badge-대기'}" style="font-size:.62rem;padding:1px 6px">${stLabel[v.Status]||v.Status}</span>${stuckMark(v)}</td>
-    <td style="font-size:.68rem;color:${pend.color};max-width:112px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtmlAttr(pend.title||'')}" data-pending>${escHtml(pend.text)}</td>
+    <td style="font-size:.68rem;color:${pend.color};max-width:112px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtmlAttr(pend.title||'')}" data-pending>${pend.loading ? ACC_LOADING_DOTS : escHtml(pend.text)}</td>
     <td style="font-size:.68rem;color:#605e5c;white-space:nowrap">${fmtDate(v.SubmittedDate)}</td>
     <td style="font-size:.7rem;color:#323130;max-width:78px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
       ${b1DocNo || '<span style="color:#a19f9d">-</span>'}
@@ -7221,7 +7363,7 @@ async function withdrawRequest(spId) {
   const _v = await useVolumeOf(window._currentVoucherDetail); // 이 전표의 결재이력이 있는 Approvals 세대로 전환
   const _APR3 = (_v && _v.id) || LIST_APPROVALS;
   try {
-    if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
+    await ensureSiteId();
     // 1차 결재자가 아직 미처리(대기)인 경우에만 철회 가능
     const apprData = await apiAll(`${GRAPH}/sites/${siteId}/lists/${_APR3}/items?$expand=fields&$filter=fields/RequestID eq ${parseInt(spId)}&$top=50`);
     const items = apprData.value.sort((a,b)=>(a.fields.ApprovalOrder||0)-(b.fields.ApprovalOrder||0));
@@ -7311,7 +7453,7 @@ async function openVoucherSP(spId, fromTab, isDraft){
   if(!v){
     // 캐시에 없으면(예: URL로 바로 진입) SharePoint에서 직접 조회
     try{
-      if(!siteId){ const s = await api('/sites/'+SITE_PATH_DB); siteId = s.id; }
+      await ensureSiteId();
       // ⚠ LIST_REQUESTS는 loadVolumeConfig()가 끝나야 확정된다. boot()에서 await 없이 호출되므로
       //    딥링크로 바로 들어오면 아직 부트스트랩 기본값(VOL01)일 수 있다. 지금은 값이 같아 문제가
       //    드러나지 않지만, 요청 리스트 세대가 늘어나면 엉뚱한 리스트에서 같은 ID를 읽게 된다.
@@ -7732,7 +7874,7 @@ async function fetchApprovalListDirect(v){
   // 이어지는 요청이 엉뚱한 세대로 나간다. 손에 쥔 값은 폴링이 바꿀 수 없다.
   const _v = await useVolumeOf(v); // 이 전표의 결재이력이 있는 Approvals 세대로 전환
   const _APR4 = (_v && _v.id) || LIST_APPROVALS;
-  if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
+  await ensureSiteId();
   const t = await token();
   const url = `${GRAPH}/sites/${siteId}/lists/${_APR4}/items?$expand=fields&$filter=fields/RequestID eq ${parseInt(v._spId)}&$top=50`;
   const res = await fetch(url, {headers:{Authorization:'Bearer '+t, Prefer:'HonorNonIndexedQueriesWarningMayFailRandomly'}});
@@ -7752,7 +7894,7 @@ async function recoverAttachments(v){
   const vid = v.Title || '';
   if(!vid) return;
   try{
-    if(!siteId){ const s = await api('/sites/'+SITE_PATH_DB); siteId = s.id; }
+    await ensureSiteId();
     const drives = await api(`/sites/${siteId}/drives`);
     const drive = drives.value.find(d=>d.name==='AttachedFiles') || drives.value[0];
     if(!drive) return;
@@ -8072,7 +8214,7 @@ async function saveB1DocFromModal() {
 async function loadAdminComments(reqSpId) {
   const listEl = document.getElementById('admin-comments-list');
   if(!listEl) return;
-  if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
+  await ensureSiteId();
   try {
     const f = await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${reqSpId}/fields`);
     let comments = [];
@@ -8108,7 +8250,7 @@ async function submitAdminComment(reqSpId) {
   if(!comment) { alert('의견을 입력해주세요.'); return; }
   const _blocked = await pkfBlockedFor(reqSpId);
   if (_blocked) { showAccAlert('등록 권한이 없습니다', _blocked, '🔒'); return; }
-  if(!siteId){const s=await api('/sites/'+SITE_PATH_DB);siteId=s.id;}
+  await ensureSiteId();
   try {
     const check = await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${reqSpId}/fields`);
     if(check.Status==='승인완료'||check.Status==='철회') {
@@ -9412,7 +9554,7 @@ let _ptMasterTag = '';
 
 // 문서 라이브러리에서 파일 메타데이터를 먼저 읽는다 (본문보다 훨씬 가볍다)
 async function ptFindFile(name){
-  if(!siteId){ const s = await api('/sites/'+SITE_PATH_DB); siteId = s.id; }
+  await ensureSiteId();
   const drives = await api('/sites/'+siteId+'/drives');
   const dv = (drives.value||[]).find(d=>['Documents','문서','Shared Documents'].includes(d.name)) || (drives.value||[])[0];
   if(!dv) throw new Error('문서 라이브러리를 찾을 수 없습니다.');
@@ -9586,7 +9728,7 @@ async function ptDownloadTemplate(){
   try{
     if(btn){ btn.disabled = true; btn.textContent = '받는 중...'; }
     const t = await token();
-    if(!siteId){ const s = await api('/sites/'+SITE_PATH_DB); siteId = s.id; }
+    await ensureSiteId();
     const drives = await api('/sites/'+siteId+'/drives');
     const dv = (drives.value||[]).find(d=>['Documents','문서','Shared Documents'].includes(d.name)) || (drives.value||[])[0];
     if(!dv) throw new Error('문서 라이브러리를 찾을 수 없습니다.');
@@ -9885,6 +10027,7 @@ function ptApply(){
     <div id="acc-alert-title" style="font-size:1rem;font-weight:700;color:#1e293b;margin-bottom:6px;line-height:1.6"></div>
     <div id="acc-alert-sub" style="font-size:.8rem;color:#64748b;margin-bottom:20px;white-space:pre-line;line-height:1.7;text-align:center"></div>
     <div id="acc-alert-list" style="display:none;font-size:.78rem;color:#475569;line-height:1.55;text-align:left;background:#f8fafc;border:1px solid #e6ebf1;border-radius:8px;padding:11px 14px;margin:-8px 0 18px;white-space:pre-line"></div>
+    <button id="acc-alert-action" type="button" style="display:none;background:#fff;color:#0078d4;border:1px solid #0078d4;border-radius:8px;padding:8px 22px;font-size:.88rem;font-weight:600;cursor:pointer;font-family:inherit;margin-right:8px"></button>
     <button style="background:#0078d4;color:#fff;border:none;border-radius:8px;padding:9px 32px;font-size:.88rem;font-weight:600;cursor:pointer;font-family:inherit" onclick="closeAccAlert()">확인</button>
   </div>
 </div>
