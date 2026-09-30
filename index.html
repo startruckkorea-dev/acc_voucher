@@ -257,6 +257,13 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 .btn-row{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
 .btn-primary{background:#0078d4;color:#fff;border:none;border-radius:4px;padding:8px 24px;font-size:.85rem;cursor:pointer;font-family:inherit}
 .btn-primary:hover{background:#106ebe}
+/* 상세 화면 결재 버튼 줄(09-30) — APS 상세(.modal-action)와 같은 모양 · 색: 가로로 꽉 채운 알약 두 개, 승인 초록 채움 · 반려 흰 바탕 빨간 테두리.
+   .modal-action 안에서만 적용되므로 목록의 작은 승인 · 반려 단추는 그대로다. */
+.modal-action{display:flex;gap:10px;margin-top:22px}
+.modal-action .btn-approve{flex:1;padding:12px;font-size:.9rem;border-radius:12px;background:#16a34a;color:#fff;border:none;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
+.modal-action .btn-approve:hover{background:#15803d;box-shadow:0 3px 10px rgba(22,163,74,.35)}
+.modal-action .btn-reject{flex:1;padding:11px;font-size:.9rem;border-radius:12px;background:#fff;color:#dc2626;border:1.5px solid #fca5a5;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
+.modal-action .btn-reject:hover{background:#fef2f2;border-color:#ef4444}
 /* Modal (GW 동일 스타일) */
 #voucher-detail-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;align-items:center;justify-content:center}
 #voucher-detail-modal.open{display:flex}
@@ -5796,7 +5803,7 @@ function showApprConfirm(apprId, action, reqId, aprCode) {
   document.getElementById('appr-confirm-comment').placeholder = isReject ? '반려 사유 입력 (필수)' : '의견 입력 (선택사항)';
   const okBtn = document.getElementById('appr-confirm-ok');
   okBtn.textContent = isReject ? '반려' : '승인';
-  okBtn.style.background = isReject ? '#a4262c' : '#107c10';
+  okBtn.style.background = isReject ? '#dc2626' : '#16a34a';
   document.getElementById('appr-confirm-modal').style.display = 'flex';
 }
 function closeApprConfirm() {
@@ -7759,7 +7766,7 @@ async function openVoucherSP(spId, fromTab, isDraft){
         + '<div style="font-size:.62rem;color:#a19f9d;margin-top:5px">(The Team Lead and Dept Head steps already correspond to the Accounting Head and the CFO, so the duplicate accounting review was excluded)</div>'
         + '</div>';
     })() : ''}
-    <div id="voucher-appr-action-btns" style="margin-top:14px;text-align:right"></div>
+    <div id="voucher-appr-action-btns"></div>   <!-- 내 차례면 .modal-action(승인 · 반려)이 들어온다. 상세 PDF 에서는 숨긴다 -->
   `;
 
   document.getElementById('voucher-detail-modal').classList.add('open');
@@ -8111,8 +8118,7 @@ async function loadApprovalHistory(spId){
     const btnWrap = document.getElementById('voucher-appr-action-btns');
     if(btnWrap){
       btnWrap.innerHTML = myPending
-        ? `<button class="btn-approve" style="padding:8px 22px;font-size:.8rem;background:#107c10;color:#fff;border:none;border-radius:4px;cursor:pointer;margin-right:8px" onclick="showApprConfirm(${myPending._apprId},'승인',${v._spId})">✅ 승인</button>
-           <button class="btn-reject" style="padding:8px 22px;font-size:.8rem;background:#a4262c;color:#fff;border:none;border-radius:4px;cursor:pointer" onclick="showApprConfirm(${myPending._apprId},'반려',${v._spId})">❌ 반려</button>`
+        ? `<div class="modal-action"><button class="btn-approve" onclick="showApprConfirm(${myPending._apprId},'승인',${v._spId})">✅ 승인</button><button class="btn-reject" onclick="showApprConfirm(${myPending._apprId},'반려',${v._spId})">❌ 반려</button></div>`
         : '';
     }
   }catch(e){
@@ -10072,7 +10078,7 @@ function ptApply(){
     <textarea id="appr-confirm-comment" style="width:100%;min-height:70px;padding:8px 10px;border:1px solid #d2d0ce;border-radius:4px;font-size:.85rem;font-family:inherit;box-sizing:border-box;resize:vertical"></textarea>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
       <button class="btn-secondary" onclick="closeApprConfirm()">취소</button>
-      <button id="appr-confirm-ok" onclick="confirmApprAction()" style="background:#107c10;color:#fff;border:none;border-radius:4px;padding:8px 24px;font-size:.85rem;cursor:pointer;font-family:inherit">승인</button>
+      <button id="appr-confirm-ok" onclick="confirmApprAction()" style="background:#16a34a;color:#fff;border:none;border-radius:4px;padding:8px 24px;font-size:.85rem;cursor:pointer;font-family:inherit">승인</button>
     </div>
   </div>
 </div>
