@@ -1392,7 +1392,8 @@ const SITE_PATH_DB  = 'startruckkorea.sharepoint.com:/sites/STK-DB:';
 const SITE_PATH_NAS = 'startruckkorea.sharepoint.com:/sites/STK-NAS:';
 const GRAPH  = 'https://graph.microsoft.com/v1.0';
 const SCOPES = ['User.Read','Sites.ReadWrite.All','Files.ReadWrite.All'];
-const BP_FILE_NAME   = 'Master data List 2014_Final(STK).xlsx';   // STK-DB 문서 라이브러리 루트 — ACC Others BP Master 가 관리하는 바로 그 파일(09-30 이전엔 STK-NAS 의 (DTK) 파일을 검색했다)
+const BP_FILE_NAME   = 'BP-Master_목록_20260930_1756.xlsx';   // STK-DB 문서 라이브러리 루트 — ACC Others BP Master 「목록 내보내기」 정리본(09-30). ACC Others 가 이 파일에 등록 · 수정하고, 여기와 BP Master 검색이 읽는다
+const BP_FILE_PATTERN = /^BP-Master_목록.*\.xlsx$/i;   // 정해진 이름이 없으면 루트에서 가장 최근 것
 const CCTR_FILE_NAME    = 'acc_cctr_list.xlsx';
 const EXCHANGE_FILE_NAME = 'acc_voucher_exchange.xlsx';
 const COA_PC_FILE_NAME   = 'acc_voucher_COA_PC.xlsx'; // GL(COA)/Profit Center/Sub_PC 통합 마스터 (2026-07-03부터 사용)
@@ -2918,47 +2919,34 @@ async function loadCCTRMaster(userName) {
   }
 }
 
-// ── BP 마스터 로드 (STK-NAS SharePoint Excel) ──
-/* BP 마스터 파일 찾기(09-30) — 파일이 STK-NAS 에서 STK-DB 문서 라이브러리 루트로 옮겨지고 이름도 (DTK) → (STK) 가 됐다.
-   ① STK-DB 루트의 BP_FILE_NAME 을 이름으로 바로 연다(ACC Others BP Master 와 같은 위치 · 같은 파일 — 검색보다 빠르고 정확하다)
-   ② 없으면 STK-DB 드라이브들을 「Master data List 2014」 로 검색((STK) 우선)  ③ 그래도 없으면 예전 위치(STK-NAS)를 검색.
-   어디서 찾았는지 콘솔에 남긴다. */
-async function locateBPMasterFile(t) {
-  const pick = list => (list||[]).find(i=>/Master data List 2014/i.test(i.name||'') && /STK/i.test(i.name||''))
-                    || (list||[]).find(i=>/Master data List 2014/i.test(i.name||''));
+// ── BP 마스터 로드 (STK-DB 문서 라이브러리 Excel — 09-30 부터 BP-Master_목록 정리본) ──
+/* BP 마스터 파일 찾기(09-30) — ① STK-DB 문서 라이브러리 루트의 BP_FILE_NAME ② 없으면 루트의 BP-Master_목록*.xlsx 가운데
+   이름(날짜 · 시각)이 가장 큰 것. 둘 다 없으면 오류(기본 목록으로 폴백). ACC Others · BP Master 와 같은 규칙 · 같은 파일. */
+async function locateBPMasterFile() {
+  const docDrive = await _getConfigDocDrive();
+  const sel = '$select=id,name,lastModifiedDateTime,file';
   try {
-    const docDrive = await _getConfigDocDrive();
-    const meta = await api('/drives/'+docDrive.id+'/root:/'+encodeURIComponent(BP_FILE_NAME)+':?$select=id,name');
+    const meta = await api('/drives/'+docDrive.id+'/root:/'+encodeURIComponent(BP_FILE_NAME)+':?'+sel);
     if (meta && meta.id) { console.log('[BP] STK-DB 루트에서 발견:', meta.name); return { driveId: docDrive.id, itemId: meta.id, name: meta.name }; }
-  } catch(e) { console.warn('[BP] STK-DB 루트에 '+BP_FILE_NAME+' 없음 — 검색으로 넘어감:', e.message); }
-  const searchIn = async (label, sid) => {
-    const drives = await api('/sites/'+sid+'/drives');
-    for (const drv of (drives.value||[])) {
-      try {
-        const sr = await fetch(GRAPH+'/drives/'+drv.id+"/root/search(q='Master%20data%20List%202014')", {headers:{Authorization:'Bearer '+t}});
-        if (!sr.ok) continue;
-        const txt = await sr.text(); if (!txt) continue;
-        let d; try { d = JSON.parse(txt); } catch(_) { continue; }
-        const f = pick(d.value);
-        if (f) { console.log('[BP] '+label+' 검색으로 발견:', drv.name, f.name); return { driveId: drv.id, itemId: f.id, name: f.name }; }
-      } catch(_) {}
-    }
-    return null;
-  };
-  try { await ensureSiteId(); const r = await searchIn('STK-DB', siteId); if (r) return r; } catch(_) {}
-  try { const nasSite = await api('/sites/'+SITE_PATH_NAS); nasId = nasSite.id; const r = await searchIn('STK-NAS(예전 위치)', nasId); if (r) return r; } catch(_) {}
-  throw new Error('BP 파일을 찾을 수 없음: '+BP_FILE_NAME);
+  } catch(e) { console.warn('[BP] 루트에 '+BP_FILE_NAME+' 없음 — 같은 이름 규칙의 최근 파일을 찾는다:', e.message); }
+  const ch = await api('/drives/'+docDrive.id+'/root/children?'+sel+'&$top=500');
+  const cands = (ch.value||[]).filter(f=>f.file && BP_FILE_PATTERN.test(String(f.name||'').normalize('NFC')))   // 한글 이름은 NFC 로 맞춰 비교(맥에서 올린 NFD 이름도 잡는다)
+    .sort((a,b)=>String(b.name).localeCompare(String(a.name)) || String(b.lastModifiedDateTime||'').localeCompare(String(a.lastModifiedDateTime||'')));
+  if (!cands.length) throw new Error('BP 파일을 찾을 수 없음: '+BP_FILE_NAME);
+  console.warn('[BP] 정해진 이름이 없어 가장 최근 BP-Master_목록 파일을 씁니다:', cands[0].name);
+  return { driveId: docDrive.id, itemId: cands[0].id, name: cands[0].name };
 }
 async function loadBPMaster() {
   try {
     const t = await token();
-    const loc = await locateBPMasterFile(t);
+    const loc = await locateBPMasterFile();
     const res = await fetch(GRAPH+'/drives/'+loc.driveId+'/items/'+loc.itemId+'/content', {headers:{Authorization:'Bearer '+t}});
     if(!res.ok) throw new Error('BP 파일 내려받기 실패 ('+res.status+')');
     const buf = await res.arrayBuffer();
     const wb = XLSX.read(buf,{type:'array'});
-    const sheetName = wb.SheetNames.find(s=>s==='DTK')||wb.SheetNames[0];
-    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1});
+    // 정리본 열 순서: A Code · B 유형 · C Name 1 · D 한글이름 · E 사업자등록번호 · F Bank · G Account no. · H 상태(활성/비활성) — 1행 머리글
+    const sheetName = wb.SheetNames.find(s=>s==='BP Master')||wb.SheetNames[0];
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,raw:true,defval:''});
     bpData = [];
     for(let i=1;i<rows.length;i++){
       const r=rows[i];
@@ -2968,12 +2956,12 @@ async function loadBPMaster() {
       const name1 = (r[2]||'').toString().trim();
       const name2 = (r[3]||'').toString().trim();
       const bizNo = (r[4]||'').toString().trim();
-      const bank    = (r[10]||'').toString().trim();
-      const accountNo = (r[11]||'').toString().trim();
-      if(!code||!name1) continue;
-      if(isNaN(code.charAt(0))===false && code.includes('.')) continue; // 헤더행 스킵
-      if(code.toLowerCase()==='bp code'||code.toLowerCase()==='code') continue;
-      bpData.push({code,type:item,name:name1,nameKo:name2,bizNo,bank,accountNo});
+      const bank    = (r[5]||'').toString().trim();
+      const accountNo = (r[6]||'').toString().trim();
+      const inactive = /^비활성$/.test((r[7]||'').toString().trim());
+      if(!code||!(name1||name2)) continue;   // 이름이 하나도 없는 코드(정리본에 665건)는 검색 · 표시할 게 없어 뺀다
+      if(code.toLowerCase()==='bp code'||code.toLowerCase()==='code') continue;   // 머리글
+      bpData.push({code,type:item,name:name1||name2,nameKo:name1?name2:'',bizNo,bank,accountNo,inactive});
     }
     console.log('[BP Master] Loaded:', bpData.length, 'entries');
     // 모달이 열려있으면 자동 업데이트
@@ -4242,7 +4230,7 @@ function renderBpResults(list) {
   if(!list.length){el.innerHTML='<div style="text-align:center;padding:20px;color:#a19f9d">검색 결과 없음</div>';return;}
   const countHtml = list.length>=50 ? '<div style="font-size:11px;color:#a19f9d;padding:4px 12px;background:#f9f8f7">상위 50개 표시 — 검색어를 더 입력하세요</div>' : '';
   el.innerHTML=countHtml+list.map(b=>`<div class="result-item" onclick="selectBP('${b.code}')">
-    <div class="rc">${b.code} · ${b.type||'-'}</div>
+    <div class="rc">${b.code} · ${b.type||'-'}${b.inactive?' <span style="background:#fde7e9;color:#a4262c;border-radius:8px;padding:0 6px;font-size:10px;font-weight:700">비활성</span>':''}</div>
     <div class="rn">${b.name}</div>
     ${b.nameKo?`<div class="rs">${b.nameKo}</div>`:''}
     <div class="rs">사업자등록번호: ${b.bizNo||'Master data 미기재'}</div>
