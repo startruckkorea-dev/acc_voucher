@@ -3015,10 +3015,12 @@ function switchTab(tab) {
       e===(user.username||'').toLowerCase() || e===(user.email||'').toLowerCase()
     );
     if(!isAdmin) {
+      logAction('ACC Voucher', '관리자 탭 접근 차단', { reason: '관리자 명단에 없음', admins: emails.length });   // 권한이 없어 막혀도 이력은 남긴다(09-30)
       const m = document.getElementById('no-auth-modal');
       if(m) m.style.display = 'flex';
       return;
     }
+    logAction('ACC Voucher', '관리자 탭 열기', {});
   }
   ['new','list','appr','admin'].forEach(t=>{
     const el = document.getElementById('tab-'+t);
