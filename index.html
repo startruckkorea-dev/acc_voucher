@@ -8725,15 +8725,27 @@ async function buildPdfDocFromSegments(segments) {
    그런데 Excel 에서 PDF 로 저장한 파일은 보이는 영역이 [-12 12 583.2 853.7] 처럼 원점이 밀려 있어, 머리띠가 오른쪽으로 12pt 밀리고
    「출력일시」 가 잘렸다(10-06 ID-331 PPSP_2026 3Q Voucher_증빙.pdf). 가로로 돌려 저장된 페이지(/Rotate 90 · 180 · 270)는 띠가 옆 · 아래로
    가거나 페이지 밖으로 나가 보이지 않았다.
-   보이는 영역(CropBox)과 회전을 읽어 「보이는 화면의 왼쪽 아래 = (0,0) · 위 = height」 인 좌표로 바꿔 준다. 원본 내용은 건드리지 않는다.
+   보이는 영역(CropBox ∩ MediaBox)과 회전을 읽어 「보이는 화면의 왼쪽 아래 = (0,0) · 위 = height」 인 좌표로 바꿔 준다. 원본 내용은 건드리지 않는다.
    쓰는 법: const vf = pdfVisualFrame(pg); vf.begin(); pg.drawImage(img, {x:0, y:vf.height-h, width:vf.width, height:h}); vf.end(); */
-function pdfVisualFrame(pg) {
-  const { pushGraphicsState, popGraphicsState, concatTransformationMatrix } = PDFLib;
-  const b = pg.getCropBox(), r = (((pg.getRotation().angle || 0) % 360) + 360) % 360;
+function pdfVisualFrame(pg) {   // APS-ATTACH v1 apsPdfVisualFrame 과 같은 함수(이름만 다름) — 고칠 때 함께 고친다
+  // 보이는 영역 = CropBox ∩ MediaBox(뷰어와 같은 규칙 · 모서리 순서가 뒤집힌 상자도 바로잡음). /Rotate 가 90 의 배수가 아니면 뷰어처럼 0 으로 본다.
+  const { pushGraphicsState, popGraphicsState, concatTransformationMatrix, PDFName, PDFRef, PDFArray } = PDFLib;
+  const nb = q => ({ x0: Math.min(q.x, q.x + q.width), y0: Math.min(q.y, q.y + q.height), x1: Math.max(q.x, q.x + q.width), y1: Math.max(q.y, q.y + q.height) });
+  // 상자 · 회전 값이 망가진 PDF(값 개수가 틀림 · 숫자가 아님)는 pdf-lib 가 읽다가 던진다 — 그 쪽도 붙이고 띠는 MediaBox · 회전 0 기준으로
+  const box = f => { try { return nb(f()); } catch (e) { return null; } };
+  const md = box(() => pg.getMediaBox()) || { x0: 0, y0: 0, x1: 612, y1: 792 }, c = box(() => pg.getCropBox()) || md;
+  const x0 = Math.max(c.x0, md.x0), y0 = Math.max(c.y0, md.y0), x1 = Math.min(c.x1, md.x1), y1 = Math.min(c.y1, md.y1);
+  const v = x1 > x0 && y1 > y0 ? { x0, y0, x1, y1 } : md;
+  const b = { x: v.x0, y: v.y0, width: v.x1 - v.x0, height: v.y1 - v.y0 };
+  let r = 0; try { r = Number(pg.getRotation().angle) || 0; } catch (e) {}
+  r = ((r % 360) + 360) % 360; if (r % 90) r = 0;
   const m = r === 90  ? [0, 1, -1, 0, b.x + b.width, b.y]
           : r === 180 ? [-1, 0, 0, -1, b.x + b.width, b.y + b.height]
           : r === 270 ? [0, -1, 1, 0, b.x, b.y + b.height]
           :             [1, 0, 0, 1, b.x, b.y];
+  // 여러 쪽이 /Contents 배열 하나를 같이 쓰는 PDF 는 이 쪽 것만 떼어 낸다 — 안 그러면 이 쪽에 그린 띠가 다른 쪽에도 찍힌다
+  try { const raw = pg.node.get(PDFName.of('Contents'));
+    if (raw instanceof PDFRef) { const a = pg.doc.context.lookup(raw); if (a instanceof PDFArray) pg.node.set(PDFName.of('Contents'), pg.doc.context.obj(a.asArray())); } } catch (e) {}
   return { width: r % 180 ? b.height : b.width, height: r % 180 ? b.width : b.height,
     begin() { pg.pushOperators(pushGraphicsState(), concatTransformationMatrix(...m)); },
     end() { pg.pushOperators(popGraphicsState()); } };
@@ -9076,17 +9088,19 @@ async function makeNoticeCardBytes(dataUrlToUint8, kind, name, info) {
   }[kind] || {};
 
   // 폭에 맞춰 줄바꿈 — 영문은 단어 단위로, 공백 없는 긴 파일명은 글자 단위로 자른다
-  const wrap = (txt, maxW, font) => { x.font = font; const out = []; let cur = '';
+  const wrap = (txt, maxW, font, max = 4) => { x.font = font; const out = []; let cur = '';
     const push = (piece) => { if (x.measureText(cur ? cur + ' ' + piece : piece).width <= maxW) { cur = cur ? cur + ' ' + piece : piece; return; }
       if (cur) { out.push(cur); cur = ''; }
       if (x.measureText(piece).width <= maxW) { cur = piece; return; }
       for (const ch of piece) { if (x.measureText(cur + ch).width > maxW && cur) { out.push(cur); cur = ch; } else cur += ch; } };
     String(txt).split(' ').forEach(push);
-    if (cur) out.push(cur); return out.slice(0, 4); };
+    if (cur) out.push(cur);
+    if (out.length > max) { let l = out[max - 1]; while (l && x.measureText(l + '…').width > maxW) l = l.slice(0, -1); out.length = max; out[max - 1] = l + '…'; }   // 넘치면 말줄임
+    return out; };
   const nameLines = wrap(name, cw - 84, '600 12.5px ' + F);
-  const infoLines = (info ? [info] : []);
+  const infoLines = info ? wrap(info, cw - 60, '400 10.5px ' + F, 2) : [];   // 긴 오류 문구는 두 줄까지 · 카드 밖으로 나가지 않게
   const bodyLines = [].concat(...T.lines.map(l => wrap(l, cw - 60, '400 11.5px ' + F)));
-  const H = 176 + nameLines.length * 17 + (bodyLines.length * 18) + (infoLines.length ? 22 : 0);
+  const H = 176 + nameLines.length * 17 + (bodyLines.length * 18) + (infoLines.length ? 8 + infoLines.length * 14 : 0);
   c.height = H * S; x.setTransform(S, 0, 0, S, 0, 0);
 
   const rr = (px, py, pw, ph, r) => { x.beginPath(); x.moveTo(px + r, py); x.arcTo(px + pw, py, px + pw, py + ph, r); x.arcTo(px + pw, py + ph, px, py + ph, r); x.arcTo(px, py + ph, px, py, r); x.arcTo(px, py, px + pw, py, r); x.closePath(); };
@@ -9122,7 +9136,7 @@ async function makeNoticeCardBytes(dataUrlToUint8, kind, name, info) {
   x.fillStyle = '#374151'; x.font = '400 11.5px ' + F;
   bodyLines.forEach((l, i) => x.fillText(l, cx, y + 8 + i * 18));
   y += bodyLines.length * 18 + 6;
-  if (infoLines.length) { x.fillStyle = '#8a94a6'; x.font = '400 10.5px ' + F; x.fillText(infoLines[0], cx, y + 8); }
+  if (infoLines.length) { x.fillStyle = '#8a94a6'; x.font = '400 10.5px ' + F; infoLines.forEach((l, i) => x.fillText(l, cx, y + 8 + i * 14)); }
 
   return dataUrlToUint8(c.toDataURL('image/png'));
 }
@@ -9184,7 +9198,8 @@ async function appendAttachmentPagesToDoc(mainDoc, dataUrlToUint8, makeHeaderByt
         if(srcDoc.isEncrypted){
           // ignoreEncryption 은 "예외를 내지 말라"는 뜻이지 복호화가 아니다. 이대로 copyPages 하면
           // 암호문 스트림이 그대로 붙어 뷰어에서 백지·오류 페이지가 된다(SGI 증권·홈택스 계산서 등).
-          await addNoticePage('encrypted', name, 'PDF  ·  ' + srcDoc.getPageCount() + (srcDoc.getPageCount()===1?' page':' pages') + '  ·  ' + Math.round(pdfBytes.length/1024) + ' KB  ·  Encrypted', 'encrypted');
+          let _n = null; try { _n = srcDoc.getPageCount(); } catch(e) {}   // 객체 스트림까지 잠긴 PDF 는 쪽수도 못 읽는다 — 그래도 「암호화」 카드로(10-06)
+          await addNoticePage('encrypted', name, 'PDF  ·  ' + (_n == null ? '' : _n + (_n===1?' page':' pages') + '  ·  ') + Math.round(pdfBytes.length/1024) + ' KB  ·  Encrypted', 'encrypted');
           continue;
         }
         const copiedPages = await mainDoc.copyPages(srcDoc, srcDoc.getPageIndices());
