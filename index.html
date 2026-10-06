@@ -8720,6 +8720,25 @@ async function buildPdfDocFromSegments(segments) {
   return { mainDoc, dataUrlToUint8, makeHeaderBytes };
 }
 
+/* ── 첨부 PDF 페이지 「보이는 그대로」 좌표(10-06) ─────────────────────────
+   첨부 PDF 를 페이지째 붙인 뒤 머리띠(첨부파일 · 출력일시) · Draft 표식을 그릴 때, 예전엔 원점을 (0,0) 으로 보고 getSize() 폭 · 높이로 그렸다.
+   그런데 Excel 에서 PDF 로 저장한 파일은 보이는 영역이 [-12 12 583.2 853.7] 처럼 원점이 밀려 있어, 머리띠가 오른쪽으로 12pt 밀리고
+   「출력일시」 가 잘렸다(10-06 ID-331 PPSP_2026 3Q Voucher_증빙.pdf). 가로로 돌려 저장된 페이지(/Rotate 90 · 180 · 270)는 띠가 옆 · 아래로
+   가거나 페이지 밖으로 나가 보이지 않았다.
+   보이는 영역(CropBox)과 회전을 읽어 「보이는 화면의 왼쪽 아래 = (0,0) · 위 = height」 인 좌표로 바꿔 준다. 원본 내용은 건드리지 않는다.
+   쓰는 법: const vf = pdfVisualFrame(pg); vf.begin(); pg.drawImage(img, {x:0, y:vf.height-h, width:vf.width, height:h}); vf.end(); */
+function pdfVisualFrame(pg) {
+  const { pushGraphicsState, popGraphicsState, concatTransformationMatrix } = PDFLib;
+  const b = pg.getCropBox(), r = (((pg.getRotation().angle || 0) % 360) + 360) % 360;
+  const m = r === 90  ? [0, 1, -1, 0, b.x + b.width, b.y]
+          : r === 180 ? [-1, 0, 0, -1, b.x + b.width, b.y + b.height]
+          : r === 270 ? [0, -1, 1, 0, b.x, b.y + b.height]
+          :             [1, 0, 0, 1, b.x, b.y];
+  return { width: r % 180 ? b.height : b.width, height: r % 180 ? b.width : b.height,
+    begin() { pg.pushOperators(pushGraphicsState(), concatTransformationMatrix(...m)); },
+    end() { pg.pushOperators(popGraphicsState()); } };
+}
+
 // ── Draft 워터마크 ──
 // 임시저장 전표를 PDF 로 뽑으면 상신본과 구분이 안 된다. 결재가 시작되지 않은 문서가
 // 정식 전표처럼 돌아다니지 않도록 모든 페이지(첨부 포함)에 표식을 남긴다.
@@ -8738,7 +8757,8 @@ async function stampDraftWatermark(mainDoc, dataUrlToUint8) {
   // pdf-lib 는 자간 옵션이 없어 글자마다 폭을 재서 한 자씩 그린다
   const labelWidth = [...LABEL].reduce((w, ch) => w + font.widthOfTextAtSize(ch, LABEL_SIZE) + TRACK, -TRACK);
   mainDoc.getPages().forEach(pg => {
-    const { width, height } = pg.getSize();
+    const vf = pdfVisualFrame(pg), { width, height } = vf;   // 첨부 페이지의 밀린 원점 · 회전을 보정한 「보이는」 크기(10-06)
+    vf.begin();
     // 가운데 큰 글자 — 페이지 대각선 길이에 맞춰 크기를 정한다
     const text = 'DRAFT';
     const size = Math.min(width, height) * 0.24;   // A4 세로 기준 약 143pt — 대각선 안에 들어오고 본문을 가리지 않는 크기
@@ -8761,6 +8781,7 @@ async function stampDraftWatermark(mainDoc, dataUrlToUint8) {
     const foot = 'This document is a DRAFT and has no approval. Do not use it for posting, payment, or filing.';
     const fs = 7.5, fw = small.widthOfTextAtSize(foot, fs);
     pg.drawText(foot, { x: (width - fw) / 2, y: 12, size: fs, font: small, color: RED, opacity: 0.9 });
+    vf.end();
   });
 }
 
@@ -9171,8 +9192,8 @@ async function appendAttachmentPagesToDoc(mainDoc, dataUrlToUint8, makeHeaderByt
         for(const pg of copiedPages){
           mainDoc.addPage(pg);
           const aHdrImg2 = await mainDoc.embedPng(aHdrBytes2);
-          const {width:pgW, height:pgH} = pg.getSize();
-          pg.drawImage(aHdrImg2, {x:0,y:pgH-hdrH,width:pgW,height:hdrH});
+          const vf = pdfVisualFrame(pg);                          // 밀린 원점 · 회전 보정(10-06) — 예전 getSize() + x:0 은 Excel 저장 PDF 에서 띠가 밀렸다
+          vf.begin(); pg.drawImage(aHdrImg2, {x:0, y:vf.height-hdrH, width:vf.width, height:hdrH}); vf.end();
         }
       }
     } catch(e){
