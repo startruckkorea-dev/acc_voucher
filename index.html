@@ -686,6 +686,144 @@ html.deeplink-open.deeplink-busy #deeplink-loader {
   } catch (e) {}
 })();
 </script>
+<style id="aps-mobile">
+/* APS 모바일(10-09 · aps-mobile) — 767px 이하 전용. 웹 화면 무변경 */
+/* ACC Voucher(운영 · UAT 공용): 작성 탭 1행 인라인 3열 · BP 4열 · 불러오기 줄 · 관리자 필터 줄의 문서 넘침 해소, 회계 라인 · 목록 · 상세 회계 표는 표 상자만 가로 스크롤.
+   UAT 의 빨간 #uat-bar 는 폰에서 sticky 를 풀어 작성 화면을 가리지 않게 한다(운영에는 없는 요소라 영향 없음). */
+@media (max-width: 767px) {
+  /* ── 바탕 · 카드 ── */
+  #app { padding: 12px 12px 32px; }
+  #app .card { padding: 16px 14px; }
+
+  /* ── 헤더(V3) — 띠 한 줄 · 제목 한 단계 작게 · BU Admin 메일 줄바꿈 허용 ── */
+  #app .app-header.aps-hdr { padding: 0 16px 14px; margin-bottom: 14px; }
+  #app .aps-band { margin: 0 -16px 10px; padding: 0 16px; }
+  .aps-band-crumb { flex: 1 1 auto; }
+  .aps-band-crumb > span { overflow: hidden; text-overflow: ellipsis; }
+  #app .app-title { font-size: 1rem; }
+  #app .app-sub { font-size: .7rem; }
+  .aps-hdr .hdr-contact { display: grid; grid-template-columns: max-content minmax(0, 1fr); font-size: 11px; }
+  .aps-hdr .hdr-contact-mail { overflow-wrap: anywhere; min-width: 0; }
+  .hdr-cfg-status { max-width: none; flex-wrap: wrap; }
+
+  /* ── 탭 — 한 줄 가로 스크롤(막대 숨김) · 터치 높이 42px ── */
+  #app .tabs { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; margin: 0 -12px 14px; padding: 0 12px;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  #app .tabs::-webkit-scrollbar { display: none; }
+  #app .tab-btn { flex: none; white-space: nowrap; min-height: 42px; padding: 10px 14px; font-size: 13.5px; }
+
+  /* ── 입력 글자 16px(iOS 자동 확대 방지) — 인라인 글자 크기를 이긴다 ── */
+  input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=color]),
+  select, textarea { font-size: 16px !important; }
+
+  /* ── 작성 탭: 제목 줄(기존 전표 불러오기) ── */
+  #tab-new .card-title > div { flex-wrap: wrap; width: 100%; }
+  #tab-new .card-title > div > span:first-child { flex-basis: 100%; }
+  #load-voucher-id { flex: 1 1 150px; width: auto !important; min-width: 0; }
+  #tab-new .card-title > div > button { min-height: 36px; }
+
+  /* Excel 전표 자동 작성 */
+  .pt-bar > span:first-child { flex-basis: 100%; }
+  .pt-bar select { min-width: 0; flex: 1 1 100%; }
+  .pt-bar button { flex: 1 1 0; min-height: 36px; }
+  .pt-hint > div { grid-template-columns: 1fr; gap: 2px; padding: 7px 12px; }
+
+  /* ── 폼 — 모든 행 1열(1행은 인라인 3열이라 !important) · 라벨 위 · 입력 아래 ── */
+  #app .form-row, #app .form-row.three, #app .form-row.four { grid-template-columns: minmax(0, 1fr) !important; gap: 12px; }
+  #app .form-group > input, #app .form-group > select, #app .form-group > textarea { width: 100%; min-width: 0; }
+  #app .form-group div[style*="display:flex"] > input, #app .bp-search-row > input { flex: 1 1 0; width: auto; min-width: 0; }
+  #rd-exempt-note { grid-column: 1 / -1 !important; }
+  #rd-exempt-label { white-space: normal !important; }
+  #extra-rates { padding: 4px 0 12px !important; }
+  #extra-rates label { min-width: 30px; }
+  #extra-rates > div { display: grid !important; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+  #extra-rates > div > div { min-width: 0; }
+  #extra-rates input { width: auto !important; flex: 1 1 auto; min-width: 0; }
+
+  /* 4. 회계 정보 — 단추 묶음을 제목 아래 한 줄로 */
+  #tab-new .section-title[style*="space-between"] { flex-wrap: wrap; gap: 8px; }
+  #tab-new .section-title[style*="space-between"] > div { flex: 1 1 100%; flex-wrap: wrap; }
+  #tab-new .section-title .btn-add { flex: 1 1 auto; min-height: 36px; padding: 7px 8px; white-space: nowrap; }
+  .lines-scroll { -webkit-overflow-scrolling: touch; }
+  .totals-bar { justify-content: center; padding: 12px; }
+
+  /* 6. 결재 라인 — 블록을 세로로 */
+  #acc-line-toggle { flex-wrap: wrap; row-gap: 2px; }
+  .appr-block { padding: 12px; }
+  .appr-select-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .appr-select-row > :last-child { grid-column: 1 / -1; }
+  .appr-select-row select { width: 100%; min-width: 0; }
+  .appr-info { grid-template-columns: minmax(0, 1fr); }
+  .appr-info input { width: 100%; min-width: 0; }
+  .btn-row { gap: 8px; }
+  .btn-row > button { flex: 1 1 0; min-height: 44px; padding: 10px 8px; justify-content: center; white-space: nowrap; }
+
+  /* ── 내 전표 목록 · 결재함 · 관리자 — 필터 줄 줄바꿈, 표는 상자 안에서만 가로 스크롤 ── */
+  .list-filters select { flex: 1 1 calc(50% - 4px); min-width: 0; }
+  .list-filters input { flex: 1 1 100%; min-width: 0 !important; }
+  #tab-admin > div[style*="flex-wrap:wrap"] { gap: 8px !important; }
+  #admin-status, #admin-type { flex: 1 1 calc(50% - 4px); min-width: 0; }
+  #admin-search { flex: 1 1 100%; min-width: 0 !important; }
+  #tab-admin > div[style*="flex-wrap:wrap"] > div[style*="margin-left:auto"] { margin-left: 0 !important; width: 100%; flex-wrap: wrap; gap: 8px !important; }
+  #admin-count { flex-basis: 100%; }
+  #tab-admin > div[style*="flex-wrap:wrap"] > div[style*="margin-left:auto"] > button { flex: 1 1 auto; justify-content: center; min-height: 36px; }
+  #admin-draft-toggle, #my-draft-toggle { min-height: 34px; }
+  #tab-list .card > div[style*="overflow-x"], #tab-appr > .card, #tab-admin > .card { -webkit-overflow-scrolling: touch; }
+
+  /* ── 상세 모달 — 좌우 10px 거의 전체 폭 · 최대 높이 90% · 라벨 폭 축소 ── */
+  #voucher-detail-modal .modal-box { width: calc(100% - 20px); max-width: none; max-height: 90vh; max-height: 90dvh; padding: 18px 14px 20px; }
+  #voucher-detail-modal .modal-title { flex-wrap: wrap; row-gap: 10px; padding-right: 32px !important; font-size: .95rem; }
+  #voucher-detail-modal .modal-title > div { flex-wrap: wrap; }
+  #voucher-detail-modal .modal-title button { white-space: nowrap; }
+  .modal-box .modal-close { top: 8px; right: 8px; width: 36px; height: 36px; }
+  .det-row { gap: 8px; }
+  .det-lbl { width: 96px; font-size: .76rem; }
+  .det-val { min-width: 0; overflow-wrap: anywhere; }
+  #voucher-detail-content div[style*="justify-content:flex-end"][style*="flex-wrap:wrap"],
+  #lx-foot > div[style*="justify-content:flex-end"] { justify-content: flex-start !important; }
+  #voucher-detail-content div[style*="justify-content:flex-end"][style*="flex-wrap:wrap"] > span,
+  #lx-foot > div[style*="justify-content:flex-end"] > span { white-space: normal !important; flex-wrap: wrap; row-gap: 2px; }
+  .appr-item > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+  .appr-item > span:last-child { flex: none; white-space: nowrap; }
+  .det-sec.with-action { flex-wrap: wrap; row-gap: 6px; }
+  .modal-action .btn-approve, .modal-action .btn-reject { min-height: 46px; }
+
+  /* ── 그 밖의 팝업 — 좌우 10px 여백 · 화면 안 ── */
+  .modal-overlay, #pt-modal, #draft-confirm, #lines-expand { padding: 10px !important; }
+  .modal-overlay .modal { max-height: 90vh; max-height: 90dvh; }
+  .search-bar input { min-width: 0; }
+  .search-bar .btn { flex: none; white-space: nowrap; }
+  #lines-expand .lx-box { min-width: 0; max-height: 90vh; max-height: 90dvh; }
+  #lines-expand .lx-head { padding: 12px 14px; }
+  #lines-expand .lx-foot { padding: 10px 12px; }
+  #line-modal > div { width: 100% !important; max-width: none !important; }
+  #line-modal > div > div[style*="overflow-y:auto"] { padding: 16px 14px !important; }
+  #line-modal div:has(> #lm-gl) { flex-wrap: wrap; }
+  #lm-glname { flex-basis: 100%; }
+  #pt-modal .pt-box { max-height: 90vh; max-height: 90dvh; }
+  #pt-modal .pt-bd { overflow-x: auto; }
+  #draft-confirm > div { max-height: 90vh; max-height: 90dvh; overflow-y: auto; }
+  #acc-alert-modal > div, #appr-confirm-modal > div, #no-auth-modal > div { width: calc(100% - 20px) !important; }
+  #acc-alert-modal > div { padding: 24px 18px !important; }
+  #appr-confirm-modal > div { padding: 20px 16px !important; }
+  #appr-confirm-modal > div > div:last-child > button { flex: 1 1 0; min-height: 44px; }
+  #no-auth-modal > div { padding: 28px 20px !important; }
+  #batch-pdf-modal > div { width: calc(100% - 20px) !important; max-height: 90vh !important; }
+  #batch-search { flex: 1 1 100%; width: auto !important; }
+  .sp-box { max-width: calc(100% - 20px); padding: 20px 18px 16px; }
+  #aps-dyn .dyn-box { padding: 24px 22px; }
+
+  /* ── 로그인 — 카드는 화면 폭에 맞추고 안내 띠는 카드 아래(겹침 없음) ── */
+  #login-screen { flex-direction: column; padding: 24px 12px 0; }
+  #login-screen .login-card { margin: auto 0; padding: 36px 22px 28px; border-radius: 16px; }
+  #login-screen .login-page-footer { position: static; align-self: stretch; margin: 24px -12px 0; padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    flex-direction: column; gap: 2px; text-align: center; font-size: 10px; line-height: 1.45; }
+
+  /* ── UAT 띠(UAT 저장소에만 있음) — 따라다니지 않게 · 글자 작게 ── */
+  #uat-bar { position: relative !important; padding: 4px 10px !important; font-size: 10.5px !important; line-height: 1.35 !important; }
+  #uat-bar span { font-size: 10px !important; }
+}
+</style>
 </head>
 <body>
 <div id="deeplink-loader">
