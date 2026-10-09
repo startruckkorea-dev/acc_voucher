@@ -687,17 +687,26 @@ html.deeplink-open.deeplink-busy #deeplink-loader {
 })();
 </script>
 <style id="aps-mobile">
-/* APS 모바일(10-09 · aps-mobile) — 767px 이하 전용. 웹 화면 무변경 */
+/* APS 모바일(10-09 · aps-mobile · 10-10 2차 점검) — 767px 이하 전용. 웹 화면 무변경 */
 /* ACC Voucher(운영 · UAT 공용): 작성 탭 1행 인라인 3열 · BP 4열 · 불러오기 줄 · 관리자 필터 줄의 문서 넘침 해소, 회계 라인 · 목록 · 상세 회계 표는 표 상자만 가로 스크롤.
    UAT 의 빨간 #uat-bar 는 폰에서 sticky 를 풀어 작성 화면을 가리지 않게 한다(운영에는 없는 요소라 영향 없음). */
-@media (max-width: 767px) {
+@media screen and (max-width: 767px) {
+  /* ── iPhone(Safari) · Galaxy 방어(10-10) — 가로 돌림 글자 확대 · 날짜 칸 폭 · iOS 날짜 칸 높이(일반 입력칸 36px) ── */
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  input:not([type=checkbox]):not([type=radio]), select, textarea, button { max-width: 100%; box-sizing: border-box; }
+  input[type=date], input[type=time], input[type=month], input[type=datetime-local] { min-width: 0; }
+  @supports (-webkit-touch-callout: none) {
+    input[type=date], input[type=time], input[type=month], input[type=datetime-local] { -webkit-appearance: none; appearance: none; display: block; min-height: 36px; line-height: normal; text-align: left; }
+    input::-webkit-date-and-time-value { text-align: left; min-height: 1.2em; }
+  }
+
   /* ── 바탕 · 카드 ── */
   #app { padding: 12px 12px 32px; }
   #app .card { padding: 16px 14px; }
 
   /* ── 헤더(V3) — 띠 한 줄 · 제목 한 단계 작게 · BU Admin 메일 줄바꿈 허용 ── */
   #app .app-header.aps-hdr { padding: 0 16px 14px; margin-bottom: 14px; }
-  #app .aps-band { margin: 0 -16px 10px; padding: 0 16px; }
+  #app .aps-band { margin: 0 -16px 10px; padding: 0 16px; flex: 0 0 auto; width: calc(100% + 32px); }   /* 641~767px(가로 배치)에서 flex-basis 100%+48px 가 남아 띠가 4px 삐져나가 문서가 넘치던 것(10-10) */
   .aps-band-crumb { flex: 1 1 auto; }
   .aps-band-crumb > span { overflow: hidden; text-overflow: ellipsis; }
   #app .app-title { font-size: 1rem; }
@@ -721,6 +730,7 @@ html.deeplink-open.deeplink-busy #deeplink-loader {
   #tab-new .card-title > div > span:first-child { flex-basis: 100%; }
   #load-voucher-id { flex: 1 1 150px; width: auto !important; min-width: 0; }
   #tab-new .card-title > div > button { min-height: 36px; }
+  #load-voucher-id { height: 36px; }   /* 불러오기 단추(36px)와 같은 높이(10-10) */
 
   /* Excel 전표 자동 작성 */
   .pt-bar > span:first-child { flex-basis: 100%; }
@@ -734,6 +744,9 @@ html.deeplink-open.deeplink-busy #deeplink-loader {
   #app .form-group div[style*="display:flex"] > input, #app .bp-search-row > input { flex: 1 1 0; width: auto; min-width: 0; }
   #rd-exempt-note { grid-column: 1 / -1 !important; }
   #rd-exempt-label { white-space: normal !important; }
+  #v-exrate + button { height: 36px; }   /* 환율 칸(36px)과 「＋ 기타 통화」(31px) 높이 맞춤(10-10) */
+  /* RD 면제 금액 표 — 고정 폭 표에서 줄바꿈 금지 칸 글자가 옆 칸으로 겹치던 것(360px) */
+  #rd-amount-table th, #rd-amount-table td { padding-left: 6px !important; padding-right: 6px !important; white-space: normal !important; overflow-wrap: anywhere; }
   #extra-rates { padding: 4px 0 12px !important; }
   #extra-rates label { min-width: 30px; }
   #extra-rates > div { display: grid !important; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
@@ -745,6 +758,10 @@ html.deeplink-open.deeplink-busy #deeplink-loader {
   #tab-new .section-title[style*="space-between"] > div { flex: 1 1 100%; flex-wrap: wrap; }
   #tab-new .section-title .btn-add { flex: 1 1 auto; min-height: 36px; padding: 7px 8px; white-space: nowrap; }
   .lines-scroll { -webkit-overflow-scrolling: touch; }
+  /* 첨부 목록 — 띄어쓰기 없는 긴 파일 이름이 줄바꿈되지 않아 ✕ 단추가 밀리고 문서가 593px 로 넘치던 것(10-10) */
+  .file-item { gap: 8px; }
+  .file-item > span { min-width: 0; overflow-wrap: anywhere; }
+  .file-item > button { flex: none; min-width: 32px; min-height: 32px; }
   .totals-bar { justify-content: center; padding: 12px; }
 
   /* 6. 결재 라인 — 블록을 세로로 */
@@ -810,6 +827,26 @@ html.deeplink-open.deeplink-busy #deeplink-loader {
   #no-auth-modal > div { padding: 28px 20px !important; }
   #batch-pdf-modal > div { width: calc(100% - 20px) !important; max-height: 90vh !important; }
   #batch-search { flex: 1 1 100%; width: auto !important; }
+  /* 공식 PDF 일괄 내보내기(10-10) — 고정 폭 표(table-layout:fixed · 100%)가 좁은 화면에서 「신청자 · Purpose Title · DR」 머리글이 겹쳐 그려지던 것:
+     표에 최소 폭을 줘 표 상자(#batch-pdf-body, overflow:auto) 안에서만 가로로 밀리게. 필터 줄은 [상태 | 유형] / 검색 / 신청일 / [시작 ~ 종료] */
+  #batch-pdf-table { min-width: 1240px !important; }   /* 고정 칸 736px + 퍼센트 칸 30% — 「신청자」 칸이 0 이 되지 않는 폭 */
+  #batch-pdf-modal > div > div:nth-child(3) { padding: 8px 14px 0 !important; }
+  #batch-pdf-body { padding: 10px 14px 14px !important; -webkit-overflow-scrolling: touch; }
+  #batch-pdf-modal > div > div:first-child, #batch-pdf-modal > div > div:last-child { padding-left: 14px !important; padding-right: 14px !important; }
+  #batch-status, #batch-type { flex: 1 1 calc(50% - 4px); min-width: 0; height: 36px; }
+  #batch-search { height: 36px; }
+  #batch-pdf-modal > div > div:nth-child(3) > span:nth-of-type(1) { display: none; }   /* 세로 구분선(장식) */
+  #batch-pdf-modal > div > div:nth-child(3) > span:nth-of-type(2) { flex: 1 1 100%; }
+  #batch-date-from, #batch-date-to { flex: 1 1 0; min-width: 0; height: 36px; }
+  #batch-pdf-modal > div > div:nth-child(3) > span:nth-of-type(4) { flex: 1 1 100%; }
+  #batch-pdf-modal > div > div:last-child { flex-wrap: wrap; row-gap: 8px; }
+  #batch-pdf-modal > div > div:last-child > div { flex: 1 1 auto; }
+  #batch-pdf-modal > div > div:last-child > div > button { min-height: 40px; white-space: nowrap; }
+  #batch-pdf-run { flex: 1 1 auto; }
+  /* Accounting 담당자 변경 팝업 — 현재 담당자(긴 이름 · 메일)가 줄바꿈되지 않고 오른쪽에서 잘리던 것 */
+  #acc-chg-cur { min-width: 0; overflow-wrap: anywhere; }
+  #acc-chg-modal { padding: 10px !important; }
+  #acc-chg-save, #acc-chg-modal button[onclick^="closeAccApproverChange"]:not([style*="background:none"]) { min-height: 40px; }
   .sp-box { max-width: calc(100% - 20px); padding: 20px 18px 16px; }
   #aps-dyn .dyn-box { padding: 24px 22px; }
 
