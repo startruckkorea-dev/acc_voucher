@@ -2170,6 +2170,8 @@ function _applySystemConfig(cfg) {
     _pn++;
   }
   if(pkfList.length) PKF_EMAILS.splice(0, PKF_EMAILS.length, ...pkfList);
+  // BP 계좌 전체 표시 명단 — ACC Others BP 조회 권한과 같은 계산(10-10)
+  BP_ACCT_VIEW_EMAILS.splice(0, BP_ACCT_VIEW_EMAILS.length, ...bpAcctViewEmails(cfg));
   const ap = cfgVal(cfg,'ACC-Voucher_CONTACT_AP');
   const ar = cfgVal(cfg,'ACC-Voucher_CONTACT_AR');
   const gl = cfgVal(cfg,'ACC-Voucher_CONTACT_GL');
@@ -2204,7 +2206,7 @@ async function loadAndApplySystemConfig() {
     console.warn('[Config] 적용 실패:', e && e.message);
   } finally {
     _configLoaded = true;
-    if (!ok) syncAccLineUI();
+    if (!ok) { syncAccLineUI(); BP_ACCT_VIEW_EMAILS.length = 0; }   // 설정을 못 읽으면 계좌는 끝 4자리만(10-10)
     renderCfgStatus();
   }
   return ok;
@@ -2297,6 +2299,49 @@ const CONTACT_NAMES  = { ap:'', ar:'', gl:'' };
 // 각 Voucher Type이 어느 담당(AP/AR/GL)에 해당하는지
 const TYPE_CONTACT_CAT = { AP:'ap', AP_IMS:'gl', AP_CR:'ar', AR:'ar', GL:'gl', FA:'gl', ADV:'ap', SET:'ap' };
 const IT_EMAILS = []; // ACC-Voucher_IT — Approvals 세대 관리 등 인프라 전환 기능 노출 대상
+/* BP 계좌번호 표시(10-10) — 07-01(644013e) 요청으로 BP 검색 결과에 은행 · 계좌번호를 보여 왔는데,
+   BP 마스터에는 직원(Employee) 계좌도 있고 ACC Voucher 는 입장 제한이 없어 전 직원이 다른 사람 계좌를 볼 수 있었다.
+   ACC Others 는 같은 파일의 BP 조회를 명단으로 막는다(2880e55 · 2bf235e). 그래서 여기서는
+   - 누구나: 은행명 + 계좌 끝 4자리(****1234) — 전표 작성 때 어느 BP 인지 가려 보는 용도는 그대로 남긴다.
+   - 계좌 전체: ACC Others 의 BP 조회 권한자와 같은 명단(같은 설정 키 · 같은 계산)만.
+     ACC-OTHERS_ACCESS_N · ADMIN_N · IT · IT_N · DEV_CFO · CCL_CFO · CONTACT · ADMIN_SP · ADMIN_SP_N · BP_VIEW_N
+     + BP 관리자(ACC-OTHERS_ADMIN_N · ADMIN-BP_N · BP_ADMIN_N). 설정을 못 읽거나 명단이 비면 아무도 전체를 못 본다.
+   - 계좌번호 검색: 전체 권한자만 전체 번호로, 그 밖에는 끝 4자리로만(번호로 주인을 알아내는 조회 방지).
+   계좌 전체 번호는 bpData 객체에 넣지 않고 아래 WeakMap 에만 둔다. */
+const BP_ACCT_VIEW_EMAILS = [];
+let _bpAcctFull = new WeakMap();
+function _cfgSeqEmailsCI(cfg, prefix) {
+  const P = String(prefix).toUpperCase();
+  return Object.keys(cfg || {})
+    .filter(k => k.toUpperCase().startsWith(P) && /^\d+$/.test(k.slice(P.length)))
+    .map(k => (cfg[k] && cfg[k].email || '').trim().toLowerCase()).filter(Boolean);
+}
+function bpAcctViewEmails(cfg) {
+  if (!cfg) return [];
+  const one = ['ACC-OTHERS_IT', 'ACC-OTHERS_DEV_CFO', 'ACC-OTHERS_CCL_CFO', 'DEV_CFO', 'CCL_CFO', 'ACC-OTHERS_CONTACT', 'ADMIN_SP']
+    .map(k => (cfg[k] && cfg[k].email || '').trim().toLowerCase()).filter(Boolean);
+  const seq = ['ACC-OTHERS_ACCESS_', 'ACC-OTHERS_ADMIN_', 'ACC-OTHERS_IT_', 'ADMIN_SP_', 'ACC-OTHERS_BP_VIEW_', 'ACC-OTHERS_ADMIN-BP_', 'ACC-OTHERS_BP_ADMIN_']
+    .reduce((a, pre) => a.concat(_cfgSeqEmailsCI(cfg, pre)), []);
+  return [...new Set(one.concat(seq))];
+}
+function isBpAcctViewer() { return !_cfgLoadFailed && BP_ACCT_VIEW_EMAILS.length > 0 && meMatches(BP_ACCT_VIEW_EMAILS); }
+function bpAcctText(b) {
+  const full = _bpAcctFull.get(b);
+  if (!full) return 'Master data 미기재';
+  if (isBpAcctViewer()) return full;
+  return '****' + (b.acctLast4 || '');
+}
+function bpAcctMatches(b, kw) {
+  const full = _bpAcctFull.get(b);
+  if (!full) return false;
+  if (isBpAcctViewer()) return full.includes(kw);
+  return /^\d{1,4}$/.test(kw) && !!b.acctLast4 && b.acctLast4.includes(kw);
+}
+// 검색 결과 고르기 — onclick 문자열에 BP 코드를 넣지 않고 data-bp 로 넘긴다(코드에 ' " < 가 있어도 안전)
+document.addEventListener('click', function (e) {
+  const it = e.target && e.target.closest && e.target.closest('#bp-search-results .result-item[data-bp]');
+  if (it) selectBP(it.getAttribute('data-bp'));
+});
 let _configLoaded = false;
 
 
@@ -3253,6 +3298,7 @@ async function loadBPMaster() {
     const sheetName = wb.SheetNames.find(s=>s==='BP Master')||wb.SheetNames[0];
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,raw:true,defval:''});
     bpData = [];
+    _bpAcctFull = new WeakMap();
     for(let i=1;i<rows.length;i++){
       const r=rows[i];
       if(!r[0]) continue;
@@ -3266,7 +3312,11 @@ async function loadBPMaster() {
       const inactive = /^비활성$/.test((r[7]||'').toString().trim());
       if(!code||!(name1||name2)) continue;   // 이름이 하나도 없는 코드(정리본에 665건)는 검색 · 표시할 게 없어 뺀다
       if(code.toLowerCase()==='bp code'||code.toLowerCase()==='code') continue;   // 머리글
-      bpData.push({code,type:item,name:name1||name2,nameKo:name1?name2:'',bizNo,bank,accountNo,inactive});
+      // 계좌번호는 끝 4자리만 객체에 두고 전체는 _bpAcctFull(WeakMap) 에 — 화면은 bpAcctText 로만(10-10)
+      const acctDigits = accountNo.replace(/\D/g, '');
+      const bpRec = {code,type:item,name:name1||name2,nameKo:name1?name2:'',bizNo,bank,acctLast4:acctDigits.length>=4?acctDigits.slice(-4):'',inactive};
+      if (accountNo) _bpAcctFull.set(bpRec, accountNo);
+      bpData.push(bpRec);
     }
     console.log('[BP Master] Loaded:', bpData.length, 'entries');
     // 모달이 열려있으면 자동 업데이트
@@ -4610,7 +4660,7 @@ function searchBP(q) {
     if(!kw){renderBpResults(bpData.slice(0,10));return;}
     const res=[];
     for(const b of bpData){
-      if(b.code.toLowerCase().includes(kw)||b.name.toLowerCase().includes(kw)||(b.nameKo&&b.nameKo.includes(q))||(b.bizNo&&b.bizNo.includes(kw))||(b.bank&&b.bank.toLowerCase().includes(kw))||(b.accountNo&&b.accountNo.includes(kw))){
+      if(b.code.toLowerCase().includes(kw)||b.name.toLowerCase().includes(kw)||(b.nameKo&&b.nameKo.includes(q))||(b.bizNo&&b.bizNo.includes(kw))||(b.bank&&b.bank.toLowerCase().includes(kw))||bpAcctMatches(b,kw)){
         res.push(b); if(res.length>=50) break;
       }
     }
@@ -4622,12 +4672,13 @@ function renderBpResults(list) {
   const el=document.getElementById('bp-search-results');
   if(!list.length){el.innerHTML='<div style="text-align:center;padding:20px;color:#a19f9d">검색 결과 없음</div>';return;}
   const countHtml = list.length>=50 ? '<div style="font-size:11px;color:#a19f9d;padding:4px 12px;background:#f9f8f7">상위 50개 표시 — 검색어를 더 입력하세요</div>' : '';
-  el.innerHTML=countHtml+list.map(b=>`<div class="result-item" onclick="selectBP('${b.code}')">
-    <div class="rc">${b.code} · ${b.type||'-'}${b.inactive?' <span style="background:#fde7e9;color:#a4262c;border-radius:8px;padding:0 6px;font-size:10px;font-weight:700">비활성</span>':''}</div>
-    <div class="rn">${b.name}</div>
-    ${b.nameKo?`<div class="rs">${b.nameKo}</div>`:''}
-    <div class="rs">사업자등록번호: ${b.bizNo||'Master data 미기재'}</div>
-    <div class="rs">Bank Info.: ${b.bank||'Master data 미기재'} &nbsp;|&nbsp; Account No.: ${b.accountNo||'Master data 미기재'}</div>
+  // BP 값은 ACC Others 관리 탭(SAP 붙여넣기 · 일괄 등록)에서 들어오므로 전부 escHtml. 계좌는 bpAcctText(끝 4자리 · 권한자만 전체)(10-10)
+  el.innerHTML=countHtml+list.map(b=>`<div class="result-item" data-bp="${escHtml(b.code)}">
+    <div class="rc">${escHtml(b.code)} · ${escHtml(b.type||'-')}${b.inactive?' <span style="background:#fde7e9;color:#a4262c;border-radius:8px;padding:0 6px;font-size:10px;font-weight:700">비활성</span>':''}</div>
+    <div class="rn">${escHtml(b.name)}</div>
+    ${b.nameKo?`<div class="rs">${escHtml(b.nameKo)}</div>`:''}
+    <div class="rs">사업자등록번호: ${escHtml(b.bizNo||'Master data 미기재')}</div>
+    <div class="rs">Bank Info.: ${escHtml(b.bank||'Master data 미기재')} &nbsp;|&nbsp; Account No.: ${escHtml(bpAcctText(b))}</div>
   </div>`).join('');
 }
 function selectBP(code) {
