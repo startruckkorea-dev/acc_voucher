@@ -9403,16 +9403,18 @@ async function runBatchPdf() {
   const doneIc = document.getElementById('batch-prog-done'); if (doneIc) doneIc.style.display = 'none';
   if (titleEl) titleEl.textContent = '공식 PDF 를 만들고 있습니다'; if (sumEl) sumEl.textContent = `${targets.length}건 선택`;
   const files = []; let ok = 0, fail = 0;
+  const _logRes = new Map(); let _logDl = '없음';   // 출력 기록(10-10)용 — 건별 결과 · 내려받기 방식
   for (let i = 0; i < targets.length; i++) {
     const v = targets[i];
-    if (_batchCancel) { setRow(v, 'skip', '취소됨'); continue; }
+    if (_batchCancel) { setRow(v, 'skip', '취소됨'); _logRes.set(String(v._spId), { 결과: '취소' }); continue; }
     txt.textContent = `${i+1} / ${targets.length} — ${v.Title||''}`; setPct(Math.round((i/targets.length)*100));
     setRow(v, 'run', '생성 중');
     try {
       const bytes = await buildOfficialPdfBytes(v, (s) => setRow(v, 'run', s));
       files.push({ name: 'ACC-Voucher_'+(v.Title||v._spId)+'_공식양식.pdf', bytes });
       ok++; setRow(v, 'ok', `완료 · ${(bytes.length/1024).toLocaleString('ko-KR',{maximumFractionDigits:0}).padStart(5,' ')} KB`);
-    } catch (e) { fail++; setRow(v, 'fail', '실패 · '+(e && e.message || '').slice(0, 60)); console.warn('[일괄 PDF] 실패:', v.Title, e); }
+      _logRes.set(String(v._spId), { 결과: '성공' });
+    } catch (e) { fail++; setRow(v, 'fail', '실패 · '+(e && e.message || '').slice(0, 60)); console.warn('[일괄 PDF] 실패:', v.Title, e); _logRes.set(String(v._spId), { 결과: '실패', 오류: String((e && e.message) || e).slice(0, 120) }); }
     await new Promise(r => setTimeout(r, 0));
   }
   setPct(100);
@@ -9425,10 +9427,12 @@ async function runBatchPdf() {
       files.forEach(f => zip.file(f.name, f.bytes));
       const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `ACC-Voucher_공식양식_일괄_${ds}_${files.length}건.zip`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+      _logDl = 'ZIP';
       txt.textContent = `완료 — ${ok}건 성공${fail?` · ${fail}건 실패`:''} · ZIP 1개로 내려받았습니다.`;
     } catch (e) {
       console.warn('[일괄 PDF] ZIP 실패 → 개별 다운로드:', e && e.message);
       for (const f of files) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([f.bytes], {type:'application/pdf'})); a.download = f.name; document.body.appendChild(a); a.click(); await new Promise(r => setTimeout(r, 400)); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); }
+      _logDl = '개별(ZIP 실패)';
       txt.textContent = `완료 — ${ok}건 성공${fail?` · ${fail}건 실패`:''} · ZIP 을 만들지 못해 파일별로 내려받았습니다.`;
     }
   } else txt.textContent = _batchCancel ? '취소되었습니다.' : `만든 파일이 없습니다 (${fail}건 실패).`;
@@ -9438,7 +9442,9 @@ async function runBatchPdf() {
     doneIc.style.background = okAll ? '#e4f3ec' : (fail ? '#fbeddc' : '#eef0f3'); doneIc.style.color = okAll ? '#166a43' : (fail ? '#a6631e' : '#5b6472'); }
   if (titleEl) titleEl.textContent = _batchCancel ? '중단되었습니다' : (fail ? '완료 — 일부 실패' : '완료');
   if (sumEl) sumEl.textContent = `성공 ${ok} · 실패 ${fail}` + (_batchCancel ? ` · 취소 ${targets.length - ok - fail}` : '');
-  try { logAction('ACC Voucher', '공식 PDF 일괄 내보내기', { 선택: targets.length, 성공: ok, 실패: fail, 취소: _batchCancel }); } catch(e) {}
+  // 기존 기록(09-11)의 action · 키는 그대로 두고 대상 목록 · 내려받기 방식을 더한다(10-10). 한 건도 못 만들면 「… 실패」
+  try { logAction('ACC Voucher', (!ok && fail) ? '공식 PDF 일괄 내보내기 실패' : '공식 PDF 일괄 내보내기', { 선택: targets.length, 성공: ok, 실패: fail, 취소: _batchCancel, 내려받기: _logDl,
+    대상: targets.map(v => Object.assign({ 신청: v.Title||'', id: String(v._spId) }, _logRes.get(String(v._spId)) || { 결과: '취소' })) }); } catch(e) {}
 }
 function cancelBatchPdf() { _batchCancel = true; document.getElementById('batch-prog-cancel').disabled = true; document.getElementById('batch-prog-text').textContent = '지금 건까지 만들고 멈춥니다 …'; }
 function closeBatchProg() { document.getElementById('batch-prog-modal').style.display = 'none'; }
@@ -9706,8 +9712,13 @@ async function exportVoucherPdf() {
     if(detailEl) await appendAttachmentPagesToDoc(mainDoc, dataUrlToUint8, makeHeaderBytes, detailEl, btn);
     btn.innerHTML = '⏳ 생성 중...';
     if ((v.Status||'').trim() === DRAFT_STATUS) await stampDraftWatermark(mainDoc, dataUrlToUint8);
-    await downloadPdfDoc(mainDoc, 'ACC-Voucher_'+(v.Title||'detail')+'_공식양식_'+ds+'.pdf');
-  } catch(e){alert('PDF 생성 오류: '+e.message);console.error(e);}
+    const _pdfName = 'ACC-Voucher_'+(v.Title||'detail')+'_공식양식_'+ds+'.pdf';
+    await downloadPdfDoc(mainDoc, _pdfName);
+    // 출력 기록(10-10) — 파일을 내려받은 뒤. logAction 은 기다리지 않는 기록이라 출력이 늦어지지 않는다(실패해도 콘솔 경고만)
+    try { logAction('ACC Voucher', '공식 PDF 출력', { 신청: v.Title||'', id: String(v._spId||''), 제목: spText(v.PurposeTitle||'').slice(0,200), 상태: v.Status||'', 종류: '공식 전표 양식', 파일: _pdfName }); } catch(_le) {}
+  } catch(e){
+    try { const _v = window._currentVoucherDetail || {}; logAction('ACC Voucher', '공식 PDF 출력 실패', { 신청: _v.Title||'', id: String(_v._spId||''), 종류: '공식 전표 양식', 오류: String((e&&e.message)||e).slice(0,300) }); } catch(_le) {}
+    alert('PDF 생성 오류: '+e.message);console.error(e);}
   finally{if(printHost&&printHost.parentNode)printHost.parentNode.removeChild(printHost);btn.innerHTML=orig;btn.disabled=false;}
 }
 
@@ -9783,8 +9794,13 @@ async function exportVoucherDetailPdf() {
     await appendAttachmentPagesToDoc(mainDoc, dataUrlToUint8, makeHeaderBytes, contentEl, btn);
     btn.innerHTML = '⏳ 생성 중...';
     if ((v.Status||'').trim() === DRAFT_STATUS) await stampDraftWatermark(mainDoc, dataUrlToUint8);
-    await downloadPdfDoc(mainDoc, 'ACC-Voucher_'+(v.Title||'detail')+'_상세화면_'+ds+'.pdf');
-  } catch(e){alert('PDF 생성 오류: '+e.message);console.error(e);}
+    const _pdfName = 'ACC-Voucher_'+(v.Title||'detail')+'_상세화면_'+ds+'.pdf';
+    await downloadPdfDoc(mainDoc, _pdfName);
+    // 출력 기록(10-10) — 파일을 내려받은 뒤, 기다리지 않음
+    try { logAction('ACC Voucher', 'PDF 출력', { 신청: v.Title||'', id: String(v._spId||''), 제목: spText(v.PurposeTitle||'').slice(0,200), 상태: v.Status||'', 종류: '전표 상세 화면', 파일: _pdfName }); } catch(_le) {}
+  } catch(e){
+    try { const _v = window._currentVoucherDetail || {}; logAction('ACC Voucher', 'PDF 출력 실패', { 신청: _v.Title||'', id: String(_v._spId||''), 종류: '전표 상세 화면', 오류: String((e&&e.message)||e).slice(0,300) }); } catch(_le) {}
+    alert('PDF 생성 오류: '+e.message);console.error(e);}
   finally{
     restoreFns.forEach(([el, style])=>{ if(style===null) el.removeAttribute('style'); else el.setAttribute('style', style); });
     if(accSection){ accSection.style.display = accSectionOrigDisplay||''; }
