@@ -636,6 +636,9 @@ html, * { scrollbar-width: thin; scrollbar-color: #CBD5E1 transparent; }
 ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
 ::-webkit-scrollbar-thumb:hover { background: #94A3B8; background-clip: padding-box; }
+/* aps-web-fix acc_voucher(10-10) — Accounting 담당자 변경 팝업: 현재 담당자(긴 이름 · 띄어쓰기 없는 긴 메일)가
+   flex 줄에서 줄어들지도 줄바꿈되지도 않아 팝업 오른쪽에서 잘리던 것 → 줄바꿈해 전부 보이게(767px 이하 aps-mobile 과 같은 규칙). 인쇄는 그대로(screen 한정). */
+@media screen { #acc-chg-cur { min-width: 0; overflow-wrap: anywhere; } }
 </style>
 <script>
 // ?openId= 단독 상세보기 모드 판별을 최대한 앞당긴다.
