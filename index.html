@@ -3006,7 +3006,9 @@ async function loadEmployees(){
     const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
     window._employeeData = rows
       .map(r=>({dept:r['Department']||'', team:r['Team']||'', name:r['EngName']||'', email:(r['EMail']||r['email']||''),
-                boss:String(r['Boss']||'').trim(), boss2:String(r['Boss of Boss']||'').trim()}))   // boss = G열 팀장 · boss2 = H열 부서장 (Flex 연동 결재자, 10-01)
+                boss:String(r['Boss']||'').trim(), boss2:String(r['Boss of Boss']||'').trim(),   // boss = G열 팀장 · boss2 = H열 부서장 (Flex 연동 결재자, 10-01)
+                // 10-14: I · J · K 열 고정 조직도(Team Manager · Department Head · RD, 값은 EngName 또는 '-'). 헤더가 없는 예전 파일이면 셋 다 '' → 예전 규칙
+                tm:String(r['Team Manager']||'').trim(), dhd:String(r['Department Head']||'').trim(), rdc:String(r['RD']||'').trim()}))
       .filter(r=>r.email && r.name);
     console.log('[Employee] Loaded:', window._employeeData.length, 'entries from employee_search.xlsx');
     window._empLoaded = true;
@@ -3849,10 +3851,23 @@ function _insertBar(anchor, label){
    · 신청자가 명부에 없거나 상사 이름을 못 찾으면 예전처럼 직접 선택 드롭다운을 열어 두고 안내를 띄운다(차단하지 않음) — Logging_data 에 남긴다. */
 function flexNorm(s){ return String(s||'').trim().toLowerCase().replace(/\s+/g,' '); }
 function flexByName(name){ const k=flexNorm(name); if(!k||k==='-') return null; return (window._employeeData||[]).find(e=>flexNorm(e.name)===k)||null; }
+/* 10-14 고정 조직도 3열 — G · H 열(Boss · Boss of Boss)은 「신청자 기준 상대값」이라(팀장 → 본부장/RD) 팀장이 직접 올리면
+   부서장 단계에 RD(대표)가 들어갔다(원칙 위반). employee_search 에 I · J · K 열(Team Manager · Department Head · RD)이 있으면 그 값으로 정한다.
+     · Team Lead(TL)       = Team Manager → '-' 이면 Department Head → 그것도 '-' 이면 RD
+     · Department Head(MC) = Department Head → '-' 이면 RD
+   신청자 본인이 그 단계 결재자이면 본인이 결재한다(건너뛰지도 위로 올리지도 않음). 두 단계가 같은 사람(팀장 공석 팀 · 본부 없는 팀)이면 지금처럼 두 번 결재한다.
+   새 열이 없거나(HFS 반영 전 파일) 그 사람 행의 세 칸이 모두 비어 있으면 예전 그대로 Boss / Boss of Boss 로 정한다(fail-safe).
+   이름을 명부에서 못 찾으면 위 단계로 올리지 않고 예전처럼 직접 선택 + 안내 + 이력으로 둔다(조용히 다른 사람이 결재하지 않게). */
+function flexOrgPick(list){ for(const [col,v] of list){ const k=flexNorm(v); if(k && k!=='-') return {col, name:String(v).trim()}; } return {col:list[0][0], name:''}; }
 function flexResolve(){
   const me=[user&&user.email, user&&user.username].map(flexNorm).filter(Boolean);
   const rec=(window._employeeData||[]).find(e=>me.includes(flexNorm(e.email)))||null;
   if(!rec) return {rec:null, tl:null, dh:null};
+  if(rec.tm || rec.dhd || rec.rdc){
+    const t=flexOrgPick([['Team Manager',rec.tm],['Department Head',rec.dhd],['RD',rec.rdc]]);
+    const d=flexOrgPick([['Department Head',rec.dhd],['RD',rec.rdc]]);
+    return {rec, org:true, tl:flexByName(t.name), dh:flexByName(d.name), tlName:t.name, dhName:d.name, tlCol:t.col, dhCol:d.col};
+  }
   return {rec, tl:flexByName(rec.boss), dh:flexByName(rec.boss2)||flexByName(rec.boss)};
 }
 let _flexNote = {};   // tl/dh → 직접 선택으로 열린 이유(안내 문구)
@@ -3865,9 +3880,9 @@ function flexForRender(apLine){
     _flexNote[key] = r.nodata
       ? '⚠ 직원 명부(employee_search)를 읽지 못해 결재자를 직접 선택합니다 — 새로고침 후에도 같으면 IT팀(stk_it@hyosung.com)에 알려주세요.'
       : r.rec
-      ? '⚠ Flex 명부(employee_search)에서 '+what+' 「'+((key==='tl'?r.rec.boss:(r.rec.boss2||r.rec.boss))||'(빈칸)')+'」 을(를) 찾지 못해 직접 선택합니다 — IT팀(stk_it@hyosung.com)에 알려주세요.'
+      ? '⚠ Flex 명부(employee_search)에서 '+(r.org ? (key==='tl'?'팀장':'부서장')+'('+r[key+'Col']+')' : what)+' 「'+((r.org ? r[key+'Name'] : (key==='tl'?r.rec.boss:(r.rec.boss2||r.rec.boss)))||'(빈칸)')+'」 을(를) 찾지 못해 직접 선택합니다 — IT팀(stk_it@hyosung.com)에 알려주세요.'
       : '⚠ 신청자 계정이 Flex 명부(employee_search)에 없어 결재자를 직접 선택합니다 — IT팀(stk_it@hyosung.com)에 알려주세요.';
-    if(!r.nodata) why.push(role+': '+(r.rec ? (key==='tl' ? 'Boss 못 찾음('+(r.rec.boss||'')+')' : 'Boss of Boss 못 찾음('+(r.rec.boss2||'')+'/'+(r.rec.boss||'')+')') : '명부에 없음'));
+    if(!r.nodata) why.push(role+': '+(r.rec ? (r.org ? r[key+'Col']+' 못 찾음('+(r[key+'Name']||'')+')' : key==='tl' ? 'Boss 못 찾음('+(r.rec.boss||'')+')' : 'Boss of Boss 못 찾음('+(r.rec.boss2||'')+'/'+(r.rec.boss||'')+')') : '명부에 없음'));   // 10-14: 새 열로 정했으면 그 열 이름
   });
   if(why.length && !flexForRender._logged){ flexForRender._logged=true; try{ logAction('ACC Voucher','결재자 Flex 연동 실패',{ user:(user.email||user.username||''), reason: why.join(' · ') }); }catch(e){} }
   return {tl:r.tl, dh:r.dh};
@@ -4029,6 +4044,7 @@ function renderApproval() {
         </div></div>`;
     } else if(_flex[a.role==='TL'?'tl':'dh']){
       // Team Lead(= employee_search G열 Boss) · Department Head(= H열 Boss of Boss) — Flex 조직도에서 자동 지정(10-01).
+      // 10-14: I · J · K 열(Team Manager · Department Head · RD)이 있으면 그 고정 조직도로 정한다(flexResolve).
       // 입력칸 id 는 직접 선택 때와 같아 buildApprovers · 임시저장이 그대로 읽는다. 임시저장 복원은 이 칸을 덮어쓰지 않는다(.appr-flex).
       const fx=_flex[a.role==='TL'?'tl':'dh'];
       return `<div class="appr-block appr-fixed appr-flex">
