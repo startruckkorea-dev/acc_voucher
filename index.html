@@ -2889,11 +2889,92 @@ function logAction(systemName, action, detail) {
         timestampKST: `${dateStr} ${p(now.getUTCHours())}:${p(now.getUTCMinutes())}:${p(now.getUTCSeconds())}`,
         user: rawUser, system: systemName, action, detail: detail || {}
       });
-      await fetch(GRAPH + '/drives/' + driveId + '/root:' + path + ':/content', {
+      const _lr = await fetch(GRAPH + '/drives/' + driveId + '/root:' + path + ':/content', {
         method: 'PUT', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' }, body
       });
+      // 응답을 보지 않아 저장이 거부돼도(403 · 429 · 500) 흔적이 없었다(10-15, APS 10-10 과 같게) — 콘솔 경고만, 원 기능엔 영향 없음
+      if (!_lr.ok) console.warn('[Log] 기록 실패(무시됨, 원 기능엔 영향 없음): HTTP ' + _lr.status + ' —', systemName, action);
     } catch(e) { console.warn('[Log] 기록 실패(무시됨):', e.message); }
   })();
+}
+
+/* ══ 결재 · 데이터 변경 기록(10-15) ══
+   이 화면에서 한 상신 · 결재 승인/반려 · 철회 · 임시저장 삭제 · 관리자 변경(회계 결재자 변경 · B1 Doc No/Posting · 결재 의견 · 세대)을
+   Logging_data/ACC Voucher 에 남긴다 — 예전에는 APS 통합 결재함에서 처리한 결재만 Logging_data/APS 에 남아, 같은 승인이라도 어디서 눌렀는지에 따라
+   남고 안 남았다. action 이름 · detail 모양은 APS 감사 기록(「결재 승인」 · 「결재 반려」 · 신청번호 · 차수 · 역할 · 결과)에 맞춘다.
+   · 의견 · 사유는 원문 대신 글자 수만, 금액 · 계좌는 남기지 않는다.
+   · Graph 쓰기가 끝난 뒤에 남기고, 실패하면 「…실패」. 한 행위에 한 번만(성공을 남긴 뒤의 화면 갱신 오류는 다시 남기지 않는다).
+   · logAction 은 fire-and-forget — 기록이 실패 · 지연돼도 원 기능은 그대로. 10-01 제외 규칙(IT Manager · IT system service)도 그대로 적용되고,
+     UAT 는 logAction 이 아무것도 쓰지 않는다(쓰기 단추도 막혀 있다). */
+function avAudit(action, detail) {
+  try { logAction('ACC Voucher', action, detail); } catch (e) { console.warn('[Log] 기록 호출 실패(무시됨):', e && e.message); }
+}
+function avErr(e) { return String((e && e.message) || e || '').slice(0, 200); }
+function avLen(s) { const n = String(s || '').trim().length; return n ? n + '자' : ''; }
+// 전표 번호(Title) · 제목 — 상세 · 목록 캐시에서 찾는다(없으면 빈 값, 기록을 위해 다시 읽지 않는다)
+function avReqOf(spId) {
+  const id = String(spId || '');
+  const c = window._currentVoucherDetail;
+  const v = (c && String(c._spId) === id && !c._srcDraft) ? c
+    : ((typeof voucherListCache !== 'undefined' ? voucherListCache : []).find(x => String(x._spId) === id && !x._srcDraft)
+    || (typeof adminListCache !== 'undefined' ? adminListCache : []).find(x => String(x._spId) === id && !x._srcDraft)
+    || ((typeof approvalQueueCache !== 'undefined' ? approvalQueueCache : []).find(x => x._voucher && String(x._voucher._spId) === id) || {})._voucher || {});
+  return { 신청번호: v.Title || '', 제목: spText(v.PurposeTitle || '').slice(0, 200) };
+}
+
+/* ══ Accounting 결재라인 지정 안내(10-15) — 그 전표에서 「실제로 빠진」 단계만 ══
+   지정하면 renderApproval · buildApprovers 가 Accounting 담당자 · Accounting Head 는 늘 빼고, CFO 는 원래 들어갈 때(유형 규칙 · KRW DR 합계)만 뺀다.
+   예전 안내(상세 파란 박스 · 공식 양식 각주 · 결재표 SKIPPED)는 금액과 상관없이 「Accounting staff · Accounting Head · CFO」 제외,
+   「Team Lead · Dept Head 가 Accounting Head · CFO 에 해당」 이라고 적어, 결재선이 Team Lead 하나뿐인 100만원 미만 AP 건(08-21 · 08-26 규칙)에도
+   CFO 가 빠진 것처럼 보였다. 여기서 같은 규칙으로 다시 판정한다.
+   · 금액 = voucherKrwTotals(상세 · 공식 양식의 KRW 합계와 같은 값) DR.
+   · 규칙은 상신 시점 것 — 08-21(AP · AP_IMS · ADV CFO) · 08-27(GL MC · CFO) 이전 상신 건은 그때 규칙(CFO 필수)으로 본다(시각 = 변경 커밋 a7917d6 · 65cebe9).
+   · 유형 규칙을 모르면 예전 문구 그대로. */
+const ACC_RULE_HISTORY = [
+  { before: '2026-08-21T06:40:08Z', types: ['AP', 'AP_IMS', 'ADV'], set: { CFO: '필수' } },
+  { before: '2026-08-27T01:48:37Z', types: ['GL'], set: { MC: '필수', CFO: '필수' } },
+];
+function accRulesAt(type, submittedIso) {
+  const base = APPROVAL_RULES[type];
+  if (!base) return null;
+  const at = submittedIso ? new Date(submittedIso).getTime() : NaN;
+  const r = Object.assign({}, base);
+  if (isFinite(at)) ACC_RULE_HISTORY.forEach(h => { if (h.types.includes(type) && at < new Date(h.before).getTime()) Object.assign(r, h.set); });
+  return r;
+}
+function accRuleNeeded(rule, amt) {   // renderApproval · buildApprovers 의 needed() 와 같은 판정
+  if (!rule || rule === '-') return false;
+  if (rule === '필수' || rule === '필요시') return true;
+  const m = String(rule).replace(/,/g, '').replace(/\s/g, '').match(/^([<>]=?)([\d]+)$/);
+  if (!m) return true;
+  const op = m[1], th = parseInt(m[2]);
+  if (op === '<') return amt < th; if (op === '<=') return amt <= th;
+  if (op === '>') return amt > th; if (op === '>=') return amt >= th;
+  return true;
+}
+function accLineSkipInfo(v, lines_data) {
+  const OLD = { roles: ['ACC', 'AMGR', 'CFO'], excluded: 'Accounting staff · Accounting Head · CFO',
+    cover: 'the Team Lead and Dept Head steps already correspond to the Accounting Head and the CFO', notReq: '' };
+  const rules = accRulesAt(v && v.VoucherType, v && v.SubmittedDate);
+  if (!rules) return OLD;
+  const amt = voucherKrwTotals(v, lines_data).dr;
+  const tl = accRuleNeeded(rules.TL, amt), mc = accRuleNeeded(rules.MC, amt), cfo = accRuleNeeded(rules.CFO, amt);
+  const fmt = n => Math.round(n || 0).toLocaleString('en-US');
+  const thOf = rule => { const m = String(rule || '').replace(/[,\s]/g, '').match(/^>=?(\d+)$/); return m ? Number(m[1]) : null; };
+  const out = { roles: ['ACC', 'AMGR'].concat(cfo ? ['CFO'] : []), excluded: ['Accounting staff', 'Accounting Head'].concat(cfo ? ['CFO'] : []).join(' · ') };
+  out.cover = (tl && cfo && mc) ? OLD.cover
+    : tl ? 'the Team Lead step already corresponds to the Accounting Head'
+    : '';
+  // 금액 기준에 못 미쳐 원래 없던 단계 — 「지정으로 뺀 것」 이 아님을 적는다
+  const nr = [];
+  if (!cfo && rules.CFO && rules.CFO !== '-') nr.push(['CFO', thOf(rules.CFO)]);
+  if (!mc && rules.MC && rules.MC !== '-') nr.push(['Dept Head', thOf(rules.MC)]);
+  if (nr.length) {
+    const ths = [...new Set(nr.map(x => x[1]))];
+    out.notReq = nr.map(x => x[0]).join(' and ') + (nr.length > 1 ? ' were' : ' was') + ' not required'
+      + (ths.length === 1 && ths[0] != null ? ' — KRW ' + fmt(amt) + ' is below the KRW ' + fmt(ths[0]) + ' threshold' : ' for this amount — KRW ' + fmt(amt));
+  } else out.notReq = '';
+  return out;
 }
 
 // 로그인 계정의 email(mail)과 username(UPN)이 다를 수 있어 둘 다 비교 (GW 패턴 동일)
@@ -5230,6 +5311,7 @@ async function saveVoucher(status) {
 
   // 진행 팝업 — 상신과 임시저장 모두 띄운다(결재선 단계는 상신에서만).
   const _spOn = status === '대기' || _isDraft;
+  let _avSubmitLogged = false;   // 상신 기록(10-15) — 한 번만
   try {
     if(btn){btn.disabled=true; btn.textContent='저장 중...';}
     await ensureSiteId();
@@ -5471,6 +5553,7 @@ async function saveVoucher(status) {
         spStep('appr','err', _made+' / '+approvers.length);
         console.error('[상신] 결재선 생성 실패:', ae && ae.message);
         await rollbackIncompleteVoucher(requestId, voucherId, _made, approvers.length);
+        _avSubmitLogged = true; avAudit('상신 실패', { 신청번호: voucherId, id: String(requestId), 유형: type, 결과: '결재선 생성 실패 — 전표 철회 처리', 결재선: _made + ' / ' + approvers.length, 오류: avErr(ae) });
         if(btn){btn.disabled=false; _isDraft ? (btn.innerHTML = '<span class="bd-dot"></span>Draft Submit') : (btn.textContent = 'Submit');}
         return;   // 완료 안내로 넘어가지 않는다
       }
@@ -5489,6 +5572,7 @@ async function saveVoucher(status) {
           spStep('appr','err', _cnt+' / '+approvers.length);
           console.error('[상신] 결재선 개수 불일치:', _cnt, '/', approvers.length);
           await rollbackIncompleteVoucher(requestId, voucherId, _cnt, approvers.length);
+          _avSubmitLogged = true; avAudit('상신 실패', { 신청번호: voucherId, id: String(requestId), 유형: type, 결과: '결재선 개수 불일치 — 전표 철회 처리', 결재선: _cnt + ' / ' + approvers.length });
           if(btn){btn.disabled=false; _isDraft ? (btn.innerHTML = '<span class="bd-dot"></span>Draft Submit') : (btn.textContent = 'Submit');}
           return;
         }
@@ -5532,6 +5616,9 @@ async function saveVoucher(status) {
     // 안내에 들어가는 첨부 경고에는 사용자가 붙인 파일 이름이 섞이므로 이스케이프해서 넣는다.
     const _warnHtml = [_attWarn, _cleanWarn].filter(Boolean).map(w => '⚠️ ' + escHtml(w).replace(/\n/g,'<br>')).join('<br><br>');
     if(status==='대기'){
+      _avSubmitLogged = true;
+      avAudit('상신', { 신청번호: voucherId, id: String(requestId), 제목: purposeTitle.slice(0, 200), 유형: type, 결재단계: approvers.length,
+        회계라인지정: isAccLineSkipped() ? '예' : '', RD제외: isRdExempt(type) ? '예' : '', 첨부: _attWarn ? '일부 실패' : '', 이어서작성: _resumingDraftId ? '예' : '' });
       spDone(true, _warnHtml || '결재선이 정상적으로 생성되었습니다.');
     } else if (_isDraft) {
       spDone(true,
@@ -5547,6 +5634,7 @@ async function saveVoucher(status) {
     resetForm(); await loadMyList(); switchTab('list');
   } catch(e) {
     console.error('saveVoucher error:', e);
+    if (!_isDraft && !_avSubmitLogged) avAudit('상신 실패', { 신청번호: /_ID-TEMP$/.test(voucherId) ? '' : voucherId, 유형: type, 오류: avErr(e) });
     // 진행 모달이 떠 있으면 그 안에서 마무리한다(전표가 이미 만들어졌을 수 있어 재상신 여부를 알려야 함)
     if(_spActive) spDone(false,
       '처리 중 오류가 발생했습니다: '+escHtml((e&&e.message)||'')+'<br>'
@@ -6262,11 +6350,21 @@ async function processApproval(apprId, action, reqId, comment='', aprCode='') {
   // 이어지는 요청이 엉뚱한 세대로 나간다. 손에 쥔 값은 폴링이 바꿀 수 없다.
   const _v = await useVolumeOf(aprCode ? { _aprCode: aprCode, _spId: reqId } : window._currentVoucherDetail);
   const _APR = (_v && _v.id) || LIST_APPROVALS;
+  // 감사 기록(10-15) — APS 「결재 승인」 · 「결재 반려」 와 같은 모양. 결재행을 쓴 뒤 오류도 남기고, 성공을 남긴 뒤에는 다시 남기지 않는다.
+  let _avCur = null, _avWrote = false, _avLogged = false;
+  const _avLog = (result, what) => {
+    _avLogged = true;
+    const f = (_avCur && _avCur.fields) || {}, rq = avReqOf(reqId), dg = aacDelegatorOf(f.ApproverEmail);
+    avAudit(what || (action === '승인' ? '결재 승인' : '결재 반려'), { 신청번호: f.VoucherID || rq.신청번호, id: String(reqId), 제목: rq.제목, 결과: result,
+      차수: f.ApprovalOrder == null ? '' : f.ApprovalOrder, 역할: String(f.ApproverRole || ''), 결재자: f.ApproverEmail || '',
+      대리: dg ? '예 — ' + (f.ApproverName || dg.name || f.ApproverEmail) + ' 님 대신' : '', 의견: avLen(comment), 목록: _APR, 결재행: String(apprId) });
+  };
   try {
     const t = await token();
     const curRes = await fetch(`${GRAPH}/sites/${siteId}/lists/${_APR}/items/${apprId}?$expand=fields`,
       {headers:{Authorization:'Bearer '+t}});
     const cur = await curRes.json();
+    _avCur = cur;
     if(cur.fields.Status !== '대기') {
       showAccAlert('이미 처리된 결재 항목입니다.', '다른 창에서 처리되었거나 이미 완료된 항목입니다.', '⚠️');
       loadApprovalQueue();
@@ -6292,8 +6390,10 @@ async function processApproval(apprId, action, reqId, comment='', aprCode='') {
         ApprovalDate: new Date().toISOString()
       }, cur.fields)
     });
+    _avWrote = true;
     if(action === '반려') {
       await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${reqId}/fields`, 'PATCH', {Status:'반려'});
+      _avLog('반려 — 전표 반려');
     } else {
       // 다음 잠긴 결재자를 '대기'로 풀어줌, 없으면 전체 승인완료.
       // 예전에는 Approvals 전량(수백 건)을 받아 클라이언트에서 걸렀는데,
@@ -6306,6 +6406,7 @@ async function processApproval(apprId, action, reqId, comment='', aprCode='') {
       // 이 상태에서 '승인완료'로 넘기면 남은 결재자를 건너뛴 채 마감된다.
       if(!rows.length) {
         console.error('[결재] 결재 행 조회 결과가 비어 있음 — 승인완료 전환 중단. RequestID:', reqId);
+        _avLog('승인 기록 · 다음 단계로 넘기지 못함(결재 행 조회 0건)');
         showAccAlert('승인은 기록되었으나 다음 단계로 넘기지 못했습니다.',
           '잠시 후 결재함에서 상태를 다시 확인해 주세요. 계속 같은 증상이면 IT팀(stk_it@hyosung.com)에 알려주세요.', '⚠️');
         closeDetailModal();
@@ -6317,8 +6418,10 @@ async function processApproval(apprId, action, reqId, comment='', aprCode='') {
         .sort((a,b)=>a.fields.ApprovalOrder-b.fields.ApprovalOrder);
       if(next.length) {
         await api(`/sites/${siteId}/lists/${_APR}/items/${next[0].id}/fields`, 'PATCH', {Status:'대기'});
+        _avLog('승인 — ' + (next[0].fields.ApprovalOrder ?? '') + '차 결재자에게 넘김');
       } else {
         await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${reqId}/fields`, 'PATCH', {Status:'승인완료'});
+        _avLog('승인 — 최종 승인(전표 승인완료)');
       }
     }
     showAccAlert(action+' 처리되었습니다.', '', action==='반려'?'❌':'✅');
@@ -6326,6 +6429,7 @@ async function processApproval(apprId, action, reqId, comment='', aprCode='') {
     loadApprovalQueue();
   } catch(e) {
     console.error('processApproval error:', e);
+    if (!_avLogged) { if (_avWrote) _avLog('결재행은 기록됨 · 이후 단계 오류 — ' + avErr(e)); else _avLog('처리 안 함 — ' + avErr(e), action === '승인' ? '결재 승인 실패' : '결재 반려 실패'); }
     showAccAlert('오류가 발생했습니다.', e.message, '⚠️');
   }
 }
@@ -6427,11 +6531,13 @@ async function addAprVolume() {
   if (activate) VOL_CONFIG.currentApr = code;
   try {
     await saveVolumeConfig();
+    avAudit('세대 등록', { 세대: code, 목록: id, 이름: label || name, 활성화: activate ? '예' : '' });   // 10-15
     applyCurrentVolume();
     showAccAlert('세대가 등록되었습니다.', activate ? `${code} — 이제부터 신규 전표는 여기에 기록됩니다.` : `${code} 등록 완료 (미활성 상태)`, '✅');
     closeVolumeModal();
     refreshVolStatusBar();
   } catch(e) {
+    avAudit('세대 등록 실패', { 세대: code, 목록: id, 오류: avErr(e) });   // 10-15
     showAccAlert('저장 실패', e.message, '⚠️');
   }
 }
@@ -6442,11 +6548,13 @@ async function switchAprVolume(code) {
   VOL_CONFIG.currentApr = code;
   try {
     await saveVolumeConfig();
+    avAudit('세대 전환', { 세대: code });   // 10-15
     applyCurrentVolume();
     showAccAlert('전환되었습니다.', code+'가 현재 활성 세대로 설정되었습니다.', '✅');
     renderVolumeList();
     refreshVolStatusBar();
   } catch(e) {
+    avAudit('세대 전환 실패', { 세대: code, 오류: avErr(e) });   // 10-15
     showAccAlert('전환 실패', e.message, '⚠️');
   }
 }
@@ -6856,6 +6964,7 @@ async function exportAdminExcel(){
   const btn = document.querySelector('button[onclick="exportAdminExcel()"]');
   const orig = btn ? btn.textContent : '';
   if(btn){ btn.disabled = true; btn.textContent = '⏳ 생성 중...'; }
+  let _xlLog = null;   // 10-15: 기록은 파일을 만든 뒤에(예전에는 만들기 전에 남겨 실패해도 「Excel 내보내기」 가 남았다)
   try {
     await ensureSiteId();
     await loadVolumeConfig();
@@ -6889,7 +6998,7 @@ async function exportAdminExcel(){
     if(ft) items = items.filter(i=>i.fields.VoucherType===ft);
     if(fk) items = items.filter(i=>((i.fields.RequesterEmail||'')+' '+(i.fields.Title||'')+' '+(i.fields.BPName||'')+' '+(i.fields.B1DocNo||'')).toLowerCase().includes(fk));
     if(!items.length){ showAccAlert('내보낼 데이터가 없습니다.', '', '⚠️'); return; }
-    logAction('ACC Voucher', 'Excel 내보내기', { 건수: items.length, 필터: { 상태: fs||'전체', 유형: ft||'전체', 검색어: fk||'' } });
+    _xlLog = { 건수: items.length, 필터: { 상태: fs||'전체', 유형: ft||'전체', 검색어: fk||'' } };
 
     // 최대 결재 단계 수 계산 (결재자는 이미 각 항목의 _apprList에 볼륨 내부에서 정확히 매칭되어 있음)
     let maxStep = 0;
@@ -6995,8 +7104,10 @@ async function exportAdminExcel(){
     const now = new Date(new Date().getTime()+9*3600*1000);
     const ds = now.getUTCFullYear()+String(now.getUTCMonth()+1).padStart(2,'0')+String(now.getUTCDate()).padStart(2,'0')+'_'+String(now.getUTCHours()).padStart(2,'0')+String(now.getUTCMinutes()).padStart(2,'0');
     XLSX.writeFile(wb, 'ACC_Voucher_Admin_'+ds+'.xlsx');
+    logAction('ACC Voucher', 'Excel 내보내기', _xlLog);
   } catch(e) {
     console.error('exportAdminExcel error:', e);
+    try { logAction('ACC Voucher', 'Excel 내보내기 실패', Object.assign({}, _xlLog || {}, { 오류: avErr(e) })); } catch(_le) {}
     showAccAlert('Excel 생성 실패', e.message, '⚠️');
   } finally {
     if(btn){ btn.disabled = false; btn.textContent = orig; }
@@ -7038,6 +7149,8 @@ async function saveB1Doc(spId, b1DocNo, postingDone) {
       B1UpdatedAt: updatedAt,
       B1ChangeLog: JSON.stringify(logs)
     });
+    avAudit('B1 Doc No · Posting 저장', { 신청번호: cur.Title || avReqOf(spId).신청번호, id: String(spId),   // 10-15
+      B1DocNo: (fromB1 || '-') + ' → ' + (b1DocNo || '-'), Posting: (fromPosting || '미완료') + ' → ' + (postingDone || '미완료'), 변경: changed ? '예' : '같은 값' });
     // 캐시 갱신
     const cached = adminListCache.find(v=>v._spId===spId);
     if(cached){ cached.B1DocNo=b1DocNo; cached.PostingDone=postingDone; cached.B1UpdatedBy=updatedBy; cached.B1UpdatedAt=updatedAt; cached.B1ChangeLog=JSON.stringify(logs); }
@@ -7048,6 +7161,7 @@ async function saveB1Doc(spId, b1DocNo, postingDone) {
   } catch(e){
     // LIST_REQUESTS가 잘못 잡혔거나 컬럼이 없으면 여기로 온다. 원인 추적을 위해 대상까지 남긴다.
     console.error('[B1] saveB1Doc error:', e.message, '| list:', LIST_REQUESTS, '| spId:', spId);
+    avAudit('B1 Doc No · Posting 저장 실패', Object.assign(avReqOf(spId), { id: String(spId), B1DocNo: b1DocNo || '-', 오류: avErr(e) }));   // 10-15
     // 읽기 전용 권한만 있는 계정(예: 외부 회계법인)은 조회는 되지만 저장에서 403이 난다.
     // 원인을 못 알아채면 "저장이 안 된다"로만 인식하게 되므로 명시적으로 안내한다.
     const denied = /403|Forbidden|accessDenied|denied/i.test(e.message||'');
@@ -7095,6 +7209,10 @@ async function saveAccApproverChange(){
   const btn = document.getElementById('acc-chg-save');
   btn.disabled = true; btn.textContent = 'Saving...';
   const { spId, aprId, curName, curEmail } = _accChgCtx;
+  // 감사 기록(10-15) — APS 「결재자 교체」 와 같은 내용(이전 → 새 · 결재행). 사유는 글자 수만.
+  let _avRow = false, _avLogged = false;
+  const _avLog = (what, more) => { _avLogged = true; avAudit(what, Object.assign(avReqOf(spId), { id: String(spId), 결재행: String(aprId),
+    이전: (curName ? curName + ' ' : '') + '<' + (curEmail || '-') + '>', 새: (name ? name + ' ' : '') + '<' + email + '>', 사유: avLen(reason) }, more)); };
   try {
     // 전역 LIST_APPROVALS 대신 반환값을 직접 쓴다.
     // await 사이에 60초 배지 폴링이 끼어들어 applyCurrentVolume() 으로 전역을 되돌리면,
@@ -7112,6 +7230,7 @@ async function saveAccApproverChange(){
     await api(`/sites/${siteId}/lists/${_APR2}/items/${aprId}/fields`, 'PATCH', {
       ApproverName: name, ApproverEmail: email
     });
+    _avRow = true;
 
     // ③ 이력 append — B1ChangeLog 와 같은 방식
     const now = new Date(new Date().getTime()+9*3600*1000);
@@ -7126,6 +7245,7 @@ async function saveAccApproverChange(){
     await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${spId}/fields`, 'PATCH', {
       AccChangeLog: JSON.stringify(logs)
     });
+    _avLog('결재자 변경', { 결과: '완료' });
     if(window._currentVoucherDetail && window._currentVoucherDetail._spId===spId){
       window._currentVoucherDetail.AccChangeLog = JSON.stringify(logs);
     }
@@ -7137,6 +7257,7 @@ async function saveAccApproverChange(){
     renderAccChangeLog(JSON.stringify(logs));
     await loadApprovalHistory(spId);
   } catch(e){
+    if (!_avLogged) { if (_avRow) _avLog('결재자 변경', { 결과: '결재선 변경됨 · 변경 이력 저장 실패 — ' + avErr(e) }); else _avLog('결재자 변경 실패', { 오류: avErr(e) }); }
     const denied = /403|Forbidden|accessDenied|denied/i.test(e.message||'');
     showAccAlert(denied ? '변경 권한이 없습니다' : '변경 실패',
       denied ? '결재선을 수정할 권한이 없습니다. STK IT에 권한 조정을 요청해 주세요.' : (e.message||String(e)), '⚠️');
@@ -7837,11 +7958,13 @@ async function deleteDraft(spId) {
     // 같은 문서 라이브러리에 남아 SharePoint 검색에 걸린다. 그래서 삭제만 함께 정리한다.
     await deleteDraftAttachments(f.Title || '');
     await api(`/sites/${siteId}/lists/${LIST_DRAFTS}/items/${spId}`, 'DELETE');
+    avAudit('임시저장 삭제', { 신청번호: f.Title || '', id: String(spId), 제목: spText(f.PurposeTitle || '').slice(0, 200) });   // 10-15
     if (_resumingDraftId === String(spId)) _resumingDraftId = null;
     showAccAlert('삭제되었습니다.', '임시저장 전표와 첨부파일을 지웠습니다.', '🗑️');
     await loadMyList();
   } catch(e) {
     console.error('[Draft] 삭제 실패:', e);
+    avAudit('임시저장 삭제 실패', { id: String(spId), 오류: avErr(e) });   // 10-15
     showAccAlert('삭제하지 못했습니다.', e.message, '⚠️');
   }
 }
@@ -7858,6 +7981,7 @@ async function withdrawRequest(spId) {
   // 이어지는 요청이 엉뚱한 세대로 나간다. 손에 쥔 값은 폴링이 바꿀 수 없다.
   const _v = await useVolumeOf(window._currentVoucherDetail); // 이 전표의 결재이력이 있는 Approvals 세대로 전환
   const _APR3 = (_v && _v.id) || LIST_APPROVALS;
+  let _avWdLogged = false;   // 철회 기록(10-15) — 한 번만
   try {
     await ensureSiteId();
     // 1차 결재자가 아직 미처리(대기)인 경우에만 철회 가능
@@ -7917,11 +8041,14 @@ async function withdrawRequest(spId) {
     }
     // Step 2. Requests → '철회'
     await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${spId}/fields`, 'PATCH', {Status:'철회'});
+    _avWdLogged = true;
+    avAudit('철회', Object.assign(avReqOf(spId), { id: String(spId), 결과: _resuming ? '중단된 철회 마무리' : '철회', 잠근결재행: _patched }));   // 10-15
     showAccAlert('전표가 철회되었습니다.',
       _resuming ? `이전에 중단된 철회를 마무리했습니다. (결재 단계 ${_patched}건 정리)` : '', '✅');
     loadMyList();
   } catch(e) {
     console.error('withdrawRequest error:', e);
+    if (!_avWdLogged) avAudit('철회 실패', Object.assign(avReqOf(spId), { id: String(spId), 오류: avErr(e) }));   // 10-15
     showAccAlert('철회 처리 중 오류가 발생했습니다.', e.message, '⚠️');
   }
 }
@@ -8234,13 +8361,16 @@ async function openVoucherSP(spId, fromTab, isDraft){
       // RD 승인 제외 안내와 같은 3단 구조(제목 → 라벨:값 → 회색 설명)로 맞춘다.
       const _acLbl = t => '<span style="display:inline-block;min-width:78px;text-align:right;color:#3d7fb8;font-weight:600">' + t + '</span>'
                         + '<span style="display:inline-block;width:15px;text-align:center;color:#8fb8d8;font-weight:600">:</span>';
+      // 10-15: 그 전표에서 실제로 빠진 단계 · 설명(accLineSkipInfo) — 예전엔 금액과 상관없이 CFO 까지 적었다
+      const _acInfo = accLineSkipInfo(v, lines_data);
+      const _acCover = _acInfo.cover ? _acInfo.cover.charAt(0).toUpperCase() + _acInfo.cover.slice(1) + ', so the duplicate accounting review was excluded' : 'The duplicate accounting review was excluded';
       return '<div style="margin-top:10px;background:#eaf3fd;border:1px solid #b6d7f2;border-radius:8px;padding:9px 12px">'
         + '<div style="font-size:.71rem;font-weight:700;color:#0b5fa5;margin-bottom:5px">Accounting Approval Line — Duplicate accounting review excluded</div>'
         + '<div style="font-size:.68rem;color:#0b5fa5;line-height:1.65">'
         + _acLbl('Submitted by') + '<span style="font-weight:600">' + escHtml(v.RequesterEmail || v.RequesterName || '-') + '</span><br>'
-        + _acLbl('Excluded') + '<span style="font-weight:700">Accounting staff · Accounting Head · CFO</span>'
+        + _acLbl('Excluded') + '<span style="font-weight:700">' + escHtml(_acInfo.excluded) + '</span>'
         + '</div>'
-        + '<div style="font-size:.62rem;color:#a19f9d;margin-top:5px">(The Team Lead and Dept Head steps already correspond to the Accounting Head and the CFO, so the duplicate accounting review was excluded)</div>'
+        + '<div style="font-size:.62rem;color:#a19f9d;margin-top:5px">(' + escHtml(_acCover + (_acInfo.notReq ? '. ' + _acInfo.notReq : '')) + ')</div>'
         + '</div>';
     })() : ''}
     <div id="voucher-appr-action-btns"></div>   <!-- 내 차례면 .modal-action(승인 · 반려)이 들어온다. 상세 PDF 에서는 숨긴다 -->
@@ -8746,6 +8876,7 @@ async function submitAdminComment(reqSpId) {
   const _blocked = await pkfBlockedFor(reqSpId);
   if (_blocked) { showAccAlert('등록 권한이 없습니다', _blocked, '🔒'); return; }
   await ensureSiteId();
+  let _avCmLogged = false;   // 결재 의견 기록(10-15) — 한 번만
   try {
     const check = await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${reqSpId}/fields`);
     if(check.Status==='승인완료'||check.Status==='철회') {
@@ -8765,11 +8896,14 @@ async function submitAdminComment(reqSpId) {
     await api(`/sites/${siteId}/lists/${LIST_REQUESTS}/items/${reqSpId}/fields`, 'PATCH', {
       AdminComments: JSON.stringify(existing)
     });
+    _avCmLogged = true;
+    avAudit('결재 의견 등록', { 신청번호: check.Title || avReqOf(reqSpId).신청번호, id: String(reqSpId), 상태: check.Status || '', 의견: avLen(comment) });   // 10-15
     textEl.value='';
     await loadAdminComments(reqSpId);
     if(btn){btn.disabled=false;btn.textContent='등록';}
   } catch(e) {
     console.error('submitAdminComment error:', e);
+    if (!_avCmLogged) avAudit('결재 의견 등록 실패', Object.assign(avReqOf(reqSpId), { id: String(reqSpId), 오류: avErr(e) }));   // 10-15
     // 읽기 전용 권한 계정은 조회는 되지만 등록에서 403이 난다 — 원인을 명확히 알린다.
     const denied = /403|Forbidden|accessDenied|denied/i.test(e.message||'');
     showAccAlert(denied ? '등록 권한이 없습니다' : '의견 저장 실패',
@@ -8865,7 +8999,9 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
   // 회계팀 담당자가 상신해 Acc. Specialist / Acc. Manager / CFO 단계가 제외된 경우.
   // 원래 불필요한 단계(NOT REQUIRED)와 구분되도록 별도 표기를 쓴다.
   const SKIPPED_BADGE='<span style="display:inline-block;background:#fdf6e3;color:#8a6116;border:1px solid #f0d9a0;font-size:8.5px;font-weight:800;padding:2px 7px;border-radius:3px;letter-spacing:.2px;white-space:nowrap">SKIPPED</span>';
-  const ACC_SKIP_ROLES = ['ACC','AMGR','CFO'];
+  // 10-15: CFO 는 금액상 원래 들어갈 단계였을 때만 SKIPPED — 아니면 NOT REQUIRED · 금액 조건 그대로(accLineSkipInfo)
+  const _accSkipInfo = isAccLineSkippedDoc ? accLineSkipInfo(v, lines_data) : null;
+  const ACC_SKIP_ROLES = _accSkipInfo ? _accSkipInfo.roles : ['ACC','AMGR','CFO'];
   /* 역할은 꼬리를 뗀 본래 값으로 맞춘다. 대리 처리된 행은 aacPatchWith 가 ApproverRole 을
      'CFO · 대리(이름 <메일>)' 로 바꾸므로, 날값으로 비교하면 그 단계가 비어 NOT REQUIRED 로 찍혔다(09-23). */
   const apprByRole={}; (apprList||[]).forEach(a=>{apprByRole[aacRoleBase(a.ApproverRole)]=a;});
@@ -9100,8 +9236,9 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
       ? '<div style="margin-top:4px;border:1px solid #b6d7f2;background:#eaf3fd;border-radius:3px;padding:6px 9px;font-size:8.5px;color:#0b5fa5;line-height:1.55">'+
           '<b>※ Accounting Approval Line — Submitted by an Accounting Team Member</b><br>'+
           'The requester ('+esc(requesterKoName)+') is a member of the Accounting team. '+
-          'For Accounting staff, the Team Lead and Dept Head steps already correspond to the Accounting Head and the CFO. '+
+          (_accSkipInfo.cover ? 'For Accounting staff, '+esc(_accSkipInfo.cover)+'. ' : '')+
           'The duplicate accounting review was therefore excluded in accordance with internal accounting policy.'+
+          (_accSkipInfo.notReq ? ' '+esc(_accSkipInfo.notReq)+'.' : '')+
         '</div>'
       : '')+
     // RD 승인 제외 건은 결재 단계가 하나 빠진 상태이므로, 그 근거를 양식 안에 남겨 감사 시 확인 가능하게 한다.
