@@ -10067,16 +10067,9 @@ function deepLinkFinish() {
 async function consumeDeepLink() {
   try { await _consumeDeepLink(); } finally { deepLinkFinish(); }
 }
-/* 권한 — 신청자 · 그 전표의 결재자(대리 위임 포함) · 관리자만. 상세 열기가 불러온 전표와 결재행을 그대로 쓴다
-   (ACC 는 결재행이 세대별 목록에 나뉘어 있어, 따로 조회하면 세대 판정을 중복하게 된다). */
-function deepLinkAllowedFor(id) {
-  const v = window._currentVoucherDetail;
-  if (!v || String(v._spId) !== String(id)) return 'notfound';
-  const mine = [user && user.email, user && user.username].map((x) => String(x || '').toLowerCase()).filter(Boolean);
-  if (mine.includes(String(v.RequesterEmail || '').toLowerCase())) return true;
-  if (ADMIN_EMAILS.map((e) => String(e || '').toLowerCase()).some((e) => e && mine.includes(e))) return true;
-  return (window._dlApprovers || []).some((e) => isMyAppr(e));
-}
+/* 권한(10-15 정정) — 예전 deepLinkAllowedFor 는 상세를 연 「뒤」 에 판정했다. 그런데 openVoucherSP 는 결재 이력을 기다리지 않고
+   돌아와 그 시점 _dlApprovers 가 비어 있었고, 현재 · 지난 결재자와 대리인이 「권한 없음」 으로 막혔다(막힐 때도 숨김 모달 안에 상세 · 첨부 링크가 이미 그려짐).
+   이제 ?openId= 와 같은 _oidDecide 로 전표 + 결재행을 먼저 읽어 판정하고, 허용일 때만 상세를 그린다 — 아래 _dlOpenChecked. */
 /* ── ?openId= 단독 상세 보기 권한 확인(10-15) ──
    SSC · IT Ticket 등 다른 시스템의 「관련 전표」 링크로 들어오는 단독 상세 보기는 권한 확인 없이 아무에게나 상세를 열었다
    (실제 사례: 관련 없는 직원이 남의 전표 상세 PDF 출력). ?id= 딥링크와 같은 원칙으로 막는다.
@@ -10095,7 +10088,7 @@ function _oidLoader(icon, text, sub, withHome) {
     + '<div class="sl-sub">' + escHtml(sub) + '</div>'
     + (withHome ? '<button onclick="location.href=location.pathname" style="margin-top:6px;background:#0078d4;color:#fff;border:none;border-radius:8px;padding:8px 20px;font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit">전체 시스템 열기</button>' : '');
 }
-async function _oidDecide(id) {
+async function _oidDecide(id, withList) {   // withList(10-15): 신청자 · 명단으로 허용돼도 결재행을 읽어 돌려준다(?id= 딥링크의 「내 차례」 판단용)
   // 전표 · 결재행을 상세 없이 먼저 읽는다(openVoucherSP 와 같은 목록 · 세대).
   if (!/^\d+$/.test(String(id))) return { allow: 'notfound' };
   let v = null;
@@ -10108,15 +10101,20 @@ async function _oidDecide(id) {
   } catch (e) { console.warn('[openId 권한] 전표 조회 실패:', e && e.message); }
   if (!v) return { allow: 'notfound' };
   const mine = myIdentities();
-  if (mine.includes(String(v.RequesterEmail || '').trim().toLowerCase())) return { allow: true, v };
+  const _early = async () => {   // 결재행 없이 허용 — withList 면 결재행도 읽어 둔다(실패해도 허용은 그대로, list=null)
+    if (!withList) return { allow: true, v };
+    let l = null; try { await loadMyDelegations(); l = await fetchApprovalListDirect(v); } catch (e) {}
+    return { allow: true, v, list: l };
+  };
+  if (mine.includes(String(v.RequesterEmail || '').trim().toLowerCase())) return _early();
   const cfgOk = !_cfgLoadFailed && !!_sysConfig;
-  if (cfgOk && (meMatches(ADMIN_EMAILS) || meMatches(IT_EMAILS) || isPkfUser())) return { allow: true, v };
+  if (cfgOk && (meMatches(ADMIN_EMAILS) || meMatches(IT_EMAILS) || isPkfUser())) return _early();
   // 결재자(대리 위임 포함) — 위임 맵을 먼저 읽어야 대리인을 판정할 수 있다.
   let list = null;
   try { await loadMyDelegations(); } catch (e) {}
   try { list = await fetchApprovalListDirect(v); }
   catch (e) { console.warn('[openId 권한] 결재 이력 조회 실패:', e && e.message); }
-  if (list && list.some((a) => isMyAppr(a.ApproverEmail))) return { allow: true, v };
+  if (list && list.some((a) => isMyAppr(a.ApproverEmail))) return { allow: true, v, list };
   if (!list) return { allow: false, v, why: 'apr', reason: '결재 이력을 읽지 못해 결재자 여부를 판정할 수 없음' };
   if (!cfgOk) return { allow: false, v, why: 'cfg', reason: '설정 파일을 읽지 못함 — 신청자 · 결재자 아님' };
   return { allow: false, v, why: 'role', reason: '신청자 · 결재자 · 관리자 · IT · PKF 아님' };
@@ -10173,21 +10171,51 @@ async function _consumeDeepLink() {
   if (tab) switchTab(tab);
   if (!(id > 0)) return;
   try { await loadMyDelegations(); } catch (e) {}          // 대리 위임까지 판정하려면 먼저 읽어야 한다
-  window._currentVoucherDetail = null; window._dlApprovers = [];
-  try { await openVoucherSP(String(id), 'approval'); } catch (e) { console.warn('[딥링크] 상세 열기 실패:', e.message); }
-  const allow = deepLinkAllowedFor(id);
-  if (allow !== true) {
-    if (typeof closeDetailModal === 'function') closeDetailModal();
+  await _dlOpenChecked(id);
+}
+// 10-15: 판정(전표 + 결재행) → 허용일 때만 상세. 차단이면 상세 · 첨부 링크를 한 번도 그리지 않는다.
+async function _dlOpenChecked(id) {
+  let dd;
+  try { dd = await _oidDecide(String(id), true); }
+  catch (e) { console.warn('[딥링크] 권한 판정 실패:', e && e.message); dd = { allow: false, why: 'apr', reason: '판정 중 오류' }; }
+  if (dd.allow !== true) {
     deepLinkFinish();
-    alert(allow === 'notfound'
-      ? '해당 전표를 찾을 수 없습니다. 삭제되었거나 번호가 잘못되었습니다.\n결재함에서 내 결재 건을 확인해 주세요.'
+    if (dd.allow === 'notfound') {
+      alert('해당 전표를 찾을 수 없습니다. 삭제되었거나 번호가 잘못되었습니다.\n결재함에서 내 결재 건을 확인해 주세요.');
+      return;
+    }
+    avAudit('딥링크 접근 차단', { id: String(id), 사유: dd.reason });
+    if (dd.why === 'cfg') {
+      // 설정 파일을 못 읽어 관리자 · IT · PKF 를 판정하지 못함 — 기존 안내와 「다시 시도」(다시 읽히면 판정도 다시)
+      showCfgFailAlert();
+      const a = document.getElementById('acc-alert-action');
+      if (a) a.onclick = async () => {
+        closeAccAlert();
+        _sysConfig = null; _cfgLoadFailed = false; _configLoaded = false;
+        renderCfgStatus('loading');
+        await loadAndApplySystemConfig();
+        _dlOpenChecked(id);
+      };
+      return;
+    }
+    alert(dd.why === 'apr'
+      ? '이 전표를 볼 수 있는지 확인하지 못했습니다.\n잠시 후 새로고침(F5)해 주세요. 계속되면 IT 담당자에게 알려 주세요.'
       : '이 전표를 볼 수 있는 권한이 없습니다.\n결재함에서 내 결재 건을 확인해 주세요.');
     return;
   }
-  // 내 결재 차례가 아니면(승인 단추 없음) 상세 맨 위에 한 줄 안내
+  window._currentVoucherDetail = null; window._dlApprovers = [];
+  try { await openVoucherSP(String(id), 'approval'); } catch (e) { console.warn('[딥링크] 상세 열기 실패:', e.message); }
+  if (!window._currentVoucherDetail || String(window._currentVoucherDetail._spId) !== String(id)) {
+    deepLinkFinish();
+    alert('해당 전표를 찾을 수 없습니다. 삭제되었거나 번호가 잘못되었습니다.\n결재함에서 내 결재 건을 확인해 주세요.');
+    return;
+  }
+  // 내 결재 차례가 아니면 상세 맨 위에 한 줄 안내 — 승인 단추는 결재 이력과 함께 늦게 그려져 그 유무로는 판단할 수 없다(10-15).
+  // 판정 때 읽은 결재행으로 본다. 결재행을 못 읽었으면(null) 안내를 붙이지 않는다.
+  const _myTurn = Array.isArray(dd.list) ? dd.list.some((a) => isMyAppr(a.ApproverEmail) && String(a.Status || '').trim() === '대기') : null;
   const mc = document.getElementById('voucher-detail-content');
   const modal = document.getElementById('voucher-detail-modal');
-  if (mc && modal && !modal.querySelector('.btn-approve')) {
+  if (mc && modal && _myTurn === false) {
     const note = document.createElement('div');
     note.setAttribute('data-deeplink-note', '');
     note.style.cssText = 'margin:0 0 12px;padding:10px 12px;border:1px solid #fde68a;background:#fffbeb;border-radius:6px;font-size:13px;color:#92400e';
