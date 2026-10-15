@@ -1980,6 +1980,7 @@ function markDetailReady() {
 function armStandaloneLoaderTimeout() {
   setTimeout(() => {
     if (document.documentElement.classList.contains('detail-ready')) return;
+    if (window._oidGateState === 'deny') return;   // 10-15: 권한 차단 · 판정 불가 안내를 「불러오지 못했습니다」 로 덮지 않는다
     const el = document.getElementById('standalone-loader');
     if (!el) return;
     el.innerHTML = '<div style="font-size:1.6rem">⚠️</div>'
@@ -3067,7 +3068,9 @@ async function boot(account) {
     // ⚠ ADMIN_EMAILS는 system_config 로드가 끝나야 채워진다. 기다리지 않고 바로 열면
     //   그 시점엔 빈 배열이라 관리자인데도 관리자 섹션이 숨겨진다(경쟁 조건).
     armStandaloneLoaderTimeout();
-    _configPromise.finally(()=>openVoucherSP(String(_openId), 'admin'));
+    // 10-15: 예전에는 권한 확인 없이 누구에게나 상세(내용 · 첨부 · 결재 이력 · PDF)를 열었다.
+    //        이제 openIdGateAndOpen 이 신청자 · 결재자(대리) · 관리자 · IT · PKF 인지 먼저 판정한 뒤에만 연다.
+    _configPromise.finally(()=>openIdGateAndOpen(String(_openId)));
     history.replaceState(null, '', location.pathname);
   } else {
     // APS 에서 결재하러 들어온 경우 — 관리자 명단(system_config)이 채워진 뒤 연다.
@@ -10073,6 +10076,89 @@ function deepLinkAllowedFor(id) {
   if (mine.includes(String(v.RequesterEmail || '').toLowerCase())) return true;
   if (ADMIN_EMAILS.map((e) => String(e || '').toLowerCase()).some((e) => e && mine.includes(e))) return true;
   return (window._dlApprovers || []).some((e) => isMyAppr(e));
+}
+/* ── ?openId= 단독 상세 보기 권한 확인(10-15) ──
+   SSC · IT Ticket 등 다른 시스템의 「관련 전표」 링크로 들어오는 단독 상세 보기는 권한 확인 없이 아무에게나 상세를 열었다
+   (실제 사례: 관련 없는 직원이 남의 전표 상세 PDF 출력). ?id= 딥링크와 같은 원칙으로 막는다.
+   · 허용: 그 건의 신청자 · 결재자(대리 위임 포함, isMyAppr) · 관리자(ACC-Voucher_ADMIN_N) · IT(ACC-Voucher_IT) · PKF(SHARED-SC_2nd_N).
+   · 설정 파일을 못 읽으면 관리자 · IT · PKF 명단을 판정할 수 없으므로 신청자 · 결재자만 허용하고 나머지는 차단(fail-closed) —
+     기존 「설정 파일을 불러오지 못했습니다」 안내와 「다시 시도」 를 쓰고, 다시 읽히면 판정을 다시 한다.
+   · 판정은 상세를 그리기 전에 한다 — 판정이 끝날 때까지 로더만 보이고, 차단이면 상세 · PDF · 첨부 링크가 한 번도 만들어지지 않는다.
+   · 차단은 Logging_data/ACC Voucher 에 「단독 상세 접근 차단」(id, 사유) 1건(UAT 는 logAction 규칙대로 남기지 않음).
+   관리자 탭 · 일괄 PDF · 결재함 · 내 목록 · ?id= 딥링크는 이 함수를 거치지 않는다(각자 걸러짐). */
+window._oidGateState = '';   // '' 판정 전 · 'allow' · 'deny'
+function _oidLoader(icon, text, sub, withHome) {
+  const el = document.getElementById('standalone-loader');
+  if (!el) return;
+  el.innerHTML = '<div style="font-size:1.6rem">' + icon + '</div>'
+    + '<div class="sl-text">' + escHtml(text) + '</div>'
+    + '<div class="sl-sub">' + escHtml(sub) + '</div>'
+    + (withHome ? '<button onclick="location.href=location.pathname" style="margin-top:6px;background:#0078d4;color:#fff;border:none;border-radius:8px;padding:8px 20px;font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit">전체 시스템 열기</button>' : '');
+}
+async function _oidDecide(id) {
+  // 전표 · 결재행을 상세 없이 먼저 읽는다(openVoucherSP 와 같은 목록 · 세대).
+  if (!/^\d+$/.test(String(id))) return { allow: 'notfound' };
+  let v = null;
+  try {
+    await ensureSiteId();
+    await loadVolumeConfig();
+    LIST_REQUESTS = VOL_CONFIG.reqList;
+    const item = await api('/sites/' + siteId + '/lists/' + LIST_REQUESTS + '/items/' + id + '?$expand=fields');
+    if (item && item.id != null) v = { ...(item.fields || {}), _spId: String(item.id), _srcDraft: false };
+  } catch (e) { console.warn('[openId 권한] 전표 조회 실패:', e && e.message); }
+  if (!v) return { allow: 'notfound' };
+  const mine = myIdentities();
+  if (mine.includes(String(v.RequesterEmail || '').trim().toLowerCase())) return { allow: true, v };
+  const cfgOk = !_cfgLoadFailed && !!_sysConfig;
+  if (cfgOk && (meMatches(ADMIN_EMAILS) || meMatches(IT_EMAILS) || isPkfUser())) return { allow: true, v };
+  // 결재자(대리 위임 포함) — 위임 맵을 먼저 읽어야 대리인을 판정할 수 있다.
+  let list = null;
+  try { await loadMyDelegations(); } catch (e) {}
+  try { list = await fetchApprovalListDirect(v); }
+  catch (e) { console.warn('[openId 권한] 결재 이력 조회 실패:', e && e.message); }
+  if (list && list.some((a) => isMyAppr(a.ApproverEmail))) return { allow: true, v };
+  if (!list) return { allow: false, v, why: 'apr', reason: '결재 이력을 읽지 못해 결재자 여부를 판정할 수 없음' };
+  if (!cfgOk) return { allow: false, v, why: 'cfg', reason: '설정 파일을 읽지 못함 — 신청자 · 결재자 아님' };
+  return { allow: false, v, why: 'role', reason: '신청자 · 결재자 · 관리자 · IT · PKF 아님' };
+}
+async function openIdGateAndOpen(id) {
+  window._oidGateState = '';
+  let d;
+  try { d = await _oidDecide(id); }
+  catch (e) { console.warn('[openId 권한] 판정 실패:', e && e.message); d = { allow: false, why: 'apr', reason: '판정 중 오류' }; }
+  if (d.allow === true) {
+    window._oidGateState = 'allow';
+    return openVoucherSP(String(id), 'admin');
+  }
+  window._oidGateState = 'deny';
+  if (d.allow === 'notfound') {
+    // 예전 openVoucherSP 의 「찾을 수 없음」 안내와 같다(차단 기록 대상 아님 — 보여 줄 전표가 없다).
+    _oidLoader('⚠️', '전표를 찾을 수 없습니다', '삭제되었거나 접근 권한이 없을 수 있습니다', false);
+    return;
+  }
+  avAudit('단독 상세 접근 차단', { id: String(id), 사유: d.reason });
+  if (d.why === 'cfg') {
+    _oidLoader('⚠️', '권한을 확인할 수 없습니다', '설정 파일을 읽지 못해 이 전표를 볼 수 있는지 판정하지 못했습니다', true);
+    showCfgFailAlert();
+    // 「다시 시도」: 설정을 다시 읽고 판정도 다시 한다(읽히면 관리자 · IT · PKF 가 바로 열린다).
+    const a = document.getElementById('acc-alert-action');
+    if (a) a.onclick = async () => {
+      closeAccAlert();
+      _oidLoader('⏳', '설정 파일을 다시 읽는 중입니다', '잠시만 기다려 주세요', false);
+      _sysConfig = null; _cfgLoadFailed = false; _configLoaded = false;
+      renderCfgStatus('loading');
+      await loadAndApplySystemConfig();
+      openIdGateAndOpen(id);
+    };
+    return;
+  }
+  if (d.why === 'apr') {
+    _oidLoader('⚠️', '권한을 확인할 수 없습니다', '결재 정보를 읽지 못했습니다. 잠시 후 새로고침해 주세요', true);
+    alert('이 전표를 볼 수 있는지 확인하지 못했습니다.\n잠시 후 새로고침(F5)해 주세요. 계속되면 IT 담당자에게 알려 주세요.');
+    return;
+  }
+  _oidLoader('🔒', '이 전표를 볼 수 있는 권한이 없습니다', '신청자 · 결재자 · 관리자만 볼 수 있습니다', true);
+  alert('이 전표를 볼 수 있는 권한이 없습니다.\n결재함에서 내 결재 건을 확인해 주세요.');
 }
 async function _consumeDeepLink() {
   let d = null;
