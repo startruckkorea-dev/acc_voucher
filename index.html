@@ -10119,6 +10119,69 @@ async function _oidDecide(id, withList) {   // withList(10-15): 신청자 · 명
   if (!cfgOk) return { allow: false, v, why: 'cfg', reason: '설정 파일을 읽지 못함 — 신청자 · 결재자 아님' };
   return { allow: false, v, why: 'role', reason: '신청자 · 결재자 · 관리자 · IT · PKF 아님' };
 }
+/* ── ?openId= PKF 열람 보강(10-15, 사용자 승인) ──
+   「PKF 분들은 SSC 티켓에 첨부한 ACC 전표를 문제없이 읽을 수 있어야 한다」.
+   기존 판정은 ① 외부 게스트가 /me 에 메일이 없어 UPN(이름_도메인#EXT#@테넌트.onmicrosoft.com)으로만 로그인되면 명단과 대조되지 않고,
+   ② 설정 파일(STK-DB)을 못 읽는 게스트는 fail-closed 로 막혔다. 단독 상세(?openId=)에서만 아래 두 경로를 더한다(?id= 딥링크는 그대로).
+   · 명단: SHARED-SC_2nd_N(설정 정상일 때) — /me mail · UPN · #EXT# UPN 을 원래 메일로 푼 값까지, 기존 isPkfUser 와 같은 도메인 집합 기준.
+   · 담당 티켓: SSC_Requests 에서 이 전표를 RelatedTickets(또는 예전 Detail 토큰 [제목:ACC:id])로 연결했고
+     PKFAssignees 에 내가 있는 티켓이 하나라도 있으면 허용 — 설정을 못 읽어도 된다. 조회가 실패하면 이 경로만 불허.
+   허용돼도 열람만 — 화면은 openVoucherSP(id,'admin') 그대로이고 B1 · 의견 섹션은 기존 PKF 규칙을 따른다. */
+function _oidIds() {
+  const out = new Set(myIdentities());
+  [...out].forEach((id) => {
+    const m = id.match(/^(.+)#ext#@/i);          // 외부 게스트 UPN — 마지막 '_' 가 원래 메일의 '@'
+    if (!m) return;
+    const k = m[1].lastIndexOf('_');
+    if (k > 0 && k < m[1].length - 1) out.add(m[1].slice(0, k) + '@' + m[1].slice(k + 1));
+  });
+  return [...out];
+}
+function _oidPkfListed() {
+  if (_cfgLoadFailed || !_sysConfig || !PKF_EMAILS.length) return false;
+  const ids = _oidIds();
+  if ((PKF_EMAILS || []).some((e) => ids.includes(String(e || '').trim().toLowerCase()))) return true;
+  const { doms, locals } = _pkfParts();          // 등록 도메인 안의 별칭(isPkfUser 와 같은 기준)
+  return ids.some((id) => { const [lp, dom] = id.split('@'); return lp && dom && doms.includes(dom) && locals.has(lp); });
+}
+function _oidInPkfText(text) {
+  // PKFAssignees 는 'a@x; b@y'(이름||메일 형식이 섞일 수 있음) — 메일을 뽑아 정확히 비교한다(부분 문자열 오인 방지).
+  const got = String(text || '').toLowerCase().match(/[a-z0-9._%+'-]+@[a-z0-9.-]+\.[a-z]{2,}/g) || [];
+  if (!got.length) return false;
+  const ids = _oidIds();
+  if (got.some((g) => ids.includes(g))) return true;
+  const { doms } = _pkfParts();                  // 설정을 읽었으면 등록 도메인 안의 별칭도 인정(meInPkfText 와 같은 기준)
+  return ids.some((id) => {
+    const [lp, dom] = id.split('@');
+    return lp && dom && doms.includes(dom) && doms.some((d2) => got.includes(lp + '@' + d2));
+  });
+}
+function _oidPlain(x) {
+  // Detail 은 리치 텍스트라 SharePoint 가 ':' 를 &#58; 같은 엔티티로 내보내기도 한다 — 태그를 지우고 엔티티를 풀어 토큰을 찾는다
+  // (SSC linkifyTicketRefs 와 같은 방식, textarea 라 스크립트가 돌 여지가 없다).
+  const ta = document.createElement('textarea');
+  ta.innerHTML = String(x || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(div|p)>/gi, '\n').replace(/<[^>]+>/g, '');
+  return ta.value;
+}
+async function _oidPkfAllow(id) {
+  if (_oidPkfListed()) return 'PKF 명단';
+  let res = null;
+  try {
+    await ensureSiteId();
+    res = await apiAll('/sites/' + siteId + '/lists/' + SSC_REQ_LIST_ID + '/items?$expand=fields($select=PKFAssignees,RelatedTickets,Detail)&$top=500');
+  } catch (e) { console.warn('[openId 권한] SSC 담당 티켓 조회 실패 — PKF 티켓 경로 불허:', e && e.message); return ''; }
+  const want = String(id);
+  const hit = (res && res.value || []).some((it) => {
+    const f = it.fields || {};
+    if (!_oidInPkfText(f.PKFAssignees)) return false;
+    const srcT = _oidPlain(f.RelatedTickets) + '\n' + _oidPlain(f.Detail);   // SSC 와 같은 기준(RelatedTickets → 예전 Detail 토큰)
+    const re = /\[[^:\]]+:ACC:(\d+)\]/g;
+    let m;
+    while ((m = re.exec(srcT)) !== null) if (m[1] === want) return true;
+    return false;
+  });
+  return hit ? 'SSC 담당 티켓' : '';
+}
 async function openIdGateAndOpen(id) {
   window._oidGateState = '';
   let d;
@@ -10127,6 +10190,16 @@ async function openIdGateAndOpen(id) {
   if (d.allow === true) {
     window._oidGateState = 'allow';
     return openVoucherSP(String(id), 'admin');
+  }
+  // 10-15: PKF 보강 — 기존 판정(신청자 · 결재자 · 명단)으로 막혀도 PKF 이면 연다(차단 기록 · 안내 전에 판정).
+  if (d.allow === false && d.v) {
+    let pk = '';
+    try { pk = await _oidPkfAllow(String(id)); } catch (e) { console.warn('[openId 권한] PKF 판정 실패:', e && e.message); }
+    if (pk) {
+      console.info('[openId 권한] PKF 열람 허용(' + pk + ')');
+      window._oidGateState = 'allow';
+      return openVoucherSP(String(id), 'admin');
+    }
   }
   window._oidGateState = 'deny';
   if (d.allow === 'notfound') {
