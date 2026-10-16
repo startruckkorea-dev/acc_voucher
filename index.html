@@ -639,6 +639,17 @@ html, * { scrollbar-width: thin; scrollbar-color: #CBD5E1 transparent; }
 /* aps-web-fix acc_voucher(10-10) — Accounting 담당자 변경 팝업: 현재 담당자(긴 이름 · 띄어쓰기 없는 긴 메일)가
    flex 줄에서 줄어들지도 줄바꿈되지도 않아 팝업 오른쪽에서 잘리던 것 → 줄바꿈해 전부 보이게(767px 이하 aps-mobile 과 같은 규칙). 인쇄는 그대로(screen 한정). */
 @media screen { #acc-chg-cur { min-width: 0; overflow-wrap: anywhere; } }
+/* PDF 출력 단추 아래 안내(C-3, 10-16) — 「출력 이력은 Logging 시스템에 보관됩니다」.
+   단추 바로 뒤 형제로 두어, 단추가 style.display='none'(또는 hidden)이면 안내도 같이 숨는다.
+   단추는 모달 제목 줄에 있어 PDF 캡처 대상(본문) 밖이지만, 혹시 몰라 data-html2canvas-ignore 도 붙였다. */
+.pdf-log-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex:0 1 auto;min-width:0;margin-left:auto}
+/* 좁은 화면에서 제목 + 단추(안내 포함)가 한 줄에 안 들어가면 단추 묶음만 다음 줄 오른쪽으로 — 제목이 찌그러지지 않게 */
+:has(> .pdf-log-wrap){flex-wrap:wrap;row-gap:6px}
+.pdf-log-row{flex-wrap:wrap;justify-content:flex-end;row-gap:3px !important}
+.pdf-log-note{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:400;color:#605e5c;line-height:1.3;letter-spacing:0;text-align:right;white-space:normal}
+.pdf-log-note svg{flex:0 0 auto}
+.pdf-log-row>.pdf-log-note{flex:1 1 100%;justify-content:flex-end}
+button[style*="display:none"]+.pdf-log-note,button[style*="display: none"]+.pdf-log-note,button[hidden]+.pdf-log-note{display:none !important}
 </style>
 <script>
 // ?openId= 단독 상세보기 모드 판별을 최대한 앞당긴다.
@@ -1608,10 +1619,16 @@ window.apsYear = (function () {
     </div>
     <div class="modal-body">
       <div class="search-bar">
-        <input type="text" id="bp-search-input" placeholder="BP코드, 이름, 사업자등록번호, Bank Info., Account No. 검색..." oninput="searchBP(this.value)" style="font-size:.78rem">
+        <input type="text" id="bp-search-input" placeholder="BP 코드 · 이름 · 사업자등록번호 · 계좌번호" autocomplete="off" enterkeyhint="search" maxlength="60"
+          oninput="onBpSearchInput(this.value)" onkeydown="onBpSearchKey(event)" aria-describedby="bp-search-hint bp-search-audit" style="font-size:.78rem">
         <button class="btn btn-primary" style="padding:7px 14px;font-size:12px" onclick="searchBP(document.getElementById('bp-search-input').value)">검색</button>
       </div>
-      <div id="bp-search-results"><div style="text-align:center;padding:24px;color:#a19f9d">검색어를 입력하세요</div></div>
+      <div id="bp-search-hint" role="status" aria-live="polite" style="display:none;font-size:11.5px;color:#8a5a00;margin:-6px 0 8px 2px"></div>
+      <div id="bp-search-audit" style="display:flex;align-items:center;gap:4px;font-size:9.5px;font-weight:400;color:#605e5c;line-height:1.3;margin:-6px 0 12px 2px">
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#c4314b" stroke-width="2.2" aria-hidden="true" style="flex:none"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span>검색 이력은 Logging 시스템에 보관됩니다 · Search history is logged</span>
+      </div>
+      <div id="bp-search-results"></div>
     </div>
   </div>
 </div>
@@ -3427,11 +3444,7 @@ async function loadBPMaster() {
     }
     console.log('[BP Master] Loaded:', bpData.length, 'entries');
     // 모달이 열려있으면 자동 업데이트
-    if(document.getElementById('bp-modal')?.classList.contains('open')) {
-      document.getElementById('bp-search-input').disabled = false;
-      renderBpResults(bpData.slice(0,10));
-      document.getElementById('bp-search-input').focus();
-    }
+    if(document.getElementById('bp-modal')?.classList.contains('open')) _bpModalLoaded();   // 목록이 아니라 첫 화면(10-16)
   } catch(e) {
     console.warn('[BP Master] 로드 실패 — 기본 목록 사용:', e.message);
     bpData = [
@@ -3441,11 +3454,7 @@ async function loadBPMaster() {
     ];
   }
   // 로드 완료(성공/실패 모두) 후 모달 업데이트
-  if(document.getElementById('bp-modal')?.classList.contains('open')) {
-    document.getElementById('bp-search-input').disabled = false;
-    renderBpResults(bpData.slice(0,10));
-    document.getElementById('bp-search-input').focus();
-  }
+  if(document.getElementById('bp-modal')?.classList.contains('open')) _bpModalLoaded();
 }
 
 // ── Tabs ──
@@ -4746,53 +4755,126 @@ function openBpModalExtra() {
     showAccAlert('BP를 먼저 선택해주세요', '"2. BP 정보"에서 Vendor/Customer No.를 먼저 선택한 후 추가 BP를 등록할 수 있습니다.', '🔒');
     return;
   }
-  bpModalMode = 'extra';
-  document.getElementById('bp-modal').classList.add('open');
-  document.getElementById('bp-search-input').value='';
-  if(bpData.length === 0) {
-    document.getElementById('bp-search-results').innerHTML = '<div style="text-align:center;padding:24px;color:#a19f9d">데이터 로딩 중...</div>';
-    document.getElementById('bp-search-input').disabled = true;
-  } else {
-    document.getElementById('bp-search-input').disabled = false;
-    renderBpResults(bpData.slice(0,10));
-    setTimeout(()=>document.getElementById('bp-search-input').focus(),100);
-  }
+  _bpModalOpen('extra');
 }
 function openBpModal() {
-  bpModalMode = 'primary';
-  document.getElementById('bp-modal').classList.add('open');
-  document.getElementById('bp-search-input').value='';
-  if(bpData.length === 0) {
-    document.getElementById('bp-search-results').innerHTML = '<div style="text-align:center;padding:24px;color:#a19f9d">데이터 로딩 중...</div>';
-    document.getElementById('bp-search-input').disabled = true;
-  } else {
-    document.getElementById('bp-search-input').disabled = false;
-    renderBpResults(bpData.slice(0,10));
-    setTimeout(()=>document.getElementById('bp-search-input').focus(),100);
-  }
+  _bpModalOpen('primary');
 }
 function closeBpModal() { document.getElementById('bp-modal').classList.remove('open'); }
 
-let _bpTimer=null;
-function searchBP(q) {
-  clearTimeout(_bpTimer);
-  _bpTimer=setTimeout(()=>{
-    const kw=q.toLowerCase().trim();
-    if(!kw){renderBpResults(bpData.slice(0,10));return;}
-    const res=[];
-    for(const b of bpData){
-      if(b.code.toLowerCase().includes(kw)||b.name.toLowerCase().includes(kw)||(b.nameKo&&b.nameKo.includes(q))||(b.bizNo&&b.bizNo.includes(kw))||(b.bank&&b.bank.toLowerCase().includes(kw))||bpAcctMatches(b,kw)){
-        res.push(b); if(res.length>=50) break;
-      }
-    }
-    if(res.length===0) console.log('[BP 검색 없음] kw='+kw+' 총데이터='+bpData.length+' 마지막코드='+bpData[bpData.length-1]?.code);
-    renderBpResults(res);
-  },200);
+/* BP 검색(10-16 · 개인정보 · 감사) — BP Master Data · SSL 과 같은 규칙.
+   예전에는 열자마자 BP 10건(은행 · 계좌 끝 4자리 포함)이 보이고, 한 글자 칠 때마다 목록이 바뀌었다(은행명으로도 찾았다).
+   - 열 때 목록 없음(첫 화면 안내만). Enter 또는 「검색」 을 눌렀을 때만, 2자 이상(숫자 · 하이픈만이면 숫자 4자리 이상)일 때만 찾는다.
+     타자 중에는 찾지 않고, 한글 조합 중 Enter 는 무시한다. 칸을 비우면 첫 화면으로.
+   - 찾는 대상: BP 코드 · 이름 · 한글이름 · 사업자등록번호 · 계좌번호(하이픈 무시). 은행명으로는 찾지 않는다.
+     계좌번호는 10-10 마스킹 규칙 그대로 — 전체 권한자만 전체 번호로, 그 밖에는 끝 4자리로만(bpAcctMatches · bpAcctMatchesDigits).
+   - 결과는 최대 50건(넘으면 「N건 중 50건 표시」).
+   - 검색 1번마다 「BP 검색」(검색어 · 결과건수 · 화면), 고르면 「BP 검색 선택」(BP코드 · 이름 · 검색어 · 화면)을 Logging_data/ACC Voucher 에.
+     결과의 은행 · 계좌번호는 남기지 않는다. IT 운영 계정 제외 · UAT 미기록은 logAction 이 그대로 지킨다. 짧은 검색어는 찾지도 남기지도 않는다. */
+const BP_SEARCH_CAP = 50;
+let _bpLastQ = '';
+function _bpEmptyHtml() {
+  return '<div class="bp-empty" style="text-align:center;padding:26px 12px 22px;color:#605e5c;word-break:keep-all">'
+    + '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#a19f9d" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" style="display:block;margin:0 auto 10px"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>'
+    + '<div style="font-size:13px;font-weight:600;color:#323130;line-height:1.6">BP 코드 · 이름 · 사업자등록번호 · 계좌번호로 검색해 주세요</div>'
+    + '<div style="font-size:11.5px;color:#8a8886;line-height:1.7;margin-top:4px">2자 이상 입력 후 Enter 또는 「검색」을 눌러 주세요.</div>'
+    + '</div>';
 }
-function renderBpResults(list) {
+function _bpHint(msg) {
+  const h = document.getElementById('bp-search-hint');
+  if (!h) return;
+  h.textContent = msg || '';
+  h.style.display = msg ? 'block' : 'none';
+}
+function _bpShowEmpty() { const el = document.getElementById('bp-search-results'); if (el) el.innerHTML = _bpEmptyHtml(); }
+// 어느 화면 · 칸에서 열었는지(기록용)
+function _bpModalScreen() {
+  return bpModalMode === 'extra' ? '바우처 작성 · 회계 정보 · ＋ BP 추가' : '바우처 작성 · 2. BP 정보 · Vendor/Customer No.';
+}
+function _bpModalOpen(mode) {
+  bpModalMode = mode;
+  _bpLastQ = '';
+  const inp = document.getElementById('bp-search-input');
+  document.getElementById('bp-modal').classList.add('open');
+  inp.value = '';
+  _bpHint('');
+  if (bpData.length === 0) {
+    document.getElementById('bp-search-results').innerHTML = '<div style="text-align:center;padding:24px;color:#a19f9d">데이터 로딩 중...</div>';
+    inp.disabled = true;
+  } else {
+    inp.disabled = false;
+    _bpShowEmpty();
+    setTimeout(() => inp.focus(), 100);
+  }
+}
+// BP 마스터를 다 읽었는데 모달이 열려 있으면 — 칸을 풀고 첫 화면(목록은 보여 주지 않는다)
+function _bpModalLoaded() {
+  const inp = document.getElementById('bp-search-input');
+  inp.disabled = false;
+  _bpLastQ = '';
+  _bpShowEmpty();
+  inp.focus();
+}
+// 타자 중에는 찾지 않는다. 글자를 다 지우면 첫 화면으로, 남아 있던 짧은 검색어 안내는 걷는다.
+function onBpSearchInput(q) {
+  _bpHint('');
+  if (!String(q || '').trim()) { _bpLastQ = ''; _bpShowEmpty(); }
+}
+function onBpSearchKey(e) {
+  if (e.key !== 'Enter' || e.isComposing || e.keyCode === 229) return;   // 한글 조합 중 Enter 는 글자 확정용
+  e.preventDefault();
+  searchBP(e.target.value);
+}
+// 숫자 · 하이픈 · 공백만 → 사업자번호 · 계좌 검색으로 보고 숫자 4자리 이상을 요구한다(짧은 숫자로 훑어보기 방지).
+function _bpQueryProblem(q) {
+  if (q.length < 2) return '검색어를 2자 이상 입력해 주세요.';
+  if (/^[\d\s-]+$/.test(q) && q.replace(/\D/g, '').length < 4) return '번호(사업자등록번호 · 계좌번호)로 찾을 때는 숫자 4자리 이상 입력해 주세요.';
+  return '';
+}
+// 하이픈을 뺀 숫자로 계좌 찾기 — 10-10 규칙 그대로(전체 권한자만 전체 번호, 그 밖에는 끝 4자리 일치만)
+function bpAcctMatchesDigits(b, d) {
+  const full = _bpAcctFull.get(b);
+  if (!full || !d) return false;
+  if (isBpAcctViewer()) return full.replace(/\D/g, '').includes(d);
+  return /^\d{4}$/.test(d) && b.acctLast4 === d;
+}
+function searchBP(raw) {
+  const typed = String(raw == null ? '' : raw);
+  const q = typed.trim();
+  const bad = _bpQueryProblem(q);
+  if (bad) {
+    _bpHint(bad);
+    _bpLastQ = '';
+    _bpShowEmpty();
+    const inp = document.getElementById('bp-search-input'); if (inp) inp.focus();
+    return;
+  }
+  _bpHint('');
+  if (!bpData.length) return;   // 아직 읽는 중 — 찾은 게 아니므로 남기지 않는다
+  const kw = q.toLowerCase();
+  const numOnly = /^[\d\s-]+$/.test(q);
+  const digits = numOnly ? q.replace(/\D/g, '') : '';
+  const dg = v => String(v || '').replace(/\D/g, '');
+  const res = [];
+  for (const b of bpData) {
+    if (String(b.code || '').toLowerCase().includes(kw) || String(b.name || '').toLowerCase().includes(kw) || (b.nameKo && String(b.nameKo).toLowerCase().includes(kw))
+      || (b.bizNo && String(b.bizNo).toLowerCase().includes(kw)) || bpAcctMatches(b, kw)
+      || (digits.length >= 4 && (dg(b.bizNo).includes(digits) || bpAcctMatchesDigits(b, digits)))) res.push(b);
+  }
+  _bpLastQ = typed;
+  renderBpResults(res.slice(0, BP_SEARCH_CAP), res.length, q);
+  avAudit('BP 검색', { 검색어: typed, 결과건수: res.length, 화면: _bpModalScreen() });
+}
+function renderBpResults(list, total, q) {
   const el=document.getElementById('bp-search-results');
-  if(!list.length){el.innerHTML='<div style="text-align:center;padding:20px;color:#a19f9d">검색 결과 없음</div>';return;}
-  const countHtml = list.length>=50 ? '<div style="font-size:11px;color:#a19f9d;padding:4px 12px;background:#f9f8f7">상위 50개 표시 — 검색어를 더 입력하세요</div>' : '';
+  if(!list.length){
+    el.innerHTML='<div style="text-align:center;padding:22px 12px;color:#605e5c;font-size:12.5px;line-height:1.7">' + (q ? '「' + escHtml(q) + '」 ' : '') + '검색 결과가 없습니다.<br><span style="font-size:11.5px;color:#8a8886">철자 · 번호를 확인하시거나 다른 검색어로 찾아 주세요.</span></div>';
+    return;
+  }
+  const n = total == null ? list.length : total;
+  const countHtml = n > list.length
+    ? '<div style="font-size:11.5px;color:#8a5a00;background:#fff8e6;border:1px solid #f3dfa8;border-radius:4px;padding:6px 10px;margin-bottom:8px">' + n + '건 중 ' + list.length + '건 표시 — 검색어를 더 구체적으로 입력해 주세요</div>'
+    : '<div style="font-size:11.5px;color:#8a8886;padding:0 2px 6px">' + (q ? '「' + escHtml(q) + '」 ' : '') + '검색 결과 ' + n + '건</div>';
   // BP 값은 ACC Others 관리 탭(SAP 붙여넣기 · 일괄 등록)에서 들어오므로 전부 escHtml. 계좌는 bpAcctText(끝 4자리 · 권한자만 전체)(10-10)
   el.innerHTML=countHtml+list.map(b=>`<div class="result-item" data-bp="${escHtml(b.code)}">
     <div class="rc">${escHtml(b.code)} · ${escHtml(b.type||'-')}${b.inactive?' <span style="background:#fde7e9;color:#a4262c;border-radius:8px;padding:0 6px;font-size:10px;font-weight:700">비활성</span>':''}</div>
@@ -4804,6 +4886,7 @@ function renderBpResults(list) {
 }
 function selectBP(code) {
   const bp=bpData.find(b=>b.code===code); if(!bp) return;
+  avAudit('BP 검색 선택', { BP코드: bp.code, 이름: bp.name || '', 검색어: _bpLastQ, 화면: _bpModalScreen() });   // 은행 · 계좌번호는 남기지 않는다(10-16)
   if(bpModalMode==='extra') {
     const bpCatVal = (bp.type==='Vendor'||bp.type==='S') ? 'S (Vendor)' : 'C (Customer)';
     extraBPs.push({code:bp.code, name:bp.name, bizNo:bp.bizNo||'', category:bpCatVal, _uid:'bp_'+(_bpUidSeq++)});
@@ -10892,9 +10975,10 @@ function ptApply(){
     <div id="batch-pdf-body" style="padding:10px 22px 14px;overflow:auto"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 22px;border-top:1px solid #edebe9;background:#faf9f8;border-radius:0 0 12px 12px">
       <span id="batch-pdf-count" style="font-size:.82rem;font-weight:600;color:#323130">0 / 30 선택</span>
-      <div style="display:flex;gap:8px">
+      <div class="pdf-log-row" style="display:flex;gap:8px">
         <button onclick="closeBatchPdfModal()" style="padding:8px 16px;background:#fff;border:1px solid #d2d0ce;border-radius:6px;font-size:.82rem;cursor:pointer">닫기</button>
         <button id="batch-pdf-run" onclick="runBatchPdf()" disabled style="padding:8px 18px;background:#0078d4;color:#fff;border:none;border-radius:6px;font-size:.82rem;font-weight:600;cursor:pointer">선택한 전표 PDF 만들기</button>
+        <span class="pdf-log-note" data-html2canvas-ignore="true"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#c4314b" stroke-width="2.2" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>출력 이력은 Logging 시스템에 보관됩니다</span>
       </div>
     </div>
   </div>
@@ -11069,7 +11153,7 @@ body.aps-year-off #aps-year-empty{display:block!important}
     <button class="modal-close" onclick="closeDetailModal()" title="닫기">✕</button>
     <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-right:24px">
       <span>전표 상세 내용</span>
-      <div style="display:flex;gap:6px">
+      <div class="pdf-log-row" style="display:flex;gap:6px">
         <button id="btn-export-detail-pdf" onclick="exportVoucherDetailPdf()" title="화면에 보이는 상세 내용 그대로 PDF 출력" style="display:none;background:#fff;color:#0078d4;border:1px solid #0078d4;border-radius:8px;padding:6px 14px;font-size:.75rem;font-weight:600;cursor:pointer;font-family:inherit;align-items:center;gap:5px;transition:all .15s" onmouseover="this.style.background='#f0f6ff'" onmouseout="this.style.background='#fff'">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:middle;margin-right:4px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
           상세화면 PDF
@@ -11078,6 +11162,7 @@ body.aps-year-off #aps-year-empty{display:block!important}
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:middle;margin-right:4px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
           공식 양식 PDF
         </button>
+        <span class="pdf-log-note" data-html2canvas-ignore="true"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#c4314b" stroke-width="2.2" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>출력 이력은 Logging 시스템에 보관됩니다</span>
       </div>
     </div>
     <div id="voucher-detail-content"></div>
