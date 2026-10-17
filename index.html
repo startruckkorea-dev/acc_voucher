@@ -1619,7 +1619,7 @@ window.apsYear = (function () {
     </div>
     <div class="modal-body">
       <div class="search-bar">
-        <input type="text" id="bp-search-input" placeholder="BP 코드 · 이름 · 사업자등록번호 · 계좌번호" autocomplete="off" enterkeyhint="search" maxlength="60"
+        <input type="text" id="bp-search-input" placeholder="BP 코드 · 이름 · 사업자등록번호 · 계좌 끝 4자리" autocomplete="off" enterkeyhint="search" maxlength="60"
           oninput="onBpSearchInput(this.value)" onkeydown="onBpSearchKey(event)" aria-describedby="bp-search-hint bp-search-audit" style="font-size:.78rem">
         <button class="btn btn-primary" style="padding:7px 14px;font-size:12px" onclick="searchBP(document.getElementById('bp-search-input').value)">검색</button>
       </div>
@@ -2394,14 +2394,13 @@ function isBpAcctViewer() { return !_cfgLoadFailed && BP_ACCT_VIEW_EMAILS.length
 function bpAcctText(b) {
   const full = _bpAcctFull.get(b);
   if (!full) return 'Master data 미기재';
-  if (isBpAcctViewer()) return full;
+  // 10-17 권한자도 BP 검색에서는 끝 4자리만 — 전체 번호는 ACC Others 「BP 코드 조회」 에서 본다
   return '****' + (b.acctLast4 || '');
 }
 function bpAcctMatches(b, kw) {
   const full = _bpAcctFull.get(b);
   if (!full) return false;
-  if (isBpAcctViewer()) return full.includes(kw);
-  return /^\d{1,4}$/.test(kw) && !!b.acctLast4 && b.acctLast4.includes(kw);
+  return /^\d{1,4}$/.test(kw) && !!b.acctLast4 && b.acctLast4.includes(kw);   // 10-17 모두 끝 4자리 기준(전체 번호로 찾기 없음)
 }
 // 검색 결과 고르기 — onclick 문자열에 BP 코드를 넣지 않고 data-bp 로 넘긴다(코드에 ' " < 가 있어도 안전)
 document.addEventListener('click', function (e) {
@@ -4803,7 +4802,7 @@ let _bpLastQ = '';
 function _bpEmptyHtml() {
   return '<div class="bp-empty" style="text-align:center;padding:26px 12px 22px;color:#605e5c;word-break:keep-all">'
     + '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#a19f9d" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" style="display:block;margin:0 auto 10px"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>'
-    + '<div style="font-size:13px;font-weight:600;color:#323130;line-height:1.6">BP 코드 · 이름 · 사업자등록번호 · 계좌번호로 검색해 주세요</div>'
+    + '<div style="font-size:13px;font-weight:600;color:#323130;line-height:1.6">BP 코드 · 이름 · 사업자등록번호 · 계좌 끝 4자리로 검색해 주세요</div>'
     + '<div style="font-size:11.5px;color:#8a8886;line-height:1.7;margin-top:4px">2자 이상 입력 후 Enter 또는 「검색」을 눌러 주세요.</div>'
     + '</div>';
 }
@@ -4862,8 +4861,7 @@ function _bpQueryProblem(q) {
 function bpAcctMatchesDigits(b, d) {
   const full = _bpAcctFull.get(b);
   if (!full || !d) return false;
-  if (isBpAcctViewer()) return full.replace(/\D/g, '').includes(d);
-  return /^\d{4}$/.test(d) && b.acctLast4 === d;
+  return /^\d{4}$/.test(d) && b.acctLast4 === d;   // 10-17 모두 끝 4자리 일치만
 }
 function searchBP(raw) {
   const typed = String(raw == null ? '' : raw);
