@@ -2189,6 +2189,33 @@ async function loadSystemConfig() {
     return null;
   }
 }
+/* IT 문의 메일(10-17) — 코드에 메일 주소를 두지 않는다. system_config_final.xlsx 의 ACC-Voucher_IT_CONTACT(C열) → 없으면 CONTACT_EMAIL 순으로 채우고,
+   설정을 못 읽었으면(로그인 전 · 읽기 실패) 메일 없이 「IT팀」 만 보인다. 형식이 맞는 메일만 받으므로 HTML 에 그대로 넣어도 안전하다.
+   data-it-contact 가 붙은 화면 칸은 설정을 읽은 뒤 메일 링크로 바뀐다. */
+var IT_CONTACT_KEY = 'ACC-Voucher_IT_CONTACT', __itMail = '';
+function itTeam(label) { label = label || 'IT팀'; return __itMail ? label + '(' + __itMail + ')' : label; }
+function itApplyDom() {
+  try {
+    document.querySelectorAll('[data-it-contact]').forEach(function (el) {
+      el.textContent = '';
+      if (!__itMail) { el.textContent = el.getAttribute('data-it-contact') || 'IT팀'; return; }
+      var a = document.createElement('a'); a.href = 'mailto:' + __itMail; a.textContent = __itMail;
+      a.style.color = '#0078d4'; a.style.textDecoration = 'none'; el.appendChild(a);
+    });
+  } catch (e) {}
+}
+function itSetFromCfg(cfg) {
+  try {
+    if (!cfg || typeof cfg !== 'object') return;
+    var keys = Object.keys(cfg);
+    var pick = function (k) { var kk = keys.find(function (x) { return String(x).trim().toUpperCase() === k.toUpperCase(); }); return kk && cfg[kk] ? String(cfg[kk].email || '').trim().toLowerCase() : ''; };
+    var ok = function (v) { return /^[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(v); };
+    var mail = [pick(IT_CONTACT_KEY), pick('CONTACT_EMAIL')].find(ok);
+    if (mail) __itMail = mail;
+    itApplyDom();
+  } catch (e) {}
+}
+loadSystemConfig = (function (orig) { return async function () { var c = await orig.apply(this, arguments); itSetFromCfg(c || (typeof _sysConfig !== 'undefined' ? _sysConfig : null)); return c; }; })(loadSystemConfig);
 // 설정 파일 값을 화면에 적용한다 — 부팅과 「다시 시도」 가 같이 쓴다.
 // 예전에는 boot() 안의 then 에만 있어, 파일을 못 읽으면 _configLoaded 가 영영 false 로 남았다.
 // 그러면 「관리자」 단추가 1.5초마다 권한 확인만 되풀이하며 아무 반응이 없었고(09-29 UAT), 헤더 연락처는 「-」 였다.
@@ -3669,7 +3696,7 @@ function contactNameOf(email, fallbackName) {
   if (fallbackName) return fallbackName;
   const emp = (window._employeeData || []).find(x => (x.email || '').toLowerCase() === e);
   if (emp && emp.name) return emp.name;
-  // hong.gildong@hyosung.com → Hong Gildong  /  jane.doe.ext@ → Jane Doe (외부 계정 접미사는 제외)
+  // user@example.com → Hong Gildong  /  jane.doe.ext@ → Jane Doe (외부 계정 접미사는 제외)
   return e.split('@')[0].split(/[._-]+/)
     .filter(w => w && !['ext', 'external', 'ex'].includes(w))
     .map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') || e;
@@ -3854,7 +3881,7 @@ function escHtml(s){
 /* ── 대리 처리 표기 (AAC 연동) ────────────────────────────────────────
    AAC(결재 대리 지정)가 대리인이 처리한 결재행의 ApproverRole 뒤에
    '· 대리(이름 <메일>)' 를 덧붙인다. 그 꼬리를 그대로 화면에 뿌리면
-   '1차결재자 · 대리(Gildong Hong <hong.gildong@hyosung.com>)' 처럼 날값이 노출된다.
+   '1차결재자 · 대리(Gildong Hong <user@example.com>)' 처럼 날값이 노출된다.
    본래 역할만 남기고, 대리였다는 사실은 알약으로 따로 보여준다.
    IT-Ticket(1877행 부근)·Goodwill-Approval·aps 와 같은 표기·같은 색이다.
    대리가 아니면 aacRolePill 이 빈 문자열을 돌려주므로 호출부에 조건이 필요 없다. */
@@ -3866,7 +3893,7 @@ function _aacRoleParse(role){
   if(!m) return null;
   const im = m[2].match(/^([\s\S]*?)\s*<([^>]+)>\s*$/);
   const nm = (im ? im[1] : m[2]).trim(), em = im ? im[2].trim() : '';
-  // 이름이 없으면 메일을 이름 자리에 쓴다 — 'on behalf of  · a@x.com' 처럼 비지 않게
+  // 이름이 없으면 메일을 이름 자리에 쓴다 — 'on behalf of  · a@example.com' 처럼 비지 않게
   return { base: m[1].trim(), name: nm || em, email: nm ? em : '' };
 }
 function aacRoleBase(role){
@@ -3971,10 +3998,10 @@ function flexForRender(apLine){
   [['TL','tl','팀장(Boss)'],['MC','dh','부서장(Boss of Boss)']].forEach(([role,key,what])=>{
     if(!apLine.some(a=>a.role===role) || r[key]) return;
     _flexNote[key] = r.nodata
-      ? '⚠ 직원 명부(employee_search)를 읽지 못해 결재자를 직접 선택합니다 — 새로고침 후에도 같으면 IT팀(stk_it@hyosung.com)에 알려주세요.'
+      ? '⚠ 직원 명부(employee_search)를 읽지 못해 결재자를 직접 선택합니다 — 새로고침 후에도 같으면 '+itTeam('IT팀')+'에 알려주세요.'
       : r.rec
-      ? '⚠ Flex 명부(employee_search)에서 '+(r.org ? (key==='tl'?'팀장':'부서장')+'('+r[key+'Col']+')' : what)+' 「'+((r.org ? r[key+'Name'] : (key==='tl'?r.rec.boss:(r.rec.boss2||r.rec.boss)))||'(빈칸)')+'」 을(를) 찾지 못해 직접 선택합니다 — IT팀(stk_it@hyosung.com)에 알려주세요.'
-      : '⚠ 신청자 계정이 Flex 명부(employee_search)에 없어 결재자를 직접 선택합니다 — IT팀(stk_it@hyosung.com)에 알려주세요.';
+      ? '⚠ Flex 명부(employee_search)에서 '+(r.org ? (key==='tl'?'팀장':'부서장')+'('+r[key+'Col']+')' : what)+' 「'+((r.org ? r[key+'Name'] : (key==='tl'?r.rec.boss:(r.rec.boss2||r.rec.boss)))||'(빈칸)')+'」 을(를) 찾지 못해 직접 선택합니다 — '+itTeam('IT팀')+'에 알려주세요.'
+      : '⚠ 신청자 계정이 Flex 명부(employee_search)에 없어 결재자를 직접 선택합니다 — '+itTeam('IT팀')+'에 알려주세요.';
     if(!r.nodata) why.push(role+': '+(r.rec ? (r.org ? r[key+'Col']+' 못 찾음('+(r[key+'Name']||'')+')' : key==='tl' ? 'Boss 못 찾음('+(r.rec.boss||'')+')' : 'Boss of Boss 못 찾음('+(r.rec.boss2||'')+'/'+(r.rec.boss||'')+')') : '명부에 없음'));   // 10-14: 새 열로 정했으면 그 열 이름
   });
   if(why.length && !flexForRender._logged){ flexForRender._logged=true; try{ logAction('ACC Voucher','결재자 Flex 연동 실패',{ user:(user.email||user.username||''), reason: why.join(' · ') }); }catch(e){} }
@@ -5137,7 +5164,7 @@ async function rollbackIncompleteVoucher(requestId, voucherId, made, total){
       if(made > 0 && !(rows.value||[]).length){
         console.error('[상신] 되돌리기 중 결재 행 조회가 0건 — 전표를 철회하지 않고 중단. RequestID:', requestId);
         spDone(false, `결재선이 ${made}/${total}단계만 만들어졌는데 결재 행을 다시 읽어오지 못해 자동 철회를 하지 않았습니다.<br>`
-          + `<b>다시 상신하지 마시고</b> IT팀(stk_it@hyosung.com)에 <b>${voucherId}</b>를 알려주세요.`);
+          + `<b>다시 상신하지 마시고</b> ${itTeam('IT팀')}에 <b>${voucherId}</b>를 알려주세요.`);
         return;
       }
       for(const it of (rows.value||[])){
@@ -5163,7 +5190,7 @@ async function rollbackIncompleteVoucher(requestId, voucherId, made, total){
     ? `결재선이 ${made}/${total}단계만 만들어져 이 전표(<b>${voucherId}</b>)는 자동으로 <b>철회</b> 처리했습니다.<br>`
       + '결재는 시작되지 않았으니 <b>다시 상신해 주세요.</b> 입력하신 내용은 화면에 그대로 남아 있습니다.'
     : `결재선이 ${made}/${total}단계만 만들어졌고 자동 철회에도 실패했습니다.<br>`
-      + `<b>다시 상신하지 마시고</b> IT팀(stk_it@hyosung.com)에 <b>${voucherId}</b>를 알려주세요.`);
+      + `<b>다시 상신하지 마시고</b> ${itTeam('IT팀')}에 <b>${voucherId}</b>를 알려주세요.`);
 }
 
 // ══ 상신 진행 모달 ═══════════════════════════════════════════════════
@@ -5594,7 +5621,7 @@ async function saveVoucher(status) {
             // 파일은 올라갔는데 전표 연결만 실패한 경우 — 데이터는 남아 있으므로 복구 가능하다.
             console.error('[첨부] 전표 연결 실패:', pe && pe.message);
             _attWarn = `파일 ${links.length}건은 업로드됐지만 전표에 연결되지 않았습니다.\n`
-                     + `상세보기에 "첨부파일 없음"으로 표시됩니다. IT팀(stk_it@hyosung.com)에 Voucher ID를 알려주세요.`;
+                     + `상세보기에 "첨부파일 없음"으로 표시됩니다. ${itTeam('IT팀')}에 Voucher ID를 알려주세요.`;
           }
         }
         if(_failedUploads.length){
@@ -6494,7 +6521,7 @@ async function processApproval(apprId, action, reqId, comment='', aprCode='') {
         console.error('[결재] 결재 행 조회 결과가 비어 있음 — 승인완료 전환 중단. RequestID:', reqId);
         _avLog('승인 기록 · 다음 단계로 넘기지 못함(결재 행 조회 0건)');
         showAccAlert('승인은 기록되었으나 다음 단계로 넘기지 못했습니다.',
-          '잠시 후 결재함에서 상태를 다시 확인해 주세요. 계속 같은 증상이면 IT팀(stk_it@hyosung.com)에 알려주세요.', '⚠️');
+          '잠시 후 결재함에서 상태를 다시 확인해 주세요. 계속 같은 증상이면 '+itTeam('IT팀')+'에 알려주세요.', '⚠️');
         closeDetailModal();
         loadApprovalQueue();
         return;
@@ -8079,7 +8106,7 @@ async function withdrawRequest(spId) {
     if(!items.length) {
       console.error('[철회] 결재 행 조회 결과가 비어 있음 — 철회 중단. RequestID:', spId);
       showAccAlert('지금은 철회할 수 없습니다.',
-        '결재행을 읽어오지 못했습니다. 잠시 후 다시 시도해 주세요.\n계속 같은 증상이면 IT팀(stk_it@hyosung.com)에 알려주세요.', '⚠️');
+        '결재행을 읽어오지 못했습니다. 잠시 후 다시 시도해 주세요.\n계속 같은 증상이면 '+itTeam('IT팀')+'에 알려주세요.', '⚠️');
       return;
     }
     const first = items[0];
