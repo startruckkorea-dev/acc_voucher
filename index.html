@@ -3989,11 +3989,37 @@ function flexResolve(){
   }
   return {rec, tl:flexByName(rec.boss), dh:flexByName(rec.boss2)||flexByName(rec.boss)};
 }
+/* ══ 본인 상신 보완 (10-20 · ITSM CHG-2026-10-20_ID-413) ══
+   Flex 로 정한 결재자가 신청자 본인이면:
+     · TL(팀장)이 본인  → MC(부서장) 단계를 금액과 무관하게 넣는다(TL 본인 결재는 그대로 둔다 — 안 A).
+     · MC(부서장)도 본인(본부장 · 단독 팀 팀장) → MC 자리에 employee_search K열(RD) 의 사람을 넣는다(본부장 → 대표).
+     · K열 사람도 본인(대표 본인 상신)이면 위 사람이 없으므로 지금처럼 둔다.
+   설정 ACC-Voucher_SELF_APPROVAL 이 「없으면 켜짐」. 이름(B) 또는 이메일(C) 칸에 N · OFF · NO 를 넣었을 때만 끈다.
+   Flex 연동이 안 된 경우(명부에 없음 · 상사 못 찾음 → 직접 선택)는 손대지 않는다. */
+function selfApprOn(){
+  const v=(_sysConfig||{})['ACC-Voucher_SELF_APPROVAL'];
+  if(!v) return true;
+  const s=String(v.name||v.email||'').trim().toUpperCase();
+  return !(s==='N'||s==='OFF'||s==='NO');
+}
+function selfApprAdj(){
+  const out={mcForce:false, mcRd:null, tlSelf:false, dhSelf:false};
+  if(!selfApprOn() || !window._empLoaded || !user || !(window._employeeData||[]).length) return out;
+  const me=[user.email, user.username].map(flexNorm).filter(Boolean);
+  const r=flexResolve(); if(!r.rec) return out;
+  const isMe=x=>!!(x && me.includes(flexNorm(x.email)));
+  out.tlSelf=isMe(r.tl); out.dhSelf=isMe(r.dh);
+  if(out.dhSelf){ const rd=flexByName(r.rec.rdc); if(rd && !isMe(rd)) out.mcRd=rd; }
+  out.mcForce = out.tlSelf && (!out.dhSelf || !!out.mcRd);   // 대표 본인 상신이면 본인 단계를 하나 더 만들지 않는다
+  return out;
+}
 let _flexNote = {};   // tl/dh → 직접 선택으로 열린 이유(안내 문구)
 function flexForRender(apLine){
   _flexNote = {};
   if(!window._empLoaded || !user) return {tl:null, dh:null};   // 명부를 아직 읽는 중이면 예전 드롭다운 그대로(안내 없음)
-  const r = (window._employeeData||[]).length ? flexResolve() : {rec:null, tl:null, dh:null, nodata:true}; const why=[];
+  let r = (window._employeeData||[]).length ? flexResolve() : {rec:null, tl:null, dh:null, nodata:true}; const why=[];
+  const _sa = r.rec ? selfApprAdj() : {};
+  if(_sa.mcRd) r = Object.assign({}, r, {dh:_sa.mcRd});   // 부서장이 본인 → 대표(K열)
   [['TL','tl','팀장(Boss)'],['MC','dh','부서장(Boss of Boss)']].forEach(([role,key,what])=>{
     if(!apLine.some(a=>a.role===role) || r[key]) return;
     _flexNote[key] = r.nodata
@@ -4039,8 +4065,13 @@ function renderApproval() {
   }
 
   const apLine=[];
-  if(needed(rules.TL,drKrw))  apLine.push({role:'TL',  label:'Team Lead (팀장)',       rule:rules.TL,  fixed:false});
-  if(needed(rules.MC,drKrw))  apLine.push({role:'MC',  label:'Department Head (부서장)',rule:rules.MC,  fixed:false});
+  const _sa = selfApprAdj();   // 본인 상신 보완(10-20)
+  const _tlNeed = needed(rules.TL,drKrw);
+  if(_tlNeed)  apLine.push({role:'TL',  label:'Team Lead (팀장)'+(_sa.tlSelf?' — 신청자 본인':''), rule:rules.TL,  fixed:false});
+  if(needed(rules.MC,drKrw) || (_tlNeed && _sa.mcForce))
+    apLine.push({role:'MC',  label: _sa.mcRd ? 'Department Head (부서장) — 신청자가 부서장이라 대표 결재'
+                                  : (!needed(rules.MC,drKrw) ? 'Department Head (부서장) — 팀장 본인 상신 · 금액 무관' : 'Department Head (부서장)'),
+                 rule:rules.MC,  fixed:false});
   // CEO는 전 유형이 '-'로 설정되어 실제로는 추가되지 않는다(2026-07-25 라인 제거).
   // 규칙 테이블만 되돌리면 다시 살아나도록 코드는 유지한다.
   if(needed(rules.CEO,drKrw)) apLine.push({role:'CEO', label:'CEO',                      rule:rules.CEO, fixed:true, person:CEO});
@@ -5788,8 +5819,10 @@ function buildApprovers() {
     return true;
   }
   const apLine=[];
-  if(needed(rules.TL,drKrw))  apLine.push({fixed:false,role:'TL'});
-  if(needed(rules.MC,drKrw))  apLine.push({fixed:false,role:'MC'});
+  const _sa = selfApprAdj();   // 본인 상신 보완(10-20) — 화면(renderApproval)과 같은 판정
+  const _tlNeed = needed(rules.TL,drKrw);
+  if(_tlNeed)  apLine.push({fixed:false,role:'TL'});
+  if(needed(rules.MC,drKrw) || (_tlNeed && _sa.mcForce))  apLine.push({fixed:false,role:'MC'});
   if(needed(rules.CEO,drKrw)) apLine.push({fixed:true,role:'CEO',person:CEO});
   if(needed(rules.RD,drKrw) && !isRdExempt(type)) apLine.push({fixed:true,role:'RD',person:RD});
   // No.3: BU 승인 후 ACC 담당자(회계담당자) 처리 → 그 다음 Accounting Head → CFO
@@ -9119,6 +9152,11 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
   /* 역할은 꼬리를 뗀 본래 값으로 맞춘다. 대리 처리된 행은 aacPatchWith 가 ApproverRole 을
      'CFO · 대리(이름 <메일>)' 로 바꾸므로, 날값으로 비교하면 그 단계가 비어 NOT REQUIRED 로 찍혔다(09-23). */
   const apprByRole={}; (apprList||[]).forEach(a=>{apprByRole[aacRoleBase(a.ApproverRole)]=a;});
+  /* 10-20 본인 상신 보완 — MC 가 금액 기준 미만인데 결재선에 있으면 팀장 본인 상신으로 들어간 단계(그 전에는 이런 건이 없었다) */
+  const _mcSelfForced = (function(){ try{ const ru=accRulesAt(v.VoucherType, v.SubmittedDate); const rv=ru&&ru.MC;
+    if(!rv || rv==='-' || rv==='필수' || rv==='필요시') return false; return !accRuleNeeded(rv, voucherKrwTotals(v, lines_data).dr); }catch(e){ return false; } })();
+  const _mcByRd = (function(){ try{ const m=apprByRole['MC']; const rdE=String(((_sysConfig||{})['ACC-Voucher_RD']||{}).email||'').trim().toLowerCase();
+    return !!(m && rdE && String(m.ApproverEmail||'').trim().toLowerCase()===rdE); }catch(e){ return false; } })();
   const fmtApprDateTime=s=>{if(!s)return '';const d=new Date(new Date(s).getTime()+9*3600*1000);const p=n=>String(n).padStart(2,'0');return `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;};
   // "홍길동 스타트럭코리아 IT(Gildong Hong)" 형태에서 한글 이름만 추출
   const koreanName = (s)=>{ const m=String(s||'').match(/^[가-힣]+/); return m ? m[0] : (s||'-'); };
@@ -9319,6 +9357,7 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
           // 표에 담기는 값은 짧게 두고, 자세한 설명은 표 아래 각주에서 보완한다.
           // 추가 결재자는 금액 기준이 아니라 신청자가 직접 지정한 단계다.
           if(rc[2]) ruleText='Requester';
+          else if(role==='MC' && apprByRole['MC'] && _mcSelfForced) ruleText='TL Self';
           else if(role==='ACC'||role==='AMGR') ruleText='Required'; // 항상 결재라인에 포함 (needed() 체크 없이 무조건 push)
           else {
             const rv = rules[role];
@@ -9344,7 +9383,9 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
       '</tr>'+
     '</table>'+
     // 표에 담기는 값을 짧게 줄인 대신, 의미는 각주로 남겨 감사 시 해석이 어긋나지 않게 한다.
-    '<div style="font-size:8px;color:#666;margin-top:3px;line-height:1.5">* 신청자가 직접 지정한 단계 &nbsp;·&nbsp; <b>Exempted</b> 승인된 사유로 제외 &nbsp;·&nbsp; <b>Skipped</b> Accounting 결재라인 적용으로 제외 &nbsp;·&nbsp; 금액 단위 <b>K</b>=천, <b>M</b>=백만</div>'+
+    '<div style="font-size:8px;color:#666;margin-top:3px;line-height:1.5">* 신청자가 직접 지정한 단계 &nbsp;·&nbsp; <b>Exempted</b> 승인된 사유로 제외 &nbsp;·&nbsp; <b>Skipped</b> Accounting 결재라인 적용으로 제외 &nbsp;·&nbsp; 금액 단위 <b>K</b>=천, <b>M</b>=백만'+
+      ((_mcSelfForced && apprByRole['MC']) ? ' &nbsp;·&nbsp; <b>TL Self</b> 팀장 본인 상신으로 금액과 무관하게 부서장 결재' : '')+
+      (_mcByRd ? ' &nbsp;·&nbsp; MC 단계는 신청자가 부서장 본인이라 RD 가 결재' : '')+'</div>'+
     // 회계팀 담당자가 직접 상신한 건은 회계 담당자 결재 단계가 빠지므로 그 근거를 양식에 남긴다.
     (isAccLineSkippedDoc
       ? '<div style="margin-top:4px;border:1px solid #b6d7f2;background:#eaf3fd;border-radius:3px;padding:6px 9px;font-size:8.5px;color:#0b5fa5;line-height:1.55">'+
