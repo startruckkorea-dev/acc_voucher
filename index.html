@@ -2019,15 +2019,25 @@ async function loadVolumeConfig() {
     const tag = meta.eTag || meta.lastModifiedDateTime || '';
     if (VOL_CONFIG && tag && tag === _volConfigTag) { applyCurrentVolume(); return VOL_CONFIG; }
     const t = await token();
-    const res = await fetch(GRAPH+'/drives/'+docDrive.id+'/root:/acc_voucher_volumes.json:/content', {headers:{Authorization:'Bearer '+t}});
+    // 10-23(B-01): 메타 조회가 됐다는 것은 파일이 있다는 뜻이다. 본문 읽기가 일시 실패(429 · 5xx)했다고
+    // 기본값(APR01)으로 운영 파일을 덮어쓰면, 세대 전환 뒤에도 옛 세대에 결재행이 쌓인다.
+    // 한 번 더 읽어 보고, 그래도 안 되면 예외로 넘겨 아래 catch 가 직전 설정을 유지하게 한다(파일은 건드리지 않는다).
+    const _volUrl = GRAPH+'/drives/'+docDrive.id+'/root:/acc_voucher_volumes.json:/content';
+    let res = await fetch(_volUrl, {headers:{Authorization:'Bearer '+t}});
+    if (!res.ok && res.status !== 404) {
+      await new Promise(r => setTimeout(r, 1200));
+      res = await fetch(_volUrl, {headers:{Authorization:'Bearer '+t}});
+    }
     if (res.ok) {
       VOL_CONFIG = await res.json();
       _volConfigTag = tag;
-    } else {
+    } else if (res.status === 404) {
       VOL_CONFIG = { reqList: DEFAULT_LIST_REQUESTS, currentApr: 'APR01', aprVolumes: [{ code:'APR01', id:DEFAULT_LIST_APPROVALS, label:'', startDate:'' }] };
       // 설정 파일이 없으면 운영에서는 기본값으로 새로 만든다.
       // UAT 는 운영 파일을 건드리면 안 되므로 메모리에만 두고 넘어간다.
       if (!IS_UAT) await saveVolumeConfig();
+    } else {
+      throw new Error('acc_voucher_volumes.json 본문 읽기 실패 (' + res.status + ')');
     }
   } catch(e) {
     // 이미 정상적으로 읽어둔 설정이 있으면 그대로 쓴다.
@@ -2056,9 +2066,12 @@ async function saveVolumeConfig() {
   _volConfigTag = '';
   const docDrive = await _getConfigDocDrive();
   const t = await token();
-  await fetch(GRAPH+'/drives/'+docDrive.id+'/root:/acc_voucher_volumes.json:/content', {
+  const _res = await fetch(GRAPH+'/drives/'+docDrive.id+'/root:/acc_voucher_volumes.json:/content', {
     method:'PUT', headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'}, body: JSON.stringify(VOL_CONFIG)
   });
+  // 10-23(B-02): 저장 실패를 성공으로 안내하지 않는다 — 호출하는 곳(세대 등록 · 전환)이 오류 안내를 띄운다.
+  // 위에서 eTag 를 비워 두었으므로, 실패해도 다음 확인 때 파일을 다시 읽어 메모리에 바꿔 둔 세대 값은 버려진다.
+  if (!_res.ok) throw new Error('세대 설정 저장 실패 (' + _res.status + ')');
 }
 function getAprVolumeByCode(code) { return (VOL_CONFIG?.aprVolumes||[]).find(v=>v.code===code); }
 function getCurrentAprVolume() { return getAprVolumeByCode(VOL_CONFIG?.currentApr) || (VOL_CONFIG?.aprVolumes||[])[0]; }
@@ -2440,15 +2453,24 @@ function cfgVal(cfg, key, def={name:'',email:''}) {
   const v=cfg[key];
   return {name:v.name||def.name, email:v.email||def.email};
 }
+/* 10-23: 접두어 뒤가 숫자인 키(PREFIX1 · PREFIX2 …)를 번호순으로 모두 — 대소문자 그대로(기존 비교와 같음) */
+function _cfgNumKeys(cfg, prefix) {
+  return Object.keys(cfg || {}).filter(x => x.startsWith(prefix) && /^\d+$/.test(x.slice(prefix.length)))
+    .sort((a, b) => Number(a.slice(prefix.length)) - Number(b.slice(prefix.length)));
+}
 function cfgEmails(cfg, keys) {
   // _ADMIN_N 패턴 키는 cfg에 존재하는 모든 번호까지 자동 확장
   const expanded = [];
   keys.forEach(k => {
+    // 10-23(E-09): 공통 관리자 'ADMIN_SP' 는 설정 파일의 ADMIN_SP_1 · ADMIN_SP_2 … 까지 함께 읽는다(APS 10-10 과 같은 기준).
+    // 설정 파일에는 번호 붙은 키만 있어, 예전에는 공통 관리자가 관리자 명단에서 빠졌다.
+    if (k === 'ADMIN_SP') { expanded.push(k); _cfgNumKeys(cfg, 'ADMIN_SP_').forEach(x => expanded.push(x)); return; }
     const match = k.match(/^(.+_ADMIN_)[0-9]+$/);
     if (match) {
       const prefix = match[1];
-      let n = 1;
-      while (cfg && cfg[prefix + n]) { expanded.push(prefix + n); n++; }
+      // 10-23(E-10): 번호가 중간에 비어도(_3 없이 _4) 뒤 번호까지 모두 읽는다 — 설정 파일에 있는 번호 전부, 번호순.
+      // 예전 방식(1 부터 이어지는 동안만)은 한 줄을 지우면 그 뒤 관리자가 조용히 빠졌다.
+      _cfgNumKeys(cfg, prefix).forEach(x => expanded.push(x));
     } else {
       expanded.push(k);
     }
@@ -4174,7 +4196,7 @@ function renderApproval() {
   const ACC_DEFAULT = cfgVal(cfg, ACC_MAP[type]||'ACC-Voucher_GL',{name:'-',email:''});
   const ACC = accOverride || ACC_DEFAULT; // 수동으로 변경했으면 그 값을, 아니면 AP/AR/GL 기본값을 사용
 
-  const drKrw = calcKrwTotals(lines).drKrw;                 // 결재 단계 금액 판정 — 저장값과 같은 규칙(09-28)
+  const drKrw = approvalBasisKrw();                        // 결재 단계 금액 판정 — 입력 · 기준 환율 환산액 중 큰 쪽(10-23, A-01)
 
   function needed(rule,amt){
     if(!rule||rule==='-') return false;
@@ -4876,6 +4898,15 @@ function updateTotals() {
   Object.keys(_kt.byCur).forEach(cur=>{ if(_kt.byCur[cur].dr) drByCur[cur]=_kt.byCur[cur].dr; if(_kt.byCur[cur].cr) crByCur[cur]=_kt.byCur[cur].cr; });
   const totalKrw = drKrw || crKrw || 0;
   document.getElementById('total-amt').textContent = 'KRW '+fmtK(totalKrw);
+  // 10-23(A-01): 결재 단계는 기준 환율 환산액이 더 크면 그 금액으로 정한다 — 왜 결재자가 늘었는지 바로 알 수 있게
+  try {
+    const _basis = approvalBasisKrw();
+    let _bn = document.getElementById('approval-basis-note');
+    if (_basis > drKrw) {
+      if (!_bn) { _bn = document.createElement('div'); _bn.id = 'approval-basis-note'; _bn.style.cssText = 'font-size:11px;color:#a4262c;margin-top:4px'; document.getElementById('total-amt').insertAdjacentElement('afterend', _bn); }
+      _bn.textContent = '⚠ 입력 환율이 기준 환율보다 낮아, 결재 단계는 기준 환율 환산액(≈ KRW ' + fmtK(_basis) + ')으로 정합니다.';
+    } else if (_bn) { _bn.remove(); }
+  } catch (e) { console.warn('[결재 판정 금액] 안내 표시 실패:', e && e.message); }
   document.getElementById('total-krw').textContent = '';
   // Total 컬럼 갱신
   if(!updateTotals._rendering) {
@@ -5444,7 +5475,17 @@ function onPurposeTitleInput(){
   }
 }
 
+/* 10-23(B-03): 재진입 차단 — 예전에는 첫 await(세대 설정 확인) 뒤에야 버튼이 잠겨, 연타 · Enter 반복으로
+   같은 전표가 두 건 생길 수 있었다. 함수에 들어오는 즉시 잠그고, 끝나면(성공 · 실패 · 중단 모두) 푼다.
+   버튼 잠금 · 진행 팝업 · 롤백 등 기존 처리는 _saveVoucherRun 안에서 그대로 동작한다. */
+let _saveVoucherBusy = false;
 async function saveVoucher(status) {
+  if (_saveVoucherBusy) { console.warn('[상신] 처리 중 — 중복 실행을 무시합니다.'); return; }
+  _saveVoucherBusy = true;
+  try { return await _saveVoucherRun(status); }
+  finally { _saveVoucherBusy = false; }
+}
+async function _saveVoucherRun(status) {
   if (uatReadOnlyGuard(status === DRAFT_STATUS ? '임시저장' : '상신')) return;
   const _isDraft = (status === DRAFT_STATUS);
   await loadVolumeConfig();
@@ -5936,7 +5977,7 @@ function buildApprovers() {
     ADV:'ACC-Voucher_AP',SET:'ACC-Voucher_AP'};
   const ACC_DEFAULT = cfgVal(cfg, ACC_MAP[type]||'ACC-Voucher_GL', {name:'-',email:''});
   const ACC = accOverride || ACC_DEFAULT; // 수동으로 변경했으면 그 값을, 아니면 AP/AR/GL 기본값을 사용
-  const drKrw = calcKrwTotals(lines).drKrw;                 // 결재 단계 금액 판정 — 저장값과 같은 규칙(09-28)
+  const drKrw = approvalBasisKrw();                        // 결재 단계 금액 판정 — 입력 · 기준 환율 환산액 중 큰 쪽(10-23, A-01)
   function needed(rule,amt){
     if(!rule||rule==='-') return false;
     if(rule==='필수'||rule==='필요시') return true;
@@ -6293,6 +6334,18 @@ function toggleExtraRates() {
    라인마다 반올림해 더하면 DR 과 CR 의 줄 수가 다를 때 ±1원이 난다 — EUR 두 줄(DR) · 한 줄(CR) 전표가 EUR 합계는 같은데
    저장값이 2,939,796,827 / 828 로 어긋나 상세 · 공식 양식에 「불일치」 로 찍힌 사례(09-28).
    저장값(TotalDR/CR_KRW) · 결재선 금액 판정 · 작성 화면 · 상세 · 공식 양식이 모두 이 함수를 쓴다. */
+/* 10-23(A-01): 결재 단계(부서장 · RD · CFO …) 금액 판정에 쓰는 원화 금액.
+   입력 환율 환산액과 기준 환율(acc_voucher_exchange.xlsx 의 오늘 · 직전 날짜 값, _cachedRates) 환산액 중 큰 쪽을 쓴다.
+   환율 칸을 낮춰 고쳐 결재 단계가 빠지는 것을 막는다(CTR_PR approvalBasisKRW 와 같은 규칙, 10-10).
+   저장 금액(TotalDR_KRW 등) · 화면 합계 · 공식 양식은 지금처럼 입력 환율로 계산한다 — 여기서는 결재선 판정만 바뀐다.
+   기준 환율이 없는 통화는 입력 환율을 그대로 쓴다(지금과 같음). */
+function approvalBasisKrw() {
+  const entered = calcKrwTotals(lines).drKrw;
+  const ref = window._cachedRates || {};
+  if (!Object.keys(ref).some(c => parseFloat(ref[c]) > 0)) return entered;
+  const byRef = calcKrwTotals(lines, cur => (parseFloat(ref[cur]) > 0 ? parseFloat(ref[cur]) : getExchangeRate(cur))).drKrw;
+  return Math.max(entered, byRef);
+}
 function calcKrwTotals(lineList, rateOf) {
   const byCur = {};
   (lineList || []).forEach(l => {
@@ -6582,9 +6635,9 @@ function renderApprovalQueue() {
     if(!v._spId) console.warn('[ApprQueue] _voucher 매칭 실패 - RequestID:', item.RequestID);
     return `<tr onclick="openVoucherSP('${v._spId}','approval')" style="cursor:pointer">
       <td style="color:#a19f9d;font-size:.73rem;text-align:center">${i+1}</td>
-      <td style="font-size:.73rem;color:#605e5c" title="${escHtmlAttr(v.RequesterEmail||'')}">${v.RequesterEmail||'-'}</td>
-      <td style="font-size:.72rem;color:#0078d4" title="${escHtmlAttr(v.Title||'')}">${v.Title||'-'}</td>
-      <td style="text-align:center"><span class="type-badge t-${v.VoucherType}" style="font-size:.62rem;padding:1px 5px">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span></td>
+      <td style="font-size:.73rem;color:#605e5c" title="${escHtmlAttr(v.RequesterEmail||'')}">${escHtml(v.RequesterEmail||'-')}</td>
+      <td style="font-size:.72rem;color:#0078d4" title="${escHtmlAttr(v.Title||'')}">${escHtml(v.Title||'-')}</td>
+      <td style="text-align:center"><span class="type-badge t-${escHtmlAttr(v.VoucherType||'')}" style="font-size:.62rem;padding:1px 5px">${escHtml(TYPE_LABEL[v.VoucherType]||v.VoucherType||'-')}</span></td>
       <td style="font-size:.73rem;color:#605e5c" title="${escHtmlAttr(v.BPName||'')}">${escHtml(v.BPName)||'-'}</td>
       <td style="font-size:.73rem" title="${escHtmlAttr(spText(v.PurposeTitle||''))}">${escHtml(spText(v.PurposeTitle))||'-'}</td>
       <td style="font-size:.73rem" title="${escHtmlAttr(spText(v.Purpose||''))}">${escHtml(spText(v.Purpose))||'-'}</td>
@@ -7704,7 +7757,7 @@ function renderAdminList(){
     const pend = accPendingStep(v);
     return `<tr onclick="openVoucherSP('${v._spId}','admin',${!!v._srcDraft})">
     <td style="color:#a19f9d;font-size:.7rem;text-align:center">${reverseNo}</td>
-    <td style="font-size:.68rem;color:#605e5c;max-width:86px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtmlAttr(v.RequesterEmail||'')}">${v.RequesterEmail||'-'}</td>
+    <td style="font-size:.68rem;color:#605e5c;max-width:86px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtmlAttr(v.RequesterEmail||'')}">${escHtml(v.RequesterEmail||'-')}</td>
     <td style="font-size:.64rem;color:#0078d4;white-space:nowrap;letter-spacing:-.2px">${v.Title||'-'}</td>
     <td style="text-align:center"><span class="type-badge t-${v.VoucherType}" style="font-size:.58rem;padding:1px 4px">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span></td>
     <td style="max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.68rem;color:#605e5c" title="${escHtmlAttr(v.BPName||'')}">${escHtml(v.BPName)||'-'}</td>
@@ -7765,9 +7818,9 @@ function renderList(){
   };
   body.innerHTML=list.map((v,i)=>`<tr onclick="openVoucherSP('${v._spId}','mylist',${!!v._srcDraft})">
     <td style="color:#a19f9d;font-size:.73rem;text-align:center">${list.length-i}</td>
-    <td style="font-size:.73rem;color:#605e5c" title="${escHtmlAttr(v.RequesterEmail||'')}">${v.RequesterEmail||'-'}</td>
-    <td style="font-size:.72rem;color:#0078d4" title="${escHtmlAttr(v.Title||'')}">${v.Title||'-'}</td>
-    <td style="text-align:center"><span class="type-badge t-${v.VoucherType}" style="font-size:.62rem;padding:1px 5px">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span></td>
+    <td style="font-size:.73rem;color:#605e5c" title="${escHtmlAttr(v.RequesterEmail||'')}">${escHtml(v.RequesterEmail||'-')}</td>
+    <td style="font-size:.72rem;color:#0078d4" title="${escHtmlAttr(v.Title||'')}">${escHtml(v.Title||'-')}</td>
+    <td style="text-align:center"><span class="type-badge t-${escHtmlAttr(v.VoucherType||'')}" style="font-size:.62rem;padding:1px 5px">${escHtml(TYPE_LABEL[v.VoucherType]||v.VoucherType||'-')}</span></td>
     <td style="font-size:.73rem;color:#605e5c" title="${escHtmlAttr(v.BPName||'')}">${escHtml(v.BPName)||'-'}</td>
     <td style="font-size:.73rem" title="${escHtmlAttr(spText(v.PurposeTitle||''))}">${escHtml(spText(v.PurposeTitle))||'-'}</td>
     <td style="font-size:.73rem;color:#605e5c" title="${escHtmlAttr(spText(v.Purpose||''))}">${escHtml(spText(v.Purpose))||'-'}</td>
@@ -8408,7 +8461,7 @@ async function openVoucherSP(spId, fromTab, isDraft){
   })() : '-';
   const invoiceDate = fmtDateOnly(v.InvoiceDate) || '-';
   const exchangeRateDisplay = v.ExchangeRate
-    ? v.ExchangeRate.split(',').map(s=>s.replace(':',': ')).join(' &nbsp;|&nbsp; ')
+    ? v.ExchangeRate.split(',').map(s=>escHtml(s.replace(':',': '))).join(' &nbsp;|&nbsp; ')
     : '-';
 
   const lineRows = lines_data.map((l,i)=>{
@@ -8451,7 +8504,7 @@ async function openVoucherSP(spId, fromTab, isDraft){
         driveId = decoded.substring(0, sepIdx);
         itemId = decoded.substring(sepIdx+3);
       }catch(e){ console.warn('[첨부] 링크 키 해석 실패:', e && e.message); }
-      return `<div style="padding:4px 0;font-size:.8rem">📎 <a href="#" class="file-dl-link" data-drive="${encodeURIComponent(driveId)}" data-id="${encodeURIComponent(itemId)}" data-name="${encodeURIComponent(name)}" style="color:#0078d4;cursor:pointer">${name}</a></div>`;
+      return `<div style="padding:4px 0;font-size:.8rem">📎 <a href="#" class="file-dl-link" data-drive="${encodeURIComponent(driveId)}" data-id="${encodeURIComponent(itemId)}" data-name="${encodeURIComponent(name)}" style="color:#0078d4;cursor:pointer">${escHtml(name)}</a></div>`;
     }).join('');
   }
 
@@ -8484,24 +8537,24 @@ async function openVoucherSP(spId, fromTab, isDraft){
   let apprHtml = '<div style="padding:12px;text-align:center;color:#a19f9d;font-size:.78rem">결재 이력을 불러오는 중...</div>';
   document.getElementById('voucher-detail-content').innerHTML = `
     <div class="det-sec">기반 정보</div>
-    ${row('Voucher ID', `<span style="font-weight:700">${v.Title||'-'}</span>`)}
-    ${row('Voucher Type', `<span class="type-badge t-${v.VoucherType}">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span>`)}
-    ${row('상태', `<span class="${stMap[v.Status]||'badge-대기'}">${stLabel[v.Status]||v.Status||'-'}</span>`)}
-    ${row('신청자', v.RequesterEmail||'-')}
-    ${row('Cost Center', v.RequesterCCTR)}
+    ${row('Voucher ID', `<span style="font-weight:700">${escHtml(v.Title||'-')}</span>`)}
+    ${row('Voucher Type', `<span class="type-badge t-${escHtmlAttr(v.VoucherType||'')}">${escHtml(TYPE_LABEL[v.VoucherType]||v.VoucherType||'-')}</span>`)}
+    ${row('상태', `<span class="${stMap[v.Status]||'badge-대기'}">${escHtml(stLabel[v.Status]||v.Status||'-')}</span>`)}
+    ${row('신청자', escHtml(v.RequesterEmail||'-'))}
+    ${row('Cost Center', escHtml(v.RequesterCCTR||''))}
     ${row('Submission Date', submittedDate)}
     ${row('Invoice Date', invoiceDate)}
     ${row('Exchange Rate', exchangeRateDisplay)}
 
     <div class="det-sec">BP 정보</div>
-    ${row('BP Code', v.BPCode)}
-    ${row('BP Name', v.BPName)}
-    ${row('Vendor Business No.', v.BPBizNo||'Master data 미기재')}
-    ${row('BP Category', v.BPCategory)}
+    ${row('BP Code', escHtml(v.BPCode||''))}
+    ${row('BP Name', escHtml(v.BPName||''))}
+    ${row('Vendor Business No.', escHtml(v.BPBizNo||'Master data 미기재'))}
+    ${row('BP Category', escHtml(v.BPCategory||''))}
     ${(()=>{
       let extras=[]; try{ extras=JSON.parse(v.AdditionalBPsJSON||'[]'); }catch(e){ extras=[]; }
       if(!extras.length) return '';
-      return extras.map((b,i)=>row('추가 BP '+(i+1), `${b.code||'-'} · ${b.name||'-'}${b.bizNo?(' · '+b.bizNo):''}`)).join('');
+      return extras.map((b,i)=>row('추가 BP '+(i+1), `${escHtml(b.code||'-')} · ${escHtml(b.name||'-')}${b.bizNo?(' · '+escHtml(b.bizNo)):''}`)).join('');
     })()}
 
     <div class="det-sec">Purpose / Description</div>
