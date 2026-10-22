@@ -7758,8 +7758,8 @@ function renderAdminList(){
     return `<tr onclick="openVoucherSP('${v._spId}','admin',${!!v._srcDraft})">
     <td style="color:#a19f9d;font-size:.7rem;text-align:center">${reverseNo}</td>
     <td style="font-size:.68rem;color:#605e5c;max-width:86px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtmlAttr(v.RequesterEmail||'')}">${escHtml(v.RequesterEmail||'-')}</td>
-    <td style="font-size:.64rem;color:#0078d4;white-space:nowrap;letter-spacing:-.2px">${v.Title||'-'}</td>
-    <td style="text-align:center"><span class="type-badge t-${v.VoucherType}" style="font-size:.58rem;padding:1px 4px">${TYPE_LABEL[v.VoucherType]||v.VoucherType||'-'}</span></td>
+    <td style="font-size:.64rem;color:#0078d4;white-space:nowrap;letter-spacing:-.2px">${escHtml(v.Title||'-')}</td>
+    <td style="text-align:center"><span class="type-badge t-${escHtmlAttr(v.VoucherType||'')}" style="font-size:.58rem;padding:1px 4px">${escHtml(TYPE_LABEL[v.VoucherType]||v.VoucherType||'-')}</span></td>
     <td style="max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.68rem;color:#605e5c" title="${escHtmlAttr(v.BPName||'')}">${escHtml(v.BPName)||'-'}</td>
     <td style="max-width:104px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.68rem" title="${escHtmlAttr(spText(v.PurposeTitle)||'')}">${escHtml(spText(v.PurposeTitle))||'-'}</td>
     <td style="max-width:104px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.68rem;color:#605e5c" title="${escHtmlAttr(spText(v.Purpose)||'')}">${escHtml(spText(v.Purpose))||'-'}</td>
@@ -8106,7 +8106,8 @@ async function resumeDraft(spId) {
     try {
       const _snap = {};
       Object.entries(_rateId).forEach(([c, id]) => { const el = document.getElementById(id); if (el) { _snap[id] = el.value; if (_rateMap[c]) el.value = _rateMap[c]; } });
-      _rolesOld = (buildApprovers() || []).map(a => a.role);
+      { const _ref = window._cachedRates; window._cachedRates = null;   // 10-23: 옛 결재선은 임시저장 당시 방식(입력 환율만)으로
+        try { _rolesOld = (buildApprovers() || []).map(a => a.role); } finally { window._cachedRates = _ref; } }
       Object.entries(_snap).forEach(([id, v]) => { const el = document.getElementById(id); if (el) el.value = v; });
       _rolesNow = (buildApprovers() || []).map(a => a.role);
     } catch(e) { console.warn('[Draft] 결재선 비교 실패:', e.message); }
@@ -9343,8 +9344,16 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
      'CFO · 대리(이름 <메일>)' 로 바꾸므로, 날값으로 비교하면 그 단계가 비어 NOT REQUIRED 로 찍혔다(09-23). */
   const apprByRole={}; (apprList||[]).forEach(a=>{apprByRole[aacRoleBase(a.ApproverRole)]=a;});
   /* 10-20 본인 상신 보완 — MC 가 금액 기준 미만인데 결재선에 있으면 팀장 본인 상신으로 들어간 단계(그 전에는 이런 건이 없었다) */
+  /* 10-23: TL 결재자가 신청자 본인일 때만 「TL Self」 — 기준 환율 판정(A-01)으로 들어간 MC 와 구분한다.
+     신청자 메일은 UPN, 결재자 메일은 Flex 메일이라 @ 앞부분까지 같으면 같은 사람으로 본다. */
+  const _sameMail = (a, b) => { a = String(a||'').trim().toLowerCase(); b = String(b||'').trim().toLowerCase(); return !!a && !!b && (a === b || a.split('@')[0] === b.split('@')[0]); };
+  const _tlIsRequester = !!(apprByRole['TL'] && _sameMail(apprByRole['TL'].ApproverEmail, v.RequesterEmail));
   const _mcSelfForced = (function(){ try{ const ru=accRulesAt(v.VoucherType, v.SubmittedDate); const rv=ru&&ru.MC;
-    if(!rv || rv==='-' || rv==='필수' || rv==='필요시') return false; return !accRuleNeeded(rv, voucherKrwTotals(v, lines_data).dr); }catch(e){ return false; } })();
+    if(!rv || rv==='-' || rv==='필수' || rv==='필요시') return false; if(!_tlIsRequester) return false; return !accRuleNeeded(rv, voucherKrwTotals(v, lines_data).dr); }catch(e){ return false; } })();
+  /* 10-23(A-01): 저장 금액(입력 환율)으로는 기준 미만인데 결재선에 있는 금액 단계 — 상신 때 기준 환율 환산액이 더 커서 들어간 단계 */
+  const _fxRaised = (function(){ try{ const ru=accRulesAt(v.VoucherType, v.SubmittedDate)||{}; const amt=voucherKrwTotals(v, lines_data).dr;
+    return ['MC','RD','CFO'].filter(role => { const rv=ru[role]; if(!apprByRole[role] || !rv || rv==='-' || rv==='필수' || rv==='필요시') return false;
+      if(role==='MC' && _mcSelfForced) return false; return !accRuleNeeded(rv, amt); }); }catch(e){ return []; } })();
   const _mcByRd = (function(){ try{ const m=apprByRole['MC']; const rdE=String(((_sysConfig||{})['ACC-Voucher_RD']||{}).email||'').trim().toLowerCase();
     return !!(m && rdE && String(m.ApproverEmail||'').trim().toLowerCase()===rdE); }catch(e){ return false; } })();
   const fmtApprDateTime=s=>{if(!s)return '';const d=new Date(new Date(s).getTime()+9*3600*1000);const p=n=>String(n).padStart(2,'0');return `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;};
@@ -9575,7 +9584,8 @@ function buildOfficialVoucherHTML(v, lines_data, apprList) {
     // 표에 담기는 값을 짧게 줄인 대신, 의미는 각주로 남겨 감사 시 해석이 어긋나지 않게 한다.
     '<div style="font-size:8px;color:#666;margin-top:3px;line-height:1.5">* 신청자가 직접 지정한 단계 &nbsp;·&nbsp; <b>Exempted</b> 승인된 사유로 제외 &nbsp;·&nbsp; <b>Skipped</b> Accounting 결재라인 적용으로 제외 &nbsp;·&nbsp; 금액 단위 <b>K</b>=천, <b>M</b>=백만'+
       ((_mcSelfForced && apprByRole['MC']) ? ' &nbsp;·&nbsp; <b>TL Self</b> 팀장 본인 상신으로 금액과 무관하게 부서장 결재' : '')+
-      (_mcByRd ? ' &nbsp;·&nbsp; MC 단계는 신청자가 부서장 본인이라 RD 가 결재' : '')+'</div>'+
+      (_mcByRd ? ' &nbsp;·&nbsp; MC 단계는 신청자가 부서장 본인이라 RD 가 결재' : '')+
+      (_fxRaised.length ? ' &nbsp;·&nbsp; <b>FX</b> '+_fxRaised.join(' · ')+' 단계는 입력 환율이 기준 환율보다 낮아 기준 환율 환산액으로 판정' : '')+'</div>'+
     // 회계팀 담당자가 직접 상신한 건은 회계 담당자 결재 단계가 빠지므로 그 근거를 양식에 남긴다.
     (isAccLineSkippedDoc
       ? '<div style="margin-top:4px;border:1px solid #b6d7f2;background:#eaf3fd;border-radius:3px;padding:6px 9px;font-size:8.5px;color:#0b5fa5;line-height:1.55">'+
