@@ -1456,13 +1456,13 @@ window.apsYear = (function () {
           <span id="acc-line-hint" style="font-size:.7rem;color:#605e5c">— Skip the duplicate accounting review</span>
         </label>
         <div style="font-size:.7rem;color:#605e5c;margin-top:6px;line-height:1.6;padding-left:23px">
-          <b style="color:#a4262c">Available to Accounting team members only.</b> For Accounting staff, the Team Lead and Dept Head steps are
+          <b style="color:#a4262c">Available to Accounting team members only.</b> For Accounting staff, the Team Leader and Dept Head steps are
           already the Accounting Head and the CFO. Selecting this option removes the duplicate accounting review,
-          so the approval line consists of Team Lead, Dept Head and RD only.
+          so the approval line consists of Team Leader, Dept Head and RD only.
         </div>
         <div id="acc-line-note" style="display:none;font-size:.7rem;color:#8a6116;background:#fdf6e3;border:1px solid #f0d9a0;border-radius:6px;padding:7px 10px;margin-top:8px;line-height:1.6">
           The duplicate accounting review is excluded. The approval line consists of
-          <b>Team Lead, Dept Head and RD</b> only.
+          <b>Team Leader, Dept Head and RD</b> only.
         </div>
       </div>
 
@@ -3141,7 +3141,7 @@ function accRuleNeeded(rule, amt) {   // renderApproval · buildApprovers 의 ne
 }
 function accLineSkipInfo(v, lines_data) {
   const OLD = { roles: ['ACC', 'AMGR', 'CFO'], excluded: 'Accounting staff · Accounting Head · CFO',
-    cover: 'the Team Lead and Dept Head steps already correspond to the Accounting Head and the CFO', notReq: '' };
+    cover: 'the Team Leader and Dept Head steps already correspond to the Accounting Head and the CFO', notReq: '' };
   const rules = accRulesAt(v && v.VoucherType, v && v.SubmittedDate);
   if (!rules) return OLD;
   const amt = voucherKrwTotals(v, lines_data).dr;
@@ -3150,7 +3150,7 @@ function accLineSkipInfo(v, lines_data) {
   const thOf = rule => { const m = String(rule || '').replace(/[,\s]/g, '').match(/^>=?(\d+)$/); return m ? Number(m[1]) : null; };
   const out = { roles: ['ACC', 'AMGR'].concat(cfo ? ['CFO'] : []), excluded: ['Accounting staff', 'Accounting Head'].concat(cfo ? ['CFO'] : []).join(' · ') };
   out.cover = (tl && cfo && mc) ? OLD.cover
-    : tl ? 'the Team Lead step already corresponds to the Accounting Head'
+    : tl ? 'the Team Leader step already corresponds to the Accounting Head'
     : '';
   // 금액 기준에 못 미쳐 원래 없던 단계 — 「지정으로 뺀 것」 이 아님을 적는다
   const nr = [];
@@ -4234,7 +4234,7 @@ function renderApproval() {
   const apLine=[];
   const _sa = selfApprAdj();   // 본인 상신 보완(10-20)
   const _tlNeed = needed(rules.TL,drKrw);
-  if(_tlNeed)  apLine.push({role:'TL',  label:'Team Lead (팀장)'+(_sa.tlSelf?' — 신청자 본인':''), rule:rules.TL,  fixed:false});
+  if(_tlNeed)  apLine.push({role:'TL',  label:'Team Leader (팀장)'+(_sa.tlSelf?' — 신청자 본인':''), rule:rules.TL,  fixed:false});
   if(needed(rules.MC,drKrw) || (_tlNeed && _sa.mcForce))
     apLine.push({role:'MC',  label: _sa.mcRd ? 'Department Head (부서장) — 신청자가 부서장이라 대표 결재'
                                   : (!needed(rules.MC,drKrw) ? 'Department Head (부서장) — 팀장 본인 상신 · 금액 무관' : 'Department Head (부서장)'),
@@ -4285,7 +4285,7 @@ function renderApproval() {
         <div style="margin-bottom:5px">Approval requirements differ by department. If your department requires approval beyond the standard line above,
         click the dashed <span style="color:#0078d4;font-weight:700">＋ 결재자 추가</span> line below to insert an additional approver at that exact position.</div>
         <table>
-          <tr><td class="k">Where</td><td>Within BU approval only — after Team Lead, and up to the step before RD. Accounting review steps are fixed by policy.</td></tr>
+          <tr><td class="k">Where</td><td>Within BU approval only — after Team Leader, and up to the step before RD. Accounting review steps are fixed by policy.</td></tr>
           <tr><td class="k">How</td><td>Select Department → Team → Employee.</td></tr>
           <tr><td class="k">Order</td><td>Approval runs top to bottom. Later steps shift down by one, and each approver is notified only after the previous step is approved.</td></tr>
           <tr><td class="k">Scope</td><td>Applies to this voucher only. Use <span style="color:#a4262c;font-weight:700">✕ 삭제</span> to remove it before submitting.</td></tr>
@@ -8135,7 +8135,7 @@ async function resumeDraft(spId) {
       Object.entries(_snap).forEach(([id, v]) => { const el = document.getElementById(id); if (el) el.value = v; });
       _rolesNow = (buildApprovers() || []).map(a => a.role);
     } catch(e) { console.warn('[Draft] 결재선 비교 실패:', e.message); }
-    const _RL = { TL:'Line Manager', MC:'Department Head', CEO:'CEO', RD:'RD', CTRL:'Controlling Head', AMGR:'Accounting Head', CFO:'CFO', ACC:'회계담당자' };
+    const _RL = { TL:'Team Leader', MC:'Department Head', CEO:'CEO', RD:'RD', CTRL:'Controlling Head', AMGR:'Accounting Head', CFO:'CFO', ACC:'회계담당자' };
     const _lbl = r => _RL[r] || r;
     const _added = _rolesNow.filter(r => !_rolesOld.includes(r)).map(_lbl);
     const _removed = _rolesOld.filter(r => !_rolesNow.includes(r)).map(_lbl);
@@ -8242,7 +8242,7 @@ async function resumeDraft(spId) {
           : '· 결재 단계는 임시저장 때와 같습니다.\n')
       + '\n'
       + '3단계  결재자 확인\n'
-      + '· 자동 지정 · 추가 결재자는 임시저장 때 사람으로, Team Lead · Department Head 는 Flex 조직도(employee_search) 기준으로 다시 정해집니다.\n'
+      + '· 자동 지정 · 추가 결재자는 임시저장 때 사람으로, Team Leader · Department Head 는 Flex 조직도(employee_search) 기준으로 다시 정해집니다.\n'
       + '· 그 사이 담당자가 바뀌었을 수 있으니 이름을 한 번 확인해 주세요.\n'
       + '\n'
       + '4단계  첨부파일\n'
@@ -8935,7 +8935,8 @@ async function loadApprovalHistory(spId){
   const stLabelMap={'대기':'대기','대기(잠김)':'대기(잠김)','승인':'승인','승인완료':'승인완료','반려':'반려','철회(잠김)':'철회(잠김)','철회':'철회',
     Pending:'대기(잠김)',Approved:'승인완료',Rejected:'반려'};
   const roleLabelMap = {
-    TL:'Line Manager', MC:'Department Head',
+    // 11-02: 1차(TL) 표기는 Line Manager → Team Leader (저장값 TL 은 그대로라 옛 전표도 같은 표기)
+    TL:'Team Leader', MC:'Department Head',
     // CEO는 2026-07-25자로 신규 결재라인에서 제외됐으나, 그 이전에 생성된 전표의
     // Approvals에는 ApproverRole='CEO' 행이 남아 있어 결재 이력 표시를 위해 매핑을 유지한다.
     CEO:'CEO', RD:'RD', CTRL:'Controlling Head',
