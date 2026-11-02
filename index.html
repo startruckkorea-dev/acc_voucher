@@ -4100,6 +4100,15 @@ function spText(s){
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
+/* 11-02: 입력칸에 되돌려 넣을 값 — spText 뒤에도 남은 숫자 엔티티(&#58; &#x3A; …)를 한 번 더 푼다.
+   기존 전표 불러오기가 예전에 태그만 지워 「PO&#58; 920190756」 처럼 엔티티가 글자로 입력칸에 들어갔고,
+   그대로 상신한 전표는 &amp;#58; 로 저장됐을 수 있다 — 그런 전표도 다시 불러올 때 「PO: 920190756」 으로 보이게.
+   이름 엔티티(&lt; 등)는 spText 가 이미 한 번 풀었으므로 여기서는 숫자 엔티티만. */
+function spFormText(s){
+  return spText(s)
+    .replace(/&#(\d+);/g, (m, d) => { const n = parseInt(d, 10); return (n>=32 && n<=1114111) ? String.fromCodePoint(n) : m; })
+    .replace(/&#x([0-9a-fA-F]+);/g, (m, x) => { const n = parseInt(x, 16); return (n>=32 && n<=1114111) ? String.fromCodePoint(n) : m; });
+}
 // 삽입선 — 클릭하면 해당 위치에 결재자가 추가된다
 function _insertBar(anchor, label){
   // 상한에 도달하면 선을 없애지 않고 비활성 상태로 남긴다.
@@ -6453,11 +6462,12 @@ async function loadExistingVoucher() {
     try { extraBPs = JSON.parse(f.AdditionalBPsJSON||'[]'); } catch(e){ extraBPs=[]; }
     extraBPs.forEach(b=>{ if(!b._uid) b._uid = 'bp_'+(_bpUidSeq++); });
     renderExtraBPs();
-    // Purpose — HTML 태그 제거
+    // Purpose — 11-02: 태그만 지우면 SharePoint 여러 줄 텍스트의 숫자 엔티티(&#58; 등)가 글자 그대로 입력칸에 들어간다.
+    //   임시저장 불러오기(spText)와 같게 태그 · 줄바꿈 · 엔티티를 모두 풀어 넣는다(spFormText).
     const rawPurpose = f.Purpose||'';
-    document.getElementById('v-purpose').value = rawPurpose.replace(/<[^>]*>/g,'').trim();
+    document.getElementById('v-purpose').value = spFormText(rawPurpose);
   const _pt = document.getElementById('v-purpose-title');
-  if(_pt){ _pt.value = String(f.PurposeTitle||'').replace(/<[^>]*>/g,'').replace(/[\r\n\t]+/g,' ').trim(); onPurposeTitleInput(); }
+  if(_pt){ _pt.value = spFormText(f.PurposeTitle||'').replace(/[\r\n\t]+/g,' ').trim(); onPurposeTitleInput(); }
     // 라인 복원
     // 다른 전표 내용으로 폼을 바꾸므로 이어서 작성 중이던 임시저장과의 연결을 끊는다(임시저장은 그대로 남는다).
     _resumingDraftId=null; _resumingDraftTitle=''; _resumingAttRef=''; renderResumedAtt();
