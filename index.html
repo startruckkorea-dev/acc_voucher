@@ -350,6 +350,29 @@ table.lines input:focus, table.lines select:focus { outline: none; border-color:
 /* ── List ── */
 .list-filters { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
 .list-filters select, .list-filters input { border: 1px solid #d2d0ce; border-radius: 4px; padding: 6px 10px; font-size: 13px; font-family: inherit; }
+/* APS 목록 필터 공통(aps-lf · 11-01 · 운영 반영 11-05 — hs-aps 와 같음) — 검색칸 폭 · 오른쪽 묶음(건수 · 새로고침 · Excel) · 새로고침 단추 · 연도 안내 · 제목 코드 칸 */
+input.aps-lf-q { width: 170px; }
+input.aps-lf-t { width: 180px; }
+.aps-lf-right { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.aps-lf-ref { display: inline-flex; align-items: center; gap: 5px; padding: 6px 10px; background: #fff; color: #605e5c; border: 1px solid #d2d0ce; border-radius: 4px; cursor: pointer; white-space: nowrap; font-family: inherit; line-height: 1.2; }
+.aps-lf-ref:hover { background: #f3f2f1; }
+.aps-lf-ref:disabled { opacity: .6; cursor: default; }
+.aps-lf-ref .ico { display: inline-block; font-size: 1.08em; line-height: 1; }
+.aps-lf-ref.busy .ico { animation: apsLfSpin .8s linear infinite; }
+@keyframes apsLfSpin { to { transform: rotate(360deg); } }
+.aps-lf-note { color: #a4262c; white-space: nowrap; }
+/* 제목 코드 칸 — 빈 칸에 「제목 코드 검색 ex. …」 흐린 안내(APS_LF.ph 가 오늘 날짜 예시 · 칸 폭을 맞춘다). 글자를 치면 안내는 숨는다 */
+.aps-lf-tw { position: relative; display: inline-flex; align-items: stretch; flex: 0 0 auto; max-width: 100%; }
+.aps-lf-tw > input.aps-lf-t { width: var(--aps-lf-tw, 236px); max-width: 100%; }
+.aps-lf-tw > input.aps-lf-t::placeholder { color: transparent; }
+.aps-lf-ph { position: absolute; left: 9px; right: 8px; top: 50%; transform: translateY(-50%); display: flex; align-items: baseline; gap: 6px; white-space: nowrap; overflow: hidden; pointer-events: none; color: #a19f9d; line-height: 1.2; }
+.aps-lf-ph small { font-size: .8em; color: #b3b0ad; letter-spacing: .1px; }
+.aps-lf-tw > input.aps-lf-t:not(:placeholder-shown) + .aps-lf-ph { visibility: hidden; }
+@media (max-width: 768px) {
+  .aps-lf-right { margin-left: 0; flex: 1 1 100%; justify-content: flex-end; }
+  .aps-lf-tw { flex: 1 1 100%; grid-column: 1 / -1; }
+  .aps-lf-tw > input.aps-lf-t { flex: 1 1 auto; width: 100%; min-width: 0; }
+}
 .voucher-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 900px; }
 .voucher-table th { background: #f3f2f1; padding: 9px 10px; text-align: left; border-bottom: 2px solid #edebe9; font-size: 12px; font-weight: 600; color: #605e5c; white-space: nowrap; }
 .voucher-table td { padding: 10px 10px; border-bottom: 1px solid #edebe9; vertical-align: middle; white-space: nowrap; }
@@ -794,10 +817,10 @@ html.deeplink-open.deeplink-busy #deeplink-loader {
   .list-filters input { flex: 1 1 100%; min-width: 0 !important; }
   #tab-admin > div[style*="flex-wrap:wrap"] { gap: 8px !important; }
   #admin-status, #admin-type { flex: 1 1 calc(50% - 4px); min-width: 0; }
-  #admin-search { flex: 1 1 100%; min-width: 0 !important; }
-  #tab-admin > div[style*="flex-wrap:wrap"] > div[style*="margin-left:auto"] { margin-left: 0 !important; width: 100%; flex-wrap: wrap; gap: 8px !important; }
+  #admin-search, #admin-title { flex: 1 1 100%; min-width: 0 !important; }
+  #tab-admin > div[style*="flex-wrap:wrap"] > .aps-lf-right { margin-left: 0 !important; width: 100%; flex-wrap: wrap; gap: 8px !important; }
   #admin-count { flex-basis: 100%; }
-  #tab-admin > div[style*="flex-wrap:wrap"] > div[style*="margin-left:auto"] > button { flex: 1 1 auto; justify-content: center; min-height: 36px; }
+  #tab-admin > div[style*="flex-wrap:wrap"] > .aps-lf-right > button { flex: 1 1 auto; justify-content: center; min-height: 36px; }
   #admin-draft-toggle, #my-draft-toggle { min-height: 34px; }
   #tab-list .card > div[style*="overflow-x"], #tab-appr > .card, #tab-admin > .card { -webkit-overflow-scrolling: touch; }
 
@@ -1147,6 +1170,14 @@ window.apsYear = (function () {
         </button>
       </div>
       <div class="list-filters">
+        <select id="f-status" onchange="renderList()">
+          <option value="">전체 상태</option>
+          <option value="대기">대기</option>
+          <option value="대기(잠김)">대기(잠김)</option>
+          <option value="승인완료">승인완료</option>
+          <option value="반려">반려</option>
+          <option value="철회">철회</option>
+        </select>
         <select id="f-type" onchange="renderList()">
           <option value="">전체 유형</option>
           <option value="AP">AP</option>
@@ -1158,15 +1189,10 @@ window.apsYear = (function () {
           <option value="ADV">Advance Payment</option>
           <option value="SET">Settlement</option>
         </select>
-        <select id="f-status" onchange="renderList()">
-          <option value="">전체 상태</option>
-          <option value="대기">대기</option>
-          <option value="대기(잠김)">대기(잠김)</option>
-          <option value="승인완료">승인완료</option>
-          <option value="반려">반려</option>
-          <option value="철회">철회</option>
-        </select>
-        <input type="text" id="f-kw" placeholder="검색..." oninput="renderList()" style="min-width:160px">
+        <input type="text" id="f-kw" class="aps-lf-q" placeholder="제목 / 요청 제목 검색..." title="제목 · 요청 제목(Purpose Title) · Purpose · BP명 · B1 Doc No. 로 찾습니다" oninput="renderList()">
+        <!-- 제목 코드 칸(aps-lf) — 다른 연도의 제목이면 Enter 로 그 연도로 옮긴다(APS_LF.myEnter) -->
+        <span class="aps-lf-tw" id="f-title-w"><input type="text" id="f-title" class="aps-lf-t" oninput="renderList()" onkeydown="if(event.key==='Enter'){event.preventDefault();APS_LF.myEnter(this);}" placeholder=" " aria-label="제목 코드 검색" title="제목 코드(예: ACC-Voucher-2026-11-03_ID-128)로 찾습니다. 날짜 · 번호만 써도 됩니다. 다른 연도의 제목이면 Enter — 그 연도로 옮깁니다." autocomplete="off" spellcheck="false"><span class="aps-lf-ph" aria-hidden="true">제목 코드 검색<small data-ex="ACC-Voucher"></small></span></span>
+        <span id="my-count" style="font-size:13px;color:#605e5c;margin-left:auto"></span>
       </div>
       <div style="overflow-x:auto">
       <table class="voucher-table">
@@ -1527,23 +1553,22 @@ window.apsYear = (function () {
       <option value="ADV">Advance Payment</option>
       <option value="SET">Settlement</option>
     </select>
-    <input type="text" id="admin-search" oninput="applyAdminFilters()" placeholder="신청자/Title/BP명/B1 Doc No." style="border:1px solid #d2d0ce;border-radius:4px;padding:6px 10px;font-size:.72rem;font-family:inherit;min-width:200px">
+    <input type="text" id="admin-search" class="aps-lf-q" oninput="applyAdminFilters()" placeholder="신청자 / 요청 제목 검색..." title="신청자 메일 · 요청 제목(Purpose Title) · 제목 · BP명 · B1 Doc No. 로 찾습니다" style="border:1px solid #d2d0ce;border-radius:4px;padding:6px 10px;font-size:.72rem;font-family:inherit">
+    <!-- 제목 코드 칸(aps-lf) — 목록에 없는 건은 전체 제목을 쓰고 Enter: 항목 번호로 한 건을 바로 읽는다(accAdminTitleEnter) -->
+    <span class="aps-lf-tw" id="admin-title-w"><input type="text" id="admin-title" class="aps-lf-t" oninput="applyAdminFilters()" onkeydown="if(event.key==='Enter'){event.preventDefault();accAdminTitleEnter();}" placeholder=" " aria-label="제목 코드 검색" title="제목 코드(예: ACC-Voucher-2026-11-03_ID-128)로 찾습니다. 날짜 · 번호만 써도 됩니다. 목록에 없는 건은 전체 제목을 쓰고 Enter — 번호로 바로 찾습니다." autocomplete="off" spellcheck="false" style="border:1px solid #d2d0ce;border-radius:4px;padding:6px 10px;font-size:.72rem;font-family:inherit"><span class="aps-lf-ph" aria-hidden="true">제목 코드 검색<small data-ex="ACC-Voucher"></small></span></span>
     <button id="admin-draft-toggle" class="draft-toggle" onclick="toggleDraftView('admin')"
       title="직원들이 저장한 임시저장(Draft) 전표만 봅니다. 결재로 올라가기 전에 여기서 확인합니다.">
       <span class="dt-dot"></span>Draft<span class="dt-n" id="admin-draft-count"></span><span class="dt-state" id="admin-draft-state">OFF</span>
     </button>
-    <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+    <span class="aps-lf-right">
       <span style="font-size:.82rem;color:#605e5c;font-weight:500" id="admin-count"></span>
-      <button id="admin-refresh" onclick="accReloadAdmin()" title="목록을 다시 불러옵니다. 지금 고른 담당자·필터는 그대로 유지됩니다."
-        style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:#fff;color:#605e5c;border:1px solid #d2d0ce;border-radius:4px;font-size:.8rem;cursor:pointer;white-space:nowrap;font-family:inherit">
-        <span id="admin-refresh-ico" style="display:inline-block;font-size:.86rem;line-height:1">↻</span>새로고침
-      </button>
       <button onclick="openBatchPdfModal()" title="현재 목록에서 최대 30건을 골라 공식 전표 양식 PDF 를 한 번에 ZIP 으로 내려받습니다"
         style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;background:#fff;color:#605e5c;border:1px solid #d2d0ce;border-radius:4px;font-size:.8rem;cursor:pointer;white-space:nowrap">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/></svg>공식 PDF 일괄 내보내기
       </button>
+      <button type="button" id="admin-refresh" class="aps-lf-ref" onclick="accReloadAdmin()" title="목록을 다시 불러옵니다. 지금 고른 담당자·필터는 그대로 유지됩니다." style="font-size:.82rem"><span id="admin-refresh-ico" class="ico" aria-hidden="true">↻</span>새로고침</button>
       <button onclick="exportAdminExcel()" style="padding:6px 14px;background:#107c10;color:#fff;border:none;border-radius:4px;font-size:.82rem;cursor:pointer;white-space:nowrap">📊 Excel 내보내기</button>
-    </div>
+    </span>
   </div>
   <div class="card" style="padding:0;overflow-x:auto">
     <table class="list-table">
@@ -6544,6 +6569,185 @@ function _byNewest(a, b) {
   return 0;
 }
 
+/* ══ APS 목록 필터 공통 (aps-lf · 11-01 · 제목 코드 칸 11-03 · 운영 반영 11-05) ═══════════════════════
+   내 신청 목록 · 관리자 탭의 필터 줄을 APS 시스템끼리 같은 모양 · 같은 규칙으로 맞춘다(13개 시스템이 같은 코드 — hs-aps 와 같음).
+     내 신청 목록: [전체 상태] [전체 유형] [제목 / 요청 제목 검색] [제목 코드 검색] (+ 시스템 고유 필터) … 건수
+     관리자     : [전체 상태] [전체 유형] [신청자 / 요청 제목 검색] [제목 코드 검색] (+ 고유 필터) … 건수 · ↻ 새로고침 · 📊 Excel 내보내기
+   제목 규칙은 <접두어>-YYYY-MM-DD_ID-<번호> — 날짜는 KST 신청일, 번호는 그 해 사이트 목록의 항목 번호다.
+     · 입력하는 동안: 불러온 목록에서 제목을 바로 거른다(대소문자 무시 · 일부만 써도 됨: 「2026-10-30」 · 「ID-445」).
+       결재행 제목(…_ID-445-2)을 붙여 넣어도 신청 제목(…_ID-445)으로 찾는다.
+     · 연도: 제목의 연도가 지금 보는 연도(apsYear)와 다르면 건수 자리에 알리고, Enter 를 누르면 그 연도로 옮긴다.
+       데이터가 없는 연도는 옮기지 않고 「데이터 없음 · 준비 전」만 알린다.
+     · Enter(관리자): 지금 목록에 없고 번호가 있으면 사이트에서 항목 번호로 한 건을 바로 읽는다(항목 번호는 목록의
+       기본 색인이라 목록 크기와 상관없이 한 번에 찾는다). 화면을 연 뒤에 들어온 신청도 새로고침 없이 찾는다.
+       읽은 항목의 제목이 입력과 맞지 않으면 보여 주지 않는다. 읽은 항목은 그 시스템의 원래 필터를 그대로 거친다.
+     · 제목 코드 칸: 빈 칸에 「제목 코드 검색 ex. FA-REG-2026-11-05_ID-128」 처럼 오늘 날짜 예시를 흐리게 보인다(ph).
+       예시가 잘리지 않게 칸 폭(--aps-lf-tw)을 글자 길이에 맞춘다(236 ~ 360px). */
+const APS_LF = {
+  parse(q) {
+    q = String(q ?? '').trim();
+    const low = q.toLowerCase();
+    const y = q.match(/(?:^|\D)(20\d{2})(?=$|[-_.\s])/);
+    const id = q.match(/ID-?(\d+)(?:-\d+)?\s*$/i);
+    return { q, low, norm: low.replace(/(_id-\d+)-\d+$/, '$1'), year: y ? +y[1] : null, id: id ? +id[1] : null };
+  },
+  // 제목이 입력과 맞는가(빈 입력은 모두 통과)
+  title: (t, p) => {
+    if (!p || !p.low) return true;
+    t = String(t ?? '').toLowerCase();
+    return t.indexOf(p.low) >= 0 || (p.norm !== p.low && t.indexOf(p.norm) >= 0);
+  },
+  // 여러 값 가운데 하나라도 검색어를 담고 있는가(빈 검색어는 통과) — 검색어는 소문자로 넘긴다
+  has: (low, ...vals) => !low || vals.some(v => String(v ?? '').toLowerCase().indexOf(low) >= 0),
+  // 제목 검색의 연도 안내 — 지금 보는 연도와 같거나 연도가 없으면 ''
+  note(p) {
+    const Y = window.apsYear;
+    if (!p || !p.year || !Y || typeof Y.get !== 'function' || p.year === Y.get()) return '';
+    if (Y.sites && Y.sites[p.year]) return 'Enter: ' + p.year + '년에서 찾기';
+    return p.year + '년 데이터가 ' + (p.year < Y.home ? '없습니다' : '아직 준비되지 않았습니다');
+  },
+  // Enter — o = { found: 지금 목록에 맞는 건이 있나, getById: async 번호 → 항목, onFound: 항목 → 목록에 넣고 다시 그리기 }
+  async enter(p, o) {
+    const Y = window.apsYear;
+    if (!p || !p.low) return 'empty';
+    if (p.year && Y && typeof Y.get === 'function' && p.year !== Y.get()) {
+      if (Y.sites && Y.sites[p.year]) { Y.set(p.year); return 'year'; }
+      return 'nosite';
+    }
+    if (o.found || !p.id || typeof o.getById !== 'function') return 'local';
+    let it = null;
+    try { it = await o.getById(p.id); } catch (e) { it = null; }
+    if (it && it.fields && APS_LF.title(it.fields.Title, p)) { o.onFound(it); return 'found'; }
+    return 'none';
+  },
+  // 새로고침 단추 — 연타를 막고 아이콘을 돌린다. 실패해도 지금 데이터로 다시 그린다. 고른 필터는 그대로 둔다.
+  async refresh(btn, reload, fallback) {
+    if (btn && btn.disabled) return;
+    if (btn) { btn.disabled = true; btn.classList.add('busy'); }
+    try { await reload(); }
+    catch (e) { console.warn('[목록] 새로고침 실패:', e && e.message); try { if (fallback) fallback(); } catch (_) {} }
+    finally { if (btn) { btn.disabled = false; btn.classList.remove('busy'); } }
+  },
+  // 제목 코드 칸 예시의 번호(「…_ID-128」)
+  EX_N: 128,
+  // 제목 코드 칸(.aps-lf-tw) — 흐린 안내(.aps-lf-ph)에 오늘(KST) 날짜 예시를 넣고, 안내가 잘리지 않게 칸 폭을 맞춘다.
+  // 칸이 숨은 탭에 있으면(크기 0) 글자 폭을 캔버스로 재서 정한다.
+  ph(root) {
+    const today = new Date(Date.now() + 9 * 36e5).toISOString().slice(0, 10);
+    const cv = APS_LF._cv || (APS_LF._cv = document.createElement('canvas').getContext('2d'));
+    (root || document).querySelectorAll('.aps-lf-tw').forEach(w => {
+      const inp = w.querySelector('input'), ph = w.querySelector('.aps-lf-ph');
+      if (!inp || !ph) return;
+      const ex = ph.querySelector('[data-ex]');
+      if (ex) ex.textContent = 'ex. ' + ex.getAttribute('data-ex') + '-' + today + '_ID-' + APS_LF.EX_N;
+      const cs = getComputedStyle(inp);
+      const fs = parseFloat(cs.fontSize) || 13, padL = parseFloat(cs.paddingLeft) || 8;
+      ph.style.fontSize = fs + 'px';
+      ph.style.left = padL + (parseFloat(cs.borderLeftWidth) || 1) + 'px';
+      let need = 0;
+      if (inp.offsetParent) need = ph.scrollWidth + (padL + 1) + 12;
+      else {
+        try {
+          cv.font = fs + 'px ' + cs.fontFamily;
+          const wLabel = cv.measureText(ph.firstChild ? ph.firstChild.textContent : '').width;
+          cv.font = fs * .8 + 'px ' + cs.fontFamily;
+          const wEx = ex ? cv.measureText(ex.textContent).width : 0;
+          need = Math.ceil(wLabel + wEx + 6 + padL + 1 + 14);
+        } catch (e) {}
+      }
+      if (need) w.style.setProperty('--aps-lf-tw', Math.max(236, Math.min(need, 360)) + 'px');
+    });
+  },
+  // 내 신청 목록의 제목 코드 칸 Enter — 다른 연도의 제목이면 그 연도로 옮긴다(내 목록은 불러온 목록 안에서만 찾는다)
+  myEnter: async inp => APS_LF.enter(APS_LF.parse(inp && inp.value), { found: true }),
+};
+// 제목 코드 칸 예시 · 폭 — 화면이 준비되면 한 번, 창 크기가 바뀌거나 칸이 있는 화면에서 누를 때(탭 전환 등) 다시 맞춘다
+!function () {
+  const run = () => { try { APS_LF.ph(); } catch (e) {} };
+  let timer;
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run); else setTimeout(run, 0);
+  const later = ms => { clearTimeout(timer); timer = setTimeout(run, ms); };
+  window.addEventListener('resize', () => later(150));
+  document.addEventListener('click', () => { if (document.querySelector('.aps-lf-tw')) later(60); }, true);
+}();
+
+// ── 목록 필터(11-01 aps-lf) ─────────────────────────────────────────────────
+// 내 전표 목록: 상태 · 유형 · 「제목 / 요청 제목」 검색 · 제목 코드. 검색 칸은 예전 검색이 보던 칸 그대로(Title · Purpose Title · Purpose · BP명 · B1 Doc No.).
+//   요청 제목 = Purpose Title(신청자가 적는 전표 제목). Draft 보기(고유 필터)는 renderList 가 예전처럼 따로 거른다.
+function accMyFilterState() {
+  const v = id => (document.getElementById(id) || { value: '' }).value || '';
+  return { status: v('f-status'), type: v('f-type'), kw: v('f-kw').trim().toLowerCase(), title: APS_LF.parse(v('f-title')) };
+}
+function accMyMatch(v, st) {
+  if (!APS_LF.title(v.Title, st.title)) return false;
+  if (st.type && v.VoucherType !== st.type) return false;
+  if (st.status && v.Status !== st.status) return false;
+  // Purpose Title · Purpose 는 여러 줄 텍스트 — 화면과 같은 spText 값으로 비교한다
+  if (st.kw && !APS_LF.has(st.kw, v.Title, spText(v.PurposeTitle), spText(v.Purpose), v.BPName, v.B1DocNo)) return false;
+  return true;
+}
+// 관리자: 목록(applyAdminFilters)과 Excel(exportAdminExcel)이 같은 필터 상태 · 같은 술어를 쓴다(화면 = 내보내기).
+//   f = 전표 필드 — 목록은 adminListRaw 항목(필드를 펼친 모양), Excel 은 item.fields.
+//   「신청자 / 요청 제목」 = 신청자 메일 · Purpose Title + 예전 관리자 검색 칸(Title · BP명 · B1 Doc No.) 그대로.
+//   신청자 이름(RequesterName)은 넣지 않는다 — 목록 조회 필드(REQ_FIELDS)에 없어 Excel 에서만 걸리고 화면과 달라진다.
+//   Draft 보기 · ACC 담당자 빠른 보기(고유 필터)는 예전처럼 목록에만 걸린다(Excel 은 원래 운영 전표 전체 기준).
+function accAdminFilterState() {
+  const v = id => (document.getElementById(id) || { value: '' }).value || '';
+  return { status: v('admin-status'), type: v('admin-type'), kw: v('admin-search').trim().toLowerCase(), title: APS_LF.parse(v('admin-title')) };
+}
+function accAdminMatch(f, st) {
+  f = f || {};
+  if (st.status && f.Status !== st.status) return false;
+  if (st.type && f.VoucherType !== st.type) return false;
+  if (st.kw && !APS_LF.has(st.kw, f.RequesterEmail, spText(f.PurposeTitle), f.Title, f.BPName, f.B1DocNo)) return false;
+  if (!APS_LF.title(f.Title, st.title)) return false;
+  return true;
+}
+// 제목 검색 Enter — 다른 연도면 그 연도로, 지금 목록에 없으면 운영 Requests 에서 항목 번호로 한 건을 바로 읽는다.
+//   Draft 제목(…_DRAFT-n)에는 「ID-번호」 가 없어 번호 조회를 하지 않는다(Drafts 는 번호 체계가 따로다).
+//   읽은 건은 loadAdminList 와 같은 모양({_spId, _srcDraft:false, _created, ...fields, _line, _curEmail})으로 adminListRaw 에 넣고
+//   applyAdminFilters 로 다시 그린다 — Draft 보기 · 담당자 빠른 보기 · 상태 · 유형 조건이 그대로 걸린다.
+async function accAdminTitleEnter() {
+  const st = accAdminFilterState();
+  let got = null;
+  const r = await APS_LF.enter(st.title, {
+    found: (adminListRaw || []).some(v => accAdminMatch(v, st)),
+    getById: async id => { await ensureSiteId(); return api('/sites/' + siteId + '/lists/' + LIST_REQUESTS + '/items/' + id + '?$expand=fields'); },
+    onFound: it => {
+      if ((adminListRaw || []).some(v => !v._srcDraft && String(v._spId) === String(it.id))) return;
+      got = { _spId: it.id, _srcDraft: false, _created: it.createdDateTime || '', ...it.fields, _line: [], _curEmail: '' };
+      adminListRaw.unshift(got);
+      adminListRaw.sort(_byNewest);
+    },
+  });
+  if (got) await _accLineFor(got);
+  applyAdminFilters();
+  if (r === 'none') { const c = document.getElementById('admin-count'); if (c) c.innerHTML = '<span class="aps-lf-note">「' + escHtml(st.title.q) + '」 제목을 찾지 못했습니다</span>'; }
+}
+// Enter 로 읽은 한 건의 결재행 — loadAdminList 가 v._line · v._curEmail 에 넣는 것과 같은 모양(「결재 대기」 열 · 담당자 빠른 보기가 쓴다). 조회만(GET).
+//   _forEachAprVolume 은 쓰지 않는다 — 세대 실패 목록(_volFailed)을 비워, 함께 도는 목록 조회의 실패 안내를 지울 수 있다.
+async function _accLineFor(v) {
+  try {
+    const vols = (VOL_CONFIG && VOL_CONFIG.aprVolumes) || [];
+    const parts = await Promise.all(vols.map(vol =>
+      apiAll(`${GRAPH}/sites/${siteId}/lists/${vol.id}/items?$expand=fields&$filter=fields/RequestID eq ${parseInt(v._spId)}&$top=50`)
+        .then(d => (d && d.value) || [], e => { console.warn('[관리자] 제목 Enter — ' + vol.code + ' 결재 정보 조회 실패:', e && e.message); return []; })));
+    v._line = parts.flat().map(i2 => {
+      const f2 = i2.fields || {};
+      return {
+        order : f2.ApprovalOrder || 0,
+        role  : f2.ApproverRole || '',
+        name  : f2.ApproverName || '',
+        email : (f2.ApproverEmail || '').toLowerCase(),
+        status: ((f2.Status && f2.Status.Value) ? f2.Status.Value : f2.Status || '').trim(),
+        mod   : i2.lastModifiedDateTime || '',
+      };
+    }).sort((a, b) => a.order - b.order);
+    const cur = v._line.find(a => a.status === '대기');
+    v._curEmail = cur ? cur.email : '';
+  } catch (e) { console.warn('[관리자] 제목 Enter — 결재 정보 조회 실패:', e && e.message); }
+}
+
 async function loadMyList() {
   await ensureSiteId();
   await loadVolumeConfig(); applyCurrentVolume();
@@ -7235,20 +7439,15 @@ function applyAdminFilters(keepPage) {
   // 결재행이 늦게 도착해 다시 그릴 때는 보던 페이지를 유지한다.
   // 그러지 않으면 3페이지를 보던 중에 1페이지로 튕긴다.
   if (!keepPage) _adminPgState.page = 0;
-  const fs = (document.getElementById('admin-status')||{value:''}).value;
-  const ft = (document.getElementById('admin-type')||{value:''}).value;
-  const fk = ((document.getElementById('admin-search')||{value:''}).value||'').toLowerCase();
+  const st = accAdminFilterState();
   adminListCache = adminListRaw.filter(v=>{
     // Draft 보기가 켜져 있으면 임시저장만, 꺼져 있으면 임시저장을 감춘다.
     const _isDraftRow = (v.Status||'').trim() === DRAFT_STATUS;
     if(_draftView.admin ? !_isDraftRow : _isDraftRow) return false;
     // 담당자 빠른 보기 — 고른 담당자와 관련된 전표만
     if(_accQuickView && !accIsRelated(v)) return false;
-    if(fs && v.Status!==fs) return false;
-    if(ft && v.VoucherType!==ft) return false;
-    // 검색어: 신청자 · Title · BP명 · B1 Doc No. (B1 번호는 SAP 전기 뒤 찾는 일이 잦다, 09-11)
-    if(fk && !(v.RequesterEmail||'').toLowerCase().includes(fk) && !(v.Title||'').toLowerCase().includes(fk) && !(v.BPName||'').toLowerCase().includes(fk) && !String(v.B1DocNo||'').toLowerCase().includes(fk)) return false;
-    return true;
+    // 상태 · 유형 · 신청자 / 요청 제목(신청자 · Purpose Title · Title · BP명 · B1 Doc No.) · 제목 — Excel 과 같은 술어
+    return accAdminMatch(v, st);
   });
   // 정렬은 건드리지 않는다. adminListRaw 가 이미 신청일 최신순이고,
   // filter 는 순서를 그대로 유지하므로 담당자 칩을 켜도 전체 보기와 같은 순서가 된다.
@@ -7259,7 +7458,8 @@ function applyAdminFilters(keepPage) {
   // 담당자별 처리 대기 건수는 칩의 주황 배지가 이미 알려 주고, 「대기」만 보려면
   // 상태 필터가 있다. 목록의 순서는 어느 칩을 눌러도 신청일 하나로 고정한다.
   const countEl = document.getElementById('admin-count');
-  if(countEl) countEl.textContent = '총 '+adminListCache.length+'건';
+  const _yn = APS_LF.note(st.title);   // 제목에 다른 연도가 있으면 건수 대신 안내
+  if(countEl) countEl.innerHTML = _yn ? '<span class="aps-lf-note">' + escHtml(_yn) + '</span>' : '총 '+adminListCache.length+'건';
   renderAdminList();
 }
 
@@ -7351,15 +7551,11 @@ async function exportAdminExcel(){
       _volLabel: (apprMap[String(item.id)]||{})._aprLabel || ''
     }));
 
-    const fs = (document.getElementById('admin-status')||{value:''}).value;
-    const ft = (document.getElementById('admin-type')||{value:''}).value;
-    const fk = ((document.getElementById('admin-search')||{value:''}).value||'').toLowerCase();
-    let items = merged.sort((a,b)=>b.id-a.id);
-    if(fs) items = items.filter(i=>i.fields.Status===fs);
-    if(ft) items = items.filter(i=>i.fields.VoucherType===ft);
-    if(fk) items = items.filter(i=>((i.fields.RequesterEmail||'')+' '+(i.fields.Title||'')+' '+(i.fields.BPName||'')+' '+(i.fields.B1DocNo||'')).toLowerCase().includes(fk));
+    // 관리자 목록과 같은 필터 상태 · 같은 술어(accAdminMatch) — 화면에 보이는 조건 = 내보내는 조건
+    const st = accAdminFilterState();
+    let items = merged.sort((a,b)=>b.id-a.id).filter(i => accAdminMatch(i.fields, st));
     if(!items.length){ showAccAlert('내보낼 데이터가 없습니다.', '', '⚠️'); return; }
-    _xlLog = { 건수: items.length, 필터: { 상태: fs||'전체', 유형: ft||'전체', 검색어: fk||'' } };
+    _xlLog = { 건수: items.length, 필터: { 상태: st.status||'전체', 유형: st.type||'전체', 검색어: st.kw||'', 제목: st.title.q||'' } };
 
     // 최대 결재 단계 수 계산 (결재자는 이미 각 항목의 _apprList에 볼륨 내부에서 정확히 매칭되어 있음)
     let maxStep = 0;
@@ -7741,7 +7937,8 @@ function renderAdminList(){
     const _filtered = !!_accQuickView
       || !!(document.getElementById('admin-status')||{}).value
       || !!(document.getElementById('admin-type')||{}).value
-      || !!(((document.getElementById('admin-search')||{}).value||'').trim());
+      || !!(((document.getElementById('admin-search')||{}).value||'').trim())
+      || !!(((document.getElementById('admin-title')||{}).value||'').trim());
     const _emptyMsg = _draftView.admin
       ? (_filtered ? '조건에 맞는 임시저장 전표가 없습니다.' : '임시저장 전표가 없습니다.')
       : '조회 결과가 없습니다.';
@@ -7809,19 +8006,17 @@ function renderAdminList(){
 
 function renderList(){
   refreshDraftCount('my');
-  const ft=document.getElementById('f-type')?.value||'';
-  const fs=document.getElementById('f-status')?.value||'';
-  const fk=(document.getElementById('f-kw')?.value||'').toLowerCase();
+  const st=accMyFilterState();
   const list=voucherListCache.filter(v=>{
     // Draft 보기가 켜져 있으면 임시저장만, 꺼져 있으면 임시저장을 감춘다.
     // 결재로 올라가지 않은 작성 중 전표가 일반 목록에 섞이지 않게 한다.
     const _isDraftRow = (v.Status||'').trim() === DRAFT_STATUS;
     if(_draftView.my ? !_isDraftRow : _isDraftRow) return false;
-    if(ft&&v.VoucherType!==ft)return false;
-    if(fs&&v.Status!==fs)return false;
-    if(fk&&!v.Purpose?.toLowerCase().includes(fk)&&!v.PurposeTitle?.toLowerCase().includes(fk)&&!v.BPName?.toLowerCase().includes(fk)&&!v.Title?.toLowerCase().includes(fk)&&!String(v.B1DocNo||'').toLowerCase().includes(fk))return false;
-    return true;
+    // 상태 · 유형 · 제목 / 요청 제목 검색(Title · Purpose Title · Purpose · BP명 · B1 Doc No.)
+    return accMyMatch(v, st);
   });
+  const _myCnt=document.getElementById('my-count');
+  if(_myCnt) _myCnt.textContent=_myListLoadFailed ? '' : '총 '+list.length+'건';
   const stMap={'대기':'badge-대기','대기(잠김)':'badge-대기잠김','승인완료':'badge-승인완료','반려':'badge-반려','철회':'badge-철회',
     Pending:'badge-대기',Draft:'badge-대기잠김',Approved:'badge-승인완료',Rejected:'badge-반려'};
   const stLabel={'대기':'대기','대기(잠김)':'대기(잠김)','승인완료':'승인완료','반려':'반려','철회':'철회',
